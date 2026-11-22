@@ -216,7 +216,7 @@ func TestFleetHandler(t *testing.T) {
 			Containers: []corev1.Container{
 				{
 					Name:  "knight",
-					Image: "ghcr.io/dapperdivers/knight:latest",
+					Image: "ghcr.io/roundtable-k8s/knight:latest",
 				},
 			},
 		},
@@ -225,7 +225,7 @@ func TestFleetHandler(t *testing.T) {
 			ContainerStatuses: []corev1.ContainerStatus{
 				{
 					Name:         "knight",
-					Image:        "ghcr.io/dapperdivers/knight:latest",
+					Image:        "ghcr.io/roundtable-k8s/knight:latest",
 					Ready:        true,
 					RestartCount: 0,
 				},
@@ -1198,7 +1198,7 @@ func TestFleetHandlerEnrichedFields(t *testing.T) {
 			Containers: []corev1.Container{
 				{
 					Name:  "knight",
-					Image: "ghcr.io/dapperdivers/knight:latest",
+					Image: "ghcr.io/roundtable-k8s/knight:latest",
 				},
 			},
 		},
@@ -1207,7 +1207,7 @@ func TestFleetHandlerEnrichedFields(t *testing.T) {
 			ContainerStatuses: []corev1.ContainerStatus{
 				{
 					Name:         "knight",
-					Image:        "ghcr.io/dapperdivers/knight:latest",
+					Image:        "ghcr.io/roundtable-k8s/knight:latest",
 					Ready:        true,
 					RestartCount: 0,
 				},

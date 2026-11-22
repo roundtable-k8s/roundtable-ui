@@ -1,4 +1,4 @@
-module github.com/dapperdivers/roundtable-ui
+module github.com/roundtable-k8s/roundtable-ui
 
 go 1.23.0
 
