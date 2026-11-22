@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
 
-Comprehensive observability and control dashboard for the [Round Table](https://github.com/dapperdivers/roundtable) Kubernetes-native multi-agent orchestration system.
+Comprehensive observability and control dashboard for the [Round Table](https://github.com/roundtable-k8s/roundtable) Kubernetes-native multi-agent orchestration system.
 
 <!-- screenshot -->
 
@@ -196,7 +196,7 @@ The dashboard provides full CRUD operations for Round Table Custom Resource Defi
 
 ```bash
 # Clone repository
-git clone https://github.com/dapperdivers/roundtable-ui.git
+git clone https://github.com/roundtable-k8s/roundtable-ui.git
 cd roundtable-ui
 
 # Terminal 1: Start backend API server
@@ -217,7 +217,7 @@ The dashboard is deployed as part of the Round Table Helm chart:
 
 ```bash
 # Install/upgrade Round Table with dashboard enabled
-helm repo add roundtable https://dapperdivers.github.io/roundtable
+helm repo add roundtable https://roundtable-k8s.github.io/roundtable
 helm upgrade --install roundtable roundtable/roundtable \
   --namespace roundtable \
   --create-namespace \

@@ -53,7 +53,7 @@ helm upgrade roundtable charts/roundtable-operator \
 
 ## What to Work On
 
-- Check [open issues](https://github.com/dapperdivers/roundtable/issues) — look for `good first issue` labels
+- Check [open issues](https://github.com/roundtable-k8s/roundtable/issues) — look for `good first issue` labels
 - Bug fixes are always welcome
 - Feature ideas? Open an issue first to discuss
 

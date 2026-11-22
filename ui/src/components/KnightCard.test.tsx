@@ -11,7 +11,7 @@ const mockKnight: Knight = {
   ready: true,
   restarts: 0,
   age: '2h 15m',
-  image: 'ghcr.io/dapperdivers/knight:latest',
+  image: 'ghcr.io/roundtable-k8s/knight:latest',
   skills: 5,
   nixTools: 10,
   labels: {
