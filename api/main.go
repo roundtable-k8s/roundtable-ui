@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode"
@@ -63,18 +64,18 @@ var (
 
 // KnightStatus represents a knight's current state
 type KnightStatus struct {
-	Name           string            `json:"name"`
-	Domain         string            `json:"domain"`
-	Status         string            `json:"status"` // online, offline, starting
-	Ready          bool              `json:"ready"`
-	Restarts       int32             `json:"restarts"`
-	Age            string            `json:"age"`
-	Image          string            `json:"image"`
-	Skills         int               `json:"skills"`
-	NixTools       int               `json:"nixTools"`
-	Labels         map[string]string `json:"labels"`
-	NixPackages    []string          `json:"nixPackages,omitempty"`
-	GeneratedSkills int              `json:"generatedSkills,omitempty"`
+	Name            string            `json:"name"`
+	Domain          string            `json:"domain"`
+	Status          string            `json:"status"` // online, offline, starting
+	Ready           bool              `json:"ready"`
+	Restarts        int32             `json:"restarts"`
+	Age             string            `json:"age"`
+	Image           string            `json:"image"`
+	Skills          int               `json:"skills"`
+	NixTools        int               `json:"nixTools"`
+	Labels          map[string]string `json:"labels"`
+	NixPackages     []string          `json:"nixPackages,omitempty"`
+	GeneratedSkills int               `json:"generatedSkills,omitempty"`
 	// CRD-derived fields
 	Phase          string   `json:"phase"`
 	Model          string   `json:"model,omitempty"`
@@ -248,7 +249,7 @@ func main() {
 	namespace := envOr("NAMESPACE", "roundtable")
 	port := envOr("PORT", "8080")
 	vaultPath := envOr("VAULT_PATH", "/vault")
-	fleetPrefix := envOr("FLEET_PREFIX", "fleet-a")       // NATS subject prefix (#23)
+	fleetPrefix := envOr("FLEET_PREFIX", "fleet-a")         // NATS subject prefix (#23)
 	fleetStream := envOr("FLEET_STREAM", "fleet_a_results") // JetStream stream name
 
 	// Connect to NATS. Reconnect forever: NATS can restart underneath a
@@ -556,12 +557,12 @@ type KnightDetail struct {
 	// PodPhase is the pod lifecycle phase (Running/Pending/...). Deliberately
 	// NOT named Phase: that would shadow the embedded CRD phase (Ready/
 	// Degraded/...) in the JSON output (#125)
-	PodPhase        string           `json:"podPhase,omitempty"`
-	StartTime       *time.Time       `json:"startTime"`
+	PodPhase        string            `json:"podPhase,omitempty"`
+	StartTime       *time.Time        `json:"startTime"`
 	Containers      []ContainerDetail `json:"containers"`
-	Conditions      []PodCondition   `json:"conditions"`
-	NixPackages     []string         `json:"nixPackages,omitempty"`
-	GeneratedSkills []GeneratedSkill `json:"generatedSkills,omitempty"`
+	Conditions      []PodCondition    `json:"conditions"`
+	NixPackages     []string          `json:"nixPackages,omitempty"`
+	GeneratedSkills []GeneratedSkill  `json:"generatedSkills,omitempty"`
 }
 
 type ContainerDetail struct {
@@ -1072,20 +1073,9 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 			return
 		}
 
-		// Write mutex + closed flag — gorilla websocket is not concurrent-write safe (#42)
-		var writeMu sync.Mutex
-		var closed bool
-		safeWrite := func(data []byte) {
-			writeMu.Lock()
-			defer writeMu.Unlock()
-			if closed {
-				return
-			}
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-				closed = true
-			}
-		}
+		// Serialized writer — gorilla websocket is not concurrent-write safe (#42, #96)
+		ws := &wsWriter{conn: conn}
+		safeWrite := func(data []byte) { ws.write(websocket.TextMessage, data) }
 
 		// Done channel to clean up NATS subscriptions when WS closes
 		done := make(chan struct{})
@@ -1189,9 +1179,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 			if chainSub != nil {
 				chainSub.Unsubscribe()
 			}
-			writeMu.Lock()
-			closed = true
-			writeMu.Unlock()
+			ws.markClosed()
 			conn.Close()
 		}()
 
@@ -1211,11 +1199,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 				case <-done:
 					return
 				case <-ticker.C:
-					writeMu.Lock()
-					conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-					err := conn.WriteMessage(websocket.PingMessage, nil)
-					writeMu.Unlock()
-					if err != nil {
+					if ws.isClosed() || !ws.write(websocket.PingMessage, nil) {
 						return
 					}
 				}
@@ -1546,26 +1530,26 @@ type MissionChainStatusDTO struct {
 
 // MissionSummary is the API response for mission list
 type MissionSummary struct {
-	Name             string            `json:"name"`
-	Namespace        string            `json:"namespace"`
-	Phase            string            `json:"phase"`
-	Objective        string            `json:"objective"`
-	StartedAt        *string           `json:"startedAt"`
-	ExpiresAt        *string           `json:"expiresAt"`
-	Knights          []string          `json:"knights"`
-	Chains           []string          `json:"chains"`
-	CostBudgetUSD    string            `json:"costBudgetUSD"`
-	TotalCost        string            `json:"totalCost"`
-	TTL              int               `json:"ttl"`
-	Timeout          int               `json:"timeout"`
-	RoundTableRef    string            `json:"roundTableRef"`
-	MetaMission      bool              `json:"metaMission"`
-	PlanningResult   *PlanningResult   `json:"planningResult,omitempty"`
-	SuccessCriteria  string            `json:"successCriteria,omitempty"`
-	Briefing         string            `json:"briefing,omitempty"`
-	CleanupPolicy    string            `json:"cleanupPolicy,omitempty"`
-	RecruitExisting  bool              `json:"recruitExisting"`
-	RetainResults    bool              `json:"retainResults"`
+	Name             string                   `json:"name"`
+	Namespace        string                   `json:"namespace"`
+	Phase            string                   `json:"phase"`
+	Objective        string                   `json:"objective"`
+	StartedAt        *string                  `json:"startedAt"`
+	ExpiresAt        *string                  `json:"expiresAt"`
+	Knights          []string                 `json:"knights"`
+	Chains           []string                 `json:"chains"`
+	CostBudgetUSD    string                   `json:"costBudgetUSD"`
+	TotalCost        string                   `json:"totalCost"`
+	TTL              int                      `json:"ttl"`
+	Timeout          int                      `json:"timeout"`
+	RoundTableRef    string                   `json:"roundTableRef"`
+	MetaMission      bool                     `json:"metaMission"`
+	PlanningResult   *PlanningResult          `json:"planningResult,omitempty"`
+	SuccessCriteria  string                   `json:"successCriteria,omitempty"`
+	Briefing         string                   `json:"briefing,omitempty"`
+	CleanupPolicy    string                   `json:"cleanupPolicy,omitempty"`
+	RecruitExisting  bool                     `json:"recruitExisting"`
+	RetainResults    bool                     `json:"retainResults"`
 	KnightStatuses   []MissionKnightStatusDTO `json:"knightStatuses,omitempty"`
 	ChainStatuses    []MissionChainStatusDTO  `json:"chainStatuses,omitempty"`
 	ResultsConfigMap string                   `json:"resultsConfigMap,omitempty"`
@@ -1762,21 +1746,21 @@ func parseMissionResource(obj map[string]interface{}) MissionSummary {
 	metadata := getNestedMap(obj, "metadata")
 
 	mission := MissionSummary{
-		Name:            getStr(metadata, "name"),
-		Namespace:       getStr(metadata, "namespace"),
-		Phase:           getStr(status, "phase"),
-		Objective:       getStr(spec, "objective"),
-		CostBudgetUSD:   getStr(spec, "costBudgetUSD"),
-		TotalCost:       getStr(status, "totalCost"),
-		TTL:             getInt(spec, "ttl"),
-		Timeout:         getInt(spec, "timeout"),
-		RoundTableRef:   getStr(spec, "roundTableRef"),
-		MetaMission:     getBool(spec, "metaMission"),
-		SuccessCriteria: getStr(spec, "successCriteria"),
-		Briefing:        getStr(spec, "briefing"),
-		CleanupPolicy:   getStr(spec, "cleanupPolicy"),
-		RecruitExisting: getBool(spec, "recruitExisting"),
-		RetainResults:   getBool(spec, "retainResults"),
+		Name:             getStr(metadata, "name"),
+		Namespace:        getStr(metadata, "namespace"),
+		Phase:            getStr(status, "phase"),
+		Objective:        getStr(spec, "objective"),
+		CostBudgetUSD:    getStr(spec, "costBudgetUSD"),
+		TotalCost:        getStr(status, "totalCost"),
+		TTL:              getInt(spec, "ttl"),
+		Timeout:          getInt(spec, "timeout"),
+		RoundTableRef:    getStr(spec, "roundTableRef"),
+		MetaMission:      getBool(spec, "metaMission"),
+		SuccessCriteria:  getStr(spec, "successCriteria"),
+		Briefing:         getStr(spec, "briefing"),
+		CleanupPolicy:    getStr(spec, "cleanupPolicy"),
+		RecruitExisting:  getBool(spec, "recruitExisting"),
+		RetainResults:    getBool(spec, "retainResults"),
 		ResultsConfigMap: getStr(status, "resultsConfigMap"),
 	}
 
@@ -2215,3 +2199,40 @@ func envOr(key, def string) string {
 	}
 	return def
 }
+
+// wsConn is the subset of *websocket.Conn used by wsWriter.
+type wsConn interface {
+	SetWriteDeadline(t time.Time) error
+	WriteMessage(messageType int, data []byte) error
+}
+
+// wsWriter serializes writes to a websocket connection and tracks whether it
+// has been closed. The closed flag is atomic so it can be read lock-free from
+// any goroutine (ping loop, NATS callbacks) without racing with writers (#96).
+type wsWriter struct {
+	conn   wsConn
+	mu     sync.Mutex
+	closed atomic.Bool
+}
+
+// write sends a message and reports whether it was written successfully.
+// A failed write marks the writer closed.
+func (w *wsWriter) write(msgType int, data []byte) bool {
+	if w.closed.Load() {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed.Load() {
+		return false
+	}
+	w.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := w.conn.WriteMessage(msgType, data); err != nil {
+		w.closed.Store(true)
+		return false
+	}
+	return true
+}
+
+func (w *wsWriter) isClosed() bool { return w.closed.Load() }
+func (w *wsWriter) markClosed()    { w.closed.Store(true) }
