@@ -1,0 +1,53 @@
+name: Trigger autodeploy
+
+# Instant deploy (roundtable-k8s/roundtable#256): after a successful main build,
+# send `roundtable-deploy` to dapperdivers/dapper-cluster, whose Round Table
+# Autodeploy bumps the images (its 5-minute cron stays as a fallback).
+# Runs on workflow_run, i.e. after CI has finished: autodeploy only deploys
+# builds whose push run has already succeeded, so a step inside CI would be early.
+# The dunce-bot key lives in the `deploy` environment (main only); the minted
+# token is scoped to dapper-cluster with contents:write and lasts an hour.
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- main only, checks out nothing
+    workflows: ["Build __CI__ Push"]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  dispatch:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    environment: deploy
+    steps:
+      - name: Check credentials
+        id: creds
+        env:
+          KEY: ${{ secrets.DUNCE_BOT_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::DUNCE_BOT_APP_PRIVATE_KEY is not set in the deploy environment; leaving it to the cron."; fi
+
+      - name: Mint a dapper-cluster token
+        id: app-token
+        if: steps.creds.outputs.ok == 'true'
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ vars.DUNCE_BOT_APP_ID }}
+          private-key: ${{ secrets.DUNCE_BOT_APP_PRIVATE_KEY }}
+          owner: dapperdivers
+          repositories: dapper-cluster
+          # repository_dispatch needs contents:write; nothing else.
+          permission-contents: write
+
+      - name: Send roundtable-deploy
+        if: steps.creds.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gh api repos/dapperdivers/dapper-cluster/dispatches -f event_type=roundtable-deploy \
+            -f "client_payload[source]=$SOURCE" -f "client_payload[sha]=$SHA"
+          echo "Sent roundtable-deploy for $SOURCE@${SHA:0:7}"
