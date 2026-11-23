@@ -5,6 +5,7 @@ import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
 import { formatDuration } from '../lib/format'
 import type { Chain, ChainStep } from '../lib/types'
+import { sanitizeText } from '../lib/untrusted'
 
 
 /** Assign each step a column (x) based on topological order of dependencies */
@@ -201,7 +202,7 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
         <div>
           <span className="text-xs text-gray-500 uppercase">Result (truncated)</span>
           <pre className="text-xs text-gray-400 whitespace-pre-wrap max-h-64 overflow-auto mt-1 bg-roundtable-slate rounded p-3 border border-roundtable-steel/50">
-            {step.result}
+            {sanitizeText(step.result)}
           </pre>
         </div>
       )}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -323,6 +324,7 @@ func main() {
 
 	// Router
 	r := mux.NewRouter()
+	r.Use(securityHeaders)
 	r.Use(metricsMiddleware)
 	r.Use(authMiddleware)
 	r.Use(rateLimiter.middleware)
@@ -706,19 +708,10 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		}
 		defer stream.Close()
 
-		w.Header().Set("Content-Type", "text/plain")
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := stream.Read(buf)
-			if n > 0 {
-				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-					break // client disconnected — stop reading (#53)
-				}
-			}
-			if readErr != nil {
-				break
-			}
-		}
+		// Redact the (size-capped) log tail before it leaves the API (#188).
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		raw, _ := io.ReadAll(io.LimitReader(stream, 1<<20))
+		w.Write([]byte(redactSecrets(string(raw))))
 	}
 }
 
@@ -872,8 +865,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(msg.Data)
+		writeRedactedJSON(w, msg.Data)
 	}
 }
 
@@ -2037,8 +2029,7 @@ func missionResultsHandler() http.HandlerFunc {
 			http.Error(w, "Results not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(entry.Value())
+		writeRedactedJSON(w, entry.Value())
 	}
 }
 
@@ -2062,8 +2053,7 @@ func chainStepOutputHandler() http.HandlerFunc {
 			http.Error(w, "Output not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(entry.Value())
+		writeRedactedJSON(w, entry.Value())
 	}
 }
 
@@ -2110,8 +2100,7 @@ func kvGetHandler() http.HandlerFunc {
 			http.Error(w, "Key not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(entry.Value())
+		writeRedactedJSON(w, entry.Value())
 	}
 }
 
@@ -2294,6 +2283,12 @@ func (w *wsWriter) enqueue(data []byte, critical bool) bool {
 	if w.closed.Load() {
 		return false
 	}
+	// Size guard + second redaction pass on everything relayed to browsers (#188).
+	if !critical && len(data) > maxLiveEventBytes {
+		wsDroppedMessages.Inc()
+		return false
+	}
+	data = redactBytes(data)
 	w.qmu.Lock()
 	if len(w.queue) >= w.capacity {
 		idx := -1

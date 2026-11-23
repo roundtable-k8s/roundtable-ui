@@ -6,6 +6,8 @@ import { fetchWithTimeout } from '../hooks/useKnightSession'
 import type { SessionEntry, SessionTreeNode, SessionHistoryItem, KnightSessionStats } from '../hooks/useKnightSession'
 import { Spinner, ErrorBanner, EmptyState, PageHeader, RefreshButton, StatCard, ProgressBar } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
+import { UntrustedText } from '../components/UntrustedText'
+import { sanitizeText } from '../lib/untrusted'
 
 const entryTypeIcons: Record<string, string> = {
   user: '📨',
@@ -122,7 +124,7 @@ export function ToolCallCard({ entry }: { entry: SessionEntry }) {
         {entry.toolName && (
           <span className="font-mono text-purple-400 text-xs bg-purple-500/10 px-1.5 py-0.5 rounded shrink-0">{entry.toolName}</span>
         )}
-        <span className={`truncate flex-1 min-w-0 ${label.placeholder ? 'text-gray-500 italic' : 'text-gray-400'}`}>{label.text}</span>
+        <span className={`truncate flex-1 min-w-0 ${label.placeholder ? 'text-gray-500 italic' : 'text-gray-400'}`}>{sanitizeText(label.text)}</span>
         {entry.cost != null && entry.cost > 0 && (
           <span className="text-roundtable-gold text-xs shrink-0">{formatCost(entry.cost)}</span>
         )}
@@ -136,17 +138,17 @@ export function ToolCallCard({ entry }: { entry: SessionEntry }) {
           {entry.input && (
             <div>
               <span className="text-[10px] text-gray-500 uppercase">Input</span>
-              <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-auto mt-0.5">{entry.input}</pre>
+              <UntrustedText text={entry.input} className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-auto mt-0.5" />
             </div>
           )}
           {entry.output && (
             <div>
               <span className="text-[10px] text-gray-500 uppercase">Output</span>
-              <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-auto mt-0.5">{entry.output}</pre>
+              <UntrustedText text={entry.output} className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-auto mt-0.5" />
             </div>
           )}
           {entry.text && !entry.input && !entry.output && (
-            <pre className="text-xs text-gray-400 whitespace-pre-wrap max-h-64 overflow-auto">{entry.text}</pre>
+            <UntrustedText text={entry.text} className="text-xs text-gray-400 whitespace-pre-wrap max-h-64 overflow-auto" />
           )}
         </div>
       )}
