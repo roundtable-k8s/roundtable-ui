@@ -3,8 +3,8 @@ name: Merge guard
 # Enforces in CI what rt-lead's prompt only asks for (roundtable#260): on
 # 2026-11-23 rt-lead queued roundtable#266 with a `hold` label and no posted review.
 # - Any PR with the `hold` label fails.
-# - Bot-authored PRs (the knights) need a posted, non-dismissed review whose
-#   last "Verdict:" line is "Verdict: ship it".
+# - Bot-authored PRs (the knights) need a posted review or PR comment whose
+#   newest "Verdict:" line is "Verdict: ship it" (dismissed reviews don't count).
 # - PRs that touch a protected path (regexes in .github/merge-guard-paths,
 #   read from the base branch) get the `protected-paths` label so they stand
 #   out. They still auto-merge on a ship-it review; the label is for visibility.
@@ -75,11 +75,18 @@ jobs:
             exit 0
           fi
 
-          verdict="$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
-            --jq '.[] | select(.state != "DISMISSED") | .body' \
+          # The verdict can be in a PR review or a PR comment: the knights' bot
+          # account can't approve its own PRs, so rt-lead sometimes posts the
+          # review as a comment. The newest "Verdict:" line wins.
+          verdict="$({
+              gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
+                --jq '.[] | select(.state != "DISMISSED") | [.submitted_at, .body] | @json'
+              gh api --paginate "repos/$REPO/issues/$PR/comments" \
+                --jq '.[] | [.created_at, .body] | @json'
+            } | jq -rs 'sort_by(.[0]) | .[] | .[1]' \
             | tr -d '\r' | grep -E '^Verdict: ' | tail -n 1 || true)"
           echo "Latest verdict: ${verdict:-none}"
           if [ "$verdict" != "Verdict: ship it" ]; then
-            echo "::error::PR #$PR needs a posted review ending in 'Verdict: ship it' before it can merge."
+            echo "::error::PR #$PR needs a posted review or comment ending in 'Verdict: ship it' before it can merge."
             exit 1
           fi
