@@ -9,7 +9,7 @@ name: Trigger autodeploy
 # token is scoped to dapper-cluster with contents:write and lasts an hour.
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers] -- main only, checks out nothing
-    workflows: ["Build __CI__ Push"]
+    workflows: ["Build & Push"]
     types: [completed]
     branches: [main]
 
