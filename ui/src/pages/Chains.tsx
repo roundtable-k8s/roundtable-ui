@@ -231,7 +231,7 @@ function ChainCard({ chain }: { chain: Chain }) {
           : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
         <span className="font-semibold text-white">{chain.name}</span>
         <PhaseBadge phase={chain.phase} />
-        {chain.suspended && (
+        {chain.suspend && (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-red-500/20 text-red-400 border-red-500/30">
             ⏸ suspended
           </span>
@@ -239,8 +239,8 @@ function ChainCard({ chain }: { chain: Chain }) {
         {chain.schedule && (
           <span className="text-xs text-gray-500 font-mono">{chain.schedule}</span>
         )}
-        {chain.timeout && (
-          <span className="text-xs text-gray-500">⏱ {chain.timeout}s timeout</span>
+        {chain.timeoutSeconds && (
+          <span className="text-xs text-gray-500">⏱ {chain.timeoutSeconds}s timeout</span>
         )}
         <span className="text-xs text-gray-500">{(chain.steps || []).length} steps</span>
         <span className="ml-auto flex items-center gap-1 text-xs text-gray-500">
@@ -276,10 +276,10 @@ function ChainCard({ chain }: { chain: Chain }) {
                 </a>
               </div>
             )}
-            {chain.outputKnight && (
+            {chain.outputKnightRef && (
               <div>
                 <span className="text-gray-500">Output Knight:</span> 
-                <span className="text-gray-300 ml-1">{chain.outputKnight}</span>
+                <span className="text-gray-300 ml-1">{chain.outputKnightRef}</span>
               </div>
             )}
             {(chain.runsCompleted !== undefined || chain.runsFailed !== undefined) && (

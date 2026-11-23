@@ -35,8 +35,8 @@ export interface Mission {
   chains: string[] | null
   costBudgetUSD: string
   totalCost: string
-  ttl: number
-  timeout: number
+  ttlSeconds: number
+  timeoutSeconds: number
   roundTableRef: string
   metaMission?: boolean
   planningResult?: PlanningResult

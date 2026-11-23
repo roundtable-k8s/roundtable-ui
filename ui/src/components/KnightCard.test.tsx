@@ -22,12 +22,12 @@ const mockKnight: Knight = {
   phase: 'Ready',
   model: 'claude-sonnet-4-20250514',
   runtime: 'deployment',
-  suspended: false,
+  suspend: false,
   tasksCompleted: 100,
   tasksFailed: 5,
   totalCost: '12.45',
   concurrency: 5,
-  taskTimeout: 300,
+  taskTimeoutSeconds: 300,
 }
 
 describe('KnightCard', () => {
@@ -247,7 +247,7 @@ describe('KnightCard', () => {
   })
 
   it('shows suspended overlay when knight is suspended', () => {
-    const suspendedKnight = { ...mockKnight, suspended: true }
+    const suspendedKnight = { ...mockKnight, suspend: true }
     render(<KnightCard knight={suspendedKnight} />)
     expect(screen.getByText('SUSPENDED')).toBeInTheDocument()
   })

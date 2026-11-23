@@ -45,7 +45,7 @@ export function RoundTablesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {roundTables.map(rt => {
           const expanded = expandedCards.has(rt.name)
-          const hasDetail = rt.warmPool || rt.policies || rt.activeMissions != null || rt.totalTasksCompleted != null || rt.description || rt.suspended
+          const hasDetail = rt.warmPool || rt.policies || rt.activeMissions != null || rt.totalTasksCompleted != null || rt.description || rt.suspend
           return (
             <div key={rt.name} className="bg-roundtable-slate border border-roundtable-steel rounded-xl hover:border-roundtable-gold/30 transition-colors">
               <div className="p-5">
@@ -55,7 +55,7 @@ export function RoundTablesPage() {
                     <p className="text-xs text-gray-500">{rt.namespace}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
-                    {rt.suspended && <PhaseBadge phase="Suspended" />}
+                    {rt.suspend && <PhaseBadge phase="Suspended" />}
                     <PhaseBadge phase={rt.phase || 'Unknown'} />
                   </div>
                 </div>

@@ -32,7 +32,7 @@ func setupTestRouter() *mux.Router {
 
 	// Initialize mock dynamic client with proper scheme
 	scheme := runtime.NewScheme()
-	
+
 	// Register our custom resource types with the scheme
 	missionList := &unstructured.UnstructuredList{}
 	missionList.SetGroupVersionKind(schema.GroupVersionKind{
@@ -40,28 +40,28 @@ func setupTestRouter() *mux.Router {
 		Version: "v1alpha1",
 		Kind:    "MissionList",
 	})
-	
+
 	chainList := &unstructured.UnstructuredList{}
 	chainList.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "ai.roundtable.io",
 		Version: "v1alpha1",
 		Kind:    "ChainList",
 	})
-	
+
 	roundTableList := &unstructured.UnstructuredList{}
 	roundTableList.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "ai.roundtable.io",
 		Version: "v1alpha1",
 		Kind:    "RoundTableList",
 	})
-	
+
 	knightList := &unstructured.UnstructuredList{}
 	knightList.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "ai.roundtable.io",
 		Version: "v1alpha1",
 		Kind:    "KnightList",
 	})
-	
+
 	dynClient = fake.NewSimpleDynamicClientWithCustomListKinds(scheme,
 		map[schema.GroupVersionResource]string{
 			missionGVR:    "MissionList",
@@ -69,43 +69,43 @@ func setupTestRouter() *mux.Router {
 			roundTableGVR: "RoundTableList",
 			knightGVR:     "KnightList",
 		})
-	
+
 	// Create router with test handlers
 	r := mux.NewRouter()
 	api := r.PathPrefix("/api").Subrouter()
-	
+
 	namespace := "test-namespace"
 	fleetPrefix := "fleet-a"
-	
+
 	// Register handlers (without auth middleware for testing)
 	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}).Methods("GET")
-	
+
 	api.HandleFunc("/fleet", fleetHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}", knightHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
 
 	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(fleetPrefix)).Methods("POST")
-	
+
 	api.HandleFunc("/chains", chainsHandler(namespace)).Methods("GET")
 	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace)).Methods("GET")
-	
+
 	api.HandleFunc("/missions", missionsHandler(namespace)).Methods("GET")
 	api.HandleFunc("/missions/{name}", missionDetailHandler(namespace)).Methods("GET")
 	api.HandleFunc("/missions", missionCreateHandler(namespace)).Methods("POST")
 	api.HandleFunc("/missions/{name}", missionDeleteHandler(namespace)).Methods("DELETE")
-	
+
 	api.HandleFunc("/roundtables", roundTablesHandler(namespace)).Methods("GET")
 	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
-	
+
 	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"fleetPrefix": fleetPrefix,
 		})
 	}).Methods("GET")
-	
+
 	return r
 }
 
@@ -134,7 +134,7 @@ func makeTestKnightCR(name, namespace, domain string) *unstructured.Unstructured
 // TestHealthEndpoint tests the /api/health endpoint
 func TestHealthEndpoint(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	tests := []struct {
 		name           string
 		method         string
@@ -148,23 +148,23 @@ func TestHealthEndpoint(t *testing.T) {
 			expectedBody:   map[string]string{"status": "ok"},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/api/health", nil)
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
-			
+
 			var response map[string]string
 			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 				t.Fatalf("failed to parse response: %v", err)
 			}
-			
+
 			if response["status"] != tt.expectedBody["status"] {
 				t.Errorf("expected status %s, got %s", tt.expectedBody["status"], response["status"])
 			}
@@ -175,21 +175,21 @@ func TestHealthEndpoint(t *testing.T) {
 // TestConfigEndpoint tests the /api/config endpoint
 func TestConfigEndpoint(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	req := httptest.NewRequest("GET", "/api/config", nil)
 	w := httptest.NewRecorder()
-	
+
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]string
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	
+
 	if response["fleetPrefix"] != "fleet-a" {
 		t.Errorf("expected fleetPrefix 'fleet-a', got '%s'", response["fleetPrefix"])
 	}
@@ -198,7 +198,7 @@ func TestConfigEndpoint(t *testing.T) {
 // TestFleetHandler tests the /api/fleet endpoint
 func TestFleetHandler(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	// Create test pods
 	namespace := "test-namespace"
 	pod := &corev1.Pod{
@@ -232,7 +232,7 @@ func TestFleetHandler(t *testing.T) {
 			},
 		},
 	}
-	
+
 	_, err := fakeK8sClient.CoreV1().Pods(namespace).Create(nil, pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create test pod: %v", err)
@@ -252,24 +252,24 @@ func TestFleetHandler(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var knights []KnightStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &knights); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	
+
 	if len(knights) != 1 {
 		t.Errorf("expected 1 knight, got %d", len(knights))
 	}
-	
+
 	if knights[0].Name != "galahad" {
 		t.Errorf("expected knight name 'galahad', got '%s'", knights[0].Name)
 	}
-	
+
 	if knights[0].Domain != "security" {
 		t.Errorf("expected domain 'security', got '%s'", knights[0].Domain)
 	}
-	
+
 	if knights[0].Status != "online" {
 		t.Errorf("expected status 'online', got '%s'", knights[0].Status)
 	}
@@ -279,7 +279,7 @@ func TestFleetHandler(t *testing.T) {
 func TestFleetHandlerFiltersOutCronJobs(t *testing.T) {
 	router := setupTestRouter()
 	namespace := "test-namespace"
-	
+
 	// Create a CronJob pod (should be filtered out)
 	cronPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -294,19 +294,19 @@ func TestFleetHandlerFiltersOutCronJobs(t *testing.T) {
 			Containers: []corev1.Container{{Name: "knight"}},
 		},
 	}
-	
+
 	_, err := fakeK8sClient.CoreV1().Pods(namespace).Create(nil, cronPod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create test pod: %v", err)
 	}
-	
+
 	req := httptest.NewRequest("GET", "/api/fleet", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	var knights []KnightStatus
 	json.Unmarshal(w.Body.Bytes(), &knights)
-	
+
 	// Should be empty because CronJob pods are filtered
 	if len(knights) != 0 {
 		t.Errorf("expected 0 knights (CronJob filtered), got %d", len(knights))
@@ -317,7 +317,7 @@ func TestFleetHandlerFiltersOutCronJobs(t *testing.T) {
 func TestKnightHandler(t *testing.T) {
 	router := setupTestRouter()
 	namespace := "test-namespace"
-	
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tristan-xyz789",
@@ -353,7 +353,7 @@ func TestKnightHandler(t *testing.T) {
 			},
 		},
 	}
-	
+
 	fakeK8sClient.CoreV1().Pods(namespace).Create(nil, pod, metav1.CreateOptions{})
 	if _, err := dynClient.Resource(knightGVR).Namespace(namespace).Create(nil, makeTestKnightCR("tristan", namespace, "infrastructure"), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("failed to create knight CR: %v", err)
@@ -425,17 +425,17 @@ func TestKnightHandler(t *testing.T) {
 			checkResponse:  func(t *testing.T, body []byte) {},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/fleet/"+tt.knightName, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
-			
+
 			tt.checkResponse(t, w.Body.Bytes())
 		})
 	}
@@ -492,7 +492,7 @@ func TestAuthMiddleware(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup environment
@@ -500,21 +500,21 @@ func TestAuthMiddleware(t *testing.T) {
 				os.Setenv("DASHBOARD_API_KEY", tt.apiKey)
 				defer os.Unsetenv("DASHBOARD_API_KEY")
 			}
-			
+
 			// Create router with auth middleware
 			router := setupTestRouter()
 			r := mux.NewRouter()
 			r.Use(authMiddleware)
 			r.PathPrefix("/api").Handler(router)
-			
+
 			req := httptest.NewRequest("GET", tt.path, nil)
 			if tt.authHeader != "" {
 				req.Header.Set("Authorization", tt.authHeader)
 			}
 			w := httptest.NewRecorder()
-			
+
 			r.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
@@ -553,35 +553,35 @@ func TestAuthLoginEndpoint(t *testing.T) {
 			expectSuccess:  false, // No auth required, so no "authenticated" field expected
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envAPIKey != "" {
 				os.Setenv("DASHBOARD_API_KEY", tt.envAPIKey)
 				defer os.Unsetenv("DASHBOARD_API_KEY")
 			}
-			
+
 			router := mux.NewRouter()
 			router.Use(authMiddleware)
 			api := router.PathPrefix("/api").Subrouter()
 			api.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
 				// Handled by middleware
 			}).Methods("POST")
-			
+
 			body, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
-			
+
 			var response map[string]interface{}
 			json.Unmarshal(w.Body.Bytes(), &response)
-			
+
 			if tt.expectSuccess {
 				if auth, ok := response["authenticated"].(bool); !ok || !auth {
 					t.Error("expected authenticated=true in response")
@@ -609,7 +609,7 @@ func TestValidKnightName(t *testing.T) {
 		{"invalid too long", strings.Repeat("a", 64), false},
 		{"empty string", "", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := validKnightName.MatchString(tt.input)
@@ -626,17 +626,17 @@ func TestBriefingHandler(t *testing.T) {
 	tmpDir := t.TempDir()
 	briefingsDir := fmt.Sprintf("%s/Briefings/Daily", tmpDir)
 	os.MkdirAll(briefingsDir, 0755)
-	
+
 	// Create a test briefing file
 	testContent := "# Daily Briefing 2024-01-01\n\nTest content"
 	os.WriteFile(fmt.Sprintf("%s/2024-01-01.md", briefingsDir), []byte(testContent), 0644)
-	
+
 	vaultPath := tmpDir
-	
+
 	router := mux.NewRouter()
 	api := router.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath)).Methods("GET")
-	
+
 	tests := []struct {
 		name           string
 		date           string
@@ -668,17 +668,17 @@ func TestBriefingHandler(t *testing.T) {
 			expectedBody:   "",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/briefings/"+tt.date, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
-			
+
 			if tt.expectedBody != "" && w.Body.String() != tt.expectedBody {
 				t.Errorf("expected body '%s', got '%s'", tt.expectedBody, w.Body.String())
 			}
@@ -689,7 +689,7 @@ func TestBriefingHandler(t *testing.T) {
 // TestMissionsHandler tests the /api/missions endpoint
 func TestMissionsHandler(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	// Create test mission CRD
 	mission := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -700,9 +700,9 @@ func TestMissionsHandler(t *testing.T) {
 				"namespace": "test-namespace",
 			},
 			"spec": map[string]interface{}{
-				"objective":      "Test objective",
-				"costBudgetUSD":  "10.00",
-				"roundTableRef":  "table-a",
+				"objective":     "Test objective",
+				"costBudgetUSD": "10.00",
+				"roundTableRef": map[string]interface{}{"name": "table-a"},
 			},
 			"status": map[string]interface{}{
 				"phase":     "Running",
@@ -710,33 +710,33 @@ func TestMissionsHandler(t *testing.T) {
 			},
 		},
 	}
-	
+
 	_, err := dynClient.Resource(missionGVR).Namespace("test-namespace").Create(nil, mission, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create test mission: %v", err)
 	}
-	
+
 	req := httptest.NewRequest("GET", "/api/missions", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var missions []MissionSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &missions); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	
+
 	if len(missions) != 1 {
 		t.Fatalf("expected 1 mission, got %d", len(missions))
 	}
-	
+
 	if missions[0].Name != "test-mission" {
 		t.Errorf("expected name 'test-mission', got '%s'", missions[0].Name)
 	}
-	
+
 	if missions[0].Phase != "Running" {
 		t.Errorf("expected phase 'Running', got '%s'", missions[0].Phase)
 	}
@@ -745,7 +745,7 @@ func TestMissionsHandler(t *testing.T) {
 // TestMissionCreateHandler tests the POST /api/missions endpoint
 func TestMissionCreateHandler(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	tests := []struct {
 		name           string
 		requestBody    map[string]interface{}
@@ -771,16 +771,16 @@ func TestMissionCreateHandler(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			body, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("POST", "/api/missions", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
@@ -791,7 +791,7 @@ func TestMissionCreateHandler(t *testing.T) {
 // TestMissionDeleteHandler tests the DELETE /api/missions/{name} endpoint
 func TestMissionDeleteHandler(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	// Create a mission to delete
 	mission := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -805,18 +805,18 @@ func TestMissionDeleteHandler(t *testing.T) {
 		},
 	}
 	dynClient.Resource(missionGVR).Namespace("test-namespace").Create(nil, mission, metav1.CreateOptions{})
-	
+
 	req := httptest.NewRequest("DELETE", "/api/missions/delete-me", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &response)
-	
+
 	if deleted, ok := response["deleted"].(bool); !ok || !deleted {
 		t.Error("expected deleted=true in response")
 	}
@@ -825,7 +825,7 @@ func TestMissionDeleteHandler(t *testing.T) {
 // TestChainsHandler tests the /api/chains endpoint
 func TestChainsHandler(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	chain := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "ai.roundtable.io/v1alpha1",
@@ -838,7 +838,7 @@ func TestChainsHandler(t *testing.T) {
 				"steps": []interface{}{
 					map[string]interface{}{
 						"name":      "step-1",
-						"knightRef": "galahad",
+						"knightRef": map[string]interface{}{"name": "galahad"},
 						"domain":    "security",
 					},
 				},
@@ -848,24 +848,24 @@ func TestChainsHandler(t *testing.T) {
 			},
 		},
 	}
-	
+
 	dynClient.Resource(chainGVR).Namespace("test-namespace").Create(nil, chain, metav1.CreateOptions{})
-	
+
 	req := httptest.NewRequest("GET", "/api/chains", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var chains []ChainSummary
 	json.Unmarshal(w.Body.Bytes(), &chains)
-	
+
 	if len(chains) != 1 {
 		t.Fatalf("expected 1 chain, got %d", len(chains))
 	}
-	
+
 	if chains[0].Name != "test-chain" {
 		t.Errorf("expected name 'test-chain', got '%s'", chains[0].Name)
 	}
@@ -874,7 +874,7 @@ func TestChainsHandler(t *testing.T) {
 // TestRoundTablesHandler tests the /api/roundtables endpoint
 func TestRoundTablesHandler(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	roundtable := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "ai.roundtable.io/v1alpha1",
@@ -895,28 +895,28 @@ func TestRoundTablesHandler(t *testing.T) {
 			},
 		},
 	}
-	
+
 	dynClient.Resource(roundTableGVR).Namespace("test-namespace").Create(nil, roundtable, metav1.CreateOptions{})
-	
+
 	req := httptest.NewRequest("GET", "/api/roundtables", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var tables []RoundTableSummary
 	json.Unmarshal(w.Body.Bytes(), &tables)
-	
+
 	if len(tables) != 1 {
 		t.Fatalf("expected 1 roundtable, got %d", len(tables))
 	}
-	
+
 	if tables[0].Name != "table-a" {
 		t.Errorf("expected name 'table-a', got '%s'", tables[0].Name)
 	}
-	
+
 	if tables[0].KnightsReady != 3 {
 		t.Errorf("expected 3 ready knights, got %d", tables[0].KnightsReady)
 	}
@@ -925,7 +925,7 @@ func TestRoundTablesHandler(t *testing.T) {
 // TestRateLimiter tests the rate limiter
 func TestRateLimiter(t *testing.T) {
 	rl := newRateLimiter(2, 1*time.Second)
-	
+
 	// First two requests should succeed
 	if !rl.allow() {
 		t.Error("first request should be allowed")
@@ -933,15 +933,15 @@ func TestRateLimiter(t *testing.T) {
 	if !rl.allow() {
 		t.Error("second request should be allowed")
 	}
-	
+
 	// Third request should be blocked
 	if rl.allow() {
 		t.Error("third request should be blocked")
 	}
-	
+
 	// Wait for window to reset
 	time.Sleep(1 * time.Second)
-	
+
 	// Should allow again
 	if !rl.allow() {
 		t.Error("request after reset should be allowed")
@@ -959,7 +959,7 @@ func TestCapitalizeKnight(t *testing.T) {
 		{"GALAHAD", "GALAHAD"},
 		{"", ""},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := capitalizeKnight(tt.input)
@@ -996,7 +996,7 @@ func TestEventTimestamp(t *testing.T) {
 func TestEnvOr(t *testing.T) {
 	os.Setenv("TEST_VAR", "value")
 	defer os.Unsetenv("TEST_VAR")
-	
+
 	tests := []struct {
 		name     string
 		key      string
@@ -1007,7 +1007,7 @@ func TestEnvOr(t *testing.T) {
 		{"missing var", "MISSING_VAR", "default", "default"},
 		{"empty default", "MISSING_VAR", "", ""},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := envOr(tt.key, tt.def)
@@ -1021,7 +1021,7 @@ func TestEnvOr(t *testing.T) {
 // TestBuildKnightStatusWithCRD tests the enriched knight status builder with CRD data
 func TestBuildKnightStatusWithCRD(t *testing.T) {
 	now := metav1.Now()
-	
+
 	// Create Knight CR with enriched fields
 	cr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1033,13 +1033,13 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 				"creationTimestamp": now.Format(time.RFC3339),
 			},
 			"spec": map[string]interface{}{
-				"domain":      "security",
-				"model":       "anthropic/claude-3-5-sonnet-20241022",
-				"runtime":     "pi@0.14.5",
-				"suspended":   false,
-				"concurrency": int64(3),
-				"taskTimeout": int64(600),
-				"skills":      []interface{}{"vulnerability-scan", "penetration-test"},
+				"domain":             "security",
+				"model":              "anthropic/claude-3-5-sonnet-20241022",
+				"runtime":            "pi@0.14.5",
+				"suspend":            false,
+				"concurrency":        int64(3),
+				"taskTimeoutSeconds": int64(600),
+				"skills":             []interface{}{"vulnerability-scan", "penetration-test"},
 			},
 			"status": map[string]interface{}{
 				"phase":          "Ready",
@@ -1050,7 +1050,7 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 		},
 	}
 	cr.SetCreationTimestamp(now)
-	
+
 	// Create matching pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1076,67 +1076,67 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 			},
 		},
 	}
-	
+
 	status := buildKnightStatus(cr, pod)
-	
+
 	// Test basic fields
 	if status.Name != "galahad" {
 		t.Errorf("expected name 'galahad', got '%s'", status.Name)
 	}
-	
+
 	if status.Domain != "security" {
 		t.Errorf("expected domain 'security', got '%s'", status.Domain)
 	}
-	
+
 	if status.Status != "online" {
 		t.Errorf("expected status 'online', got '%s'", status.Status)
 	}
-	
+
 	if status.Restarts != 2 {
 		t.Errorf("expected 2 restarts, got %d", status.Restarts)
 	}
-	
+
 	if !status.Ready {
 		t.Error("expected ready=true")
 	}
-	
+
 	// Test enriched CRD fields
 	if status.Phase != "Ready" {
 		t.Errorf("expected phase 'Ready', got '%s'", status.Phase)
 	}
-	
+
 	if status.Model != "anthropic/claude-3-5-sonnet-20241022" {
 		t.Errorf("expected model 'anthropic/claude-3-5-sonnet-20241022', got '%s'", status.Model)
 	}
-	
+
 	if status.Runtime != "pi@0.14.5" {
 		t.Errorf("expected runtime 'pi@0.14.5', got '%s'", status.Runtime)
 	}
-	
-	if status.Suspended {
+
+	if status.Suspend {
 		t.Error("expected suspended=false")
 	}
-	
+
 	if status.TasksCompleted != 150 {
 		t.Errorf("expected 150 tasks completed, got %d", status.TasksCompleted)
 	}
-	
+
 	if status.TasksFailed != 5 {
 		t.Errorf("expected 5 tasks failed, got %d", status.TasksFailed)
 	}
-	
+
 	if status.TotalCost != "$12.45" {
 		t.Errorf("expected totalCost '$12.45', got '%s'", status.TotalCost)
 	}
-	
+
 	if status.Concurrency != 3 {
 		t.Errorf("expected concurrency 3, got %d", status.Concurrency)
 	}
-	
-	if status.TaskTimeout != 600 {
-		t.Errorf("expected taskTimeout 600, got %d", status.TaskTimeout)
+
+	if status.TaskTimeoutSeconds != 600 {
+		t.Errorf("expected taskTimeout 600, got %d", status.TaskTimeoutSeconds)
 	}
-	
+
 	if len(status.SkillsList) != 2 {
 		t.Errorf("expected 2 skills, got %d", len(status.SkillsList))
 	}
@@ -1146,9 +1146,9 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 func TestFleetHandlerEnrichedFields(t *testing.T) {
 	router := setupTestRouter()
 	namespace := "test-namespace"
-	
+
 	now := metav1.Now()
-	
+
 	// Create Knight CR with enriched fields
 	knight := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1160,13 +1160,13 @@ func TestFleetHandlerEnrichedFields(t *testing.T) {
 				"creationTimestamp": now.Format(time.RFC3339),
 			},
 			"spec": map[string]interface{}{
-				"domain":      "infrastructure",
-				"model":       "openai/gpt-4o",
-				"runtime":     "pi@0.14.5",
-				"suspended":   false,
-				"concurrency": int64(5),
-				"taskTimeout": int64(900),
-				"skills":      []interface{}{"kubernetes-ops", "terraform"},
+				"domain":             "infrastructure",
+				"model":              "openai/gpt-4o",
+				"runtime":            "pi@0.14.5",
+				"suspend":            false,
+				"concurrency":        int64(5),
+				"taskTimeoutSeconds": int64(900),
+				"skills":             []interface{}{"kubernetes-ops", "terraform"},
 			},
 			"status": map[string]interface{}{
 				"phase":          "Ready",
@@ -1177,12 +1177,12 @@ func TestFleetHandlerEnrichedFields(t *testing.T) {
 		},
 	}
 	knight.SetCreationTimestamp(now)
-	
+
 	_, err := dynClient.Resource(knightGVR).Namespace(namespace).Create(nil, knight, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create knight CR: %v", err)
 	}
-	
+
 	// Create matching pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1214,61 +1214,61 @@ func TestFleetHandlerEnrichedFields(t *testing.T) {
 			},
 		},
 	}
-	
+
 	k8sClient = k8sfake.NewSimpleClientset(pod)
-	
+
 	req := httptest.NewRequest("GET", "/api/fleet", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var knights []KnightStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &knights); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	
+
 	if len(knights) != 1 {
 		t.Fatalf("expected 1 knight, got %d", len(knights))
 	}
-	
+
 	k := knights[0]
-	
+
 	// Verify enriched fields are present
 	if k.Phase != "Ready" {
 		t.Errorf("expected phase 'Ready', got '%s'", k.Phase)
 	}
-	
+
 	if k.Model != "openai/gpt-4o" {
 		t.Errorf("expected model 'openai/gpt-4o', got '%s'", k.Model)
 	}
-	
+
 	if k.Runtime != "pi@0.14.5" {
 		t.Errorf("expected runtime 'pi@0.14.5', got '%s'", k.Runtime)
 	}
-	
+
 	if k.TasksCompleted != 250 {
 		t.Errorf("expected tasksCompleted 250, got %d", k.TasksCompleted)
 	}
-	
+
 	if k.TasksFailed != 10 {
 		t.Errorf("expected tasksFailed 10, got %d", k.TasksFailed)
 	}
-	
+
 	if k.TotalCost != "$45.67" {
 		t.Errorf("expected totalCost '$45.67', got '%s'", k.TotalCost)
 	}
-	
+
 	if k.Concurrency != 5 {
 		t.Errorf("expected concurrency 5, got %d", k.Concurrency)
 	}
-	
-	if k.TaskTimeout != 900 {
-		t.Errorf("expected taskTimeout 900, got %d", k.TaskTimeout)
+
+	if k.TaskTimeoutSeconds != 900 {
+		t.Errorf("expected taskTimeout 900, got %d", k.TaskTimeoutSeconds)
 	}
-	
+
 	if len(k.SkillsList) != 2 {
 		t.Errorf("expected 2 skills, got %d", len(k.SkillsList))
 	}
@@ -1286,16 +1286,16 @@ func TestGetNestedMap(t *testing.T) {
 			"key": "value",
 		},
 	}
-	
+
 	result := getNestedMap(obj, "spec")
 	if result == nil {
 		t.Error("expected non-nil map")
 	}
-	
+
 	if result["key"] != "value" {
 		t.Errorf("expected key='value', got '%v'", result["key"])
 	}
-	
+
 	// Test missing key
 	result = getNestedMap(obj, "missing")
 	if result != nil {
@@ -1309,19 +1309,19 @@ func TestGetStr(t *testing.T) {
 		"name": "test",
 		"num":  123,
 	}
-	
+
 	if getStr(obj, "name") != "test" {
 		t.Error("expected 'test'")
 	}
-	
+
 	if getStr(obj, "num") != "" {
 		t.Error("expected empty string for non-string value")
 	}
-	
+
 	if getStr(obj, "missing") != "" {
 		t.Error("expected empty string for missing key")
 	}
-	
+
 	if getStr(nil, "any") != "" {
 		t.Error("expected empty string for nil map")
 	}
@@ -1334,19 +1334,19 @@ func TestGetInt(t *testing.T) {
 		"count64": int64(100),
 		"str":     "not a number",
 	}
-	
+
 	if getInt(obj, "count") != 42 {
 		t.Error("expected 42")
 	}
-	
+
 	if getInt(obj, "count64") != 100 {
 		t.Error("expected 100")
 	}
-	
+
 	if getInt(obj, "str") != 0 {
 		t.Error("expected 0 for non-number")
 	}
-	
+
 	if getInt(obj, "missing") != 0 {
 		t.Error("expected 0 for missing key")
 	}
@@ -1355,7 +1355,7 @@ func TestGetInt(t *testing.T) {
 // TestRoundTableHandlerWithWarmPoolAndPolicies tests enriched RoundTable fields
 func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	// Create RoundTable CR with warmPool and policies
 	roundtable := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1376,8 +1376,8 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 					"maxKnights":         int64(20),
 					"maxMissions":        int64(10),
 				},
-				"suspended":  false,
-				"ephemeral":  false,
+				"suspend":   false,
+				"ephemeral": false,
 			},
 			"status": map[string]interface{}{
 				"phase":               "Ready",
@@ -1394,30 +1394,30 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 			},
 		},
 	}
-	
+
 	_, err := dynClient.Resource(roundTableGVR).Namespace("test-namespace").Create(nil, roundtable, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create roundtable: %v", err)
 	}
-	
+
 	req := httptest.NewRequest("GET", "/api/roundtables", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var tables []RoundTableSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &tables); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	
+
 	// Should have 2 tables (one from earlier test + this one)
 	if len(tables) < 1 {
 		t.Fatalf("expected at least 1 roundtable, got %d", len(tables))
 	}
-	
+
 	// Find our table
 	var rt *RoundTableSummary
 	for i := range tables {
@@ -1426,75 +1426,75 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if rt == nil {
 		t.Fatal("table-b not found in response")
 	}
-	
+
 	// Verify enriched fields
 	if rt.Phase != "Ready" {
 		t.Errorf("expected phase 'Ready', got '%s'", rt.Phase)
 	}
-	
+
 	if rt.Description != "Production Round Table" {
 		t.Errorf("expected description 'Production Round Table', got '%s'", rt.Description)
 	}
-	
+
 	if rt.NATSPrefix != "fleet-b" {
 		t.Errorf("expected NATS prefix 'fleet-b', got '%s'", rt.NATSPrefix)
 	}
-	
+
 	// Test WarmPool
 	if rt.WarmPool == nil {
 		t.Fatal("expected warmPool to be present")
 	}
-	
+
 	if rt.WarmPool.Available != 5 {
 		t.Errorf("expected warmPool.available 5, got %d", rt.WarmPool.Available)
 	}
-	
+
 	if rt.WarmPool.Provisioning != 2 {
 		t.Errorf("expected warmPool.provisioning 2, got %d", rt.WarmPool.Provisioning)
 	}
-	
+
 	if rt.WarmPool.Claimed != 3 {
 		t.Errorf("expected warmPool.claimed 3, got %d", rt.WarmPool.Claimed)
 	}
-	
+
 	// Test Policies
 	if rt.Policies == nil {
 		t.Fatal("expected policies to be present")
 	}
-	
+
 	if rt.Policies.MaxConcurrentTasks != 100 {
 		t.Errorf("expected maxConcurrentTasks 100, got %d", rt.Policies.MaxConcurrentTasks)
 	}
-	
+
 	if rt.Policies.CostBudgetUSD != "500.00" {
 		t.Errorf("expected costBudgetUSD '500.00', got '%s'", rt.Policies.CostBudgetUSD)
 	}
-	
+
 	if rt.Policies.MaxKnights != 20 {
 		t.Errorf("expected maxKnights 20, got %d", rt.Policies.MaxKnights)
 	}
-	
+
 	if rt.Policies.MaxMissions != 10 {
 		t.Errorf("expected maxMissions 10, got %d", rt.Policies.MaxMissions)
 	}
-	
+
 	// Test other status fields
 	if rt.KnightsReady != 8 {
 		t.Errorf("expected knightsReady 8, got %d", rt.KnightsReady)
 	}
-	
+
 	if rt.KnightsTotal != 10 {
 		t.Errorf("expected knightsTotal 10, got %d", rt.KnightsTotal)
 	}
-	
+
 	if rt.TotalTasksCompleted != 5000 {
 		t.Errorf("expected totalTasksCompleted 5000, got %d", rt.TotalTasksCompleted)
 	}
-	
+
 	if rt.ActiveMissions != 3 {
 		t.Errorf("expected activeMissions 3, got %d", rt.ActiveMissions)
 	}
@@ -1503,7 +1503,7 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 // TestMissionHandlerWithKnightAndChainStatuses tests enriched Mission fields
 func TestMissionHandlerWithKnightAndChainStatuses(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	// Create Mission CR with knight and chain statuses
 	mission := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1514,12 +1514,12 @@ func TestMissionHandlerWithKnightAndChainStatuses(t *testing.T) {
 				"namespace": "test-namespace",
 			},
 			"spec": map[string]interface{}{
-				"objective":      "Test enriched mission",
-				"costBudgetUSD":  "100.00",
-				"roundTableRef":  "table-a",
-				"ttl":            int64(3600),
-				"timeout":        int64(1800),
-				"cleanupPolicy":  "Retain",
+				"objective":       "Test enriched mission",
+				"costBudgetUSD":   "100.00",
+				"roundTableRef":   map[string]interface{}{"name": "table-a"},
+				"ttlSeconds":      int64(3600),
+				"timeoutSeconds":  int64(1800),
+				"cleanupPolicy":   "Retain",
 				"recruitExisting": true,
 				"retainResults":   true,
 				"knights": []interface{}{
@@ -1531,10 +1531,10 @@ func TestMissionHandlerWithKnightAndChainStatuses(t *testing.T) {
 				},
 			},
 			"status": map[string]interface{}{
-				"phase":             "Running",
-				"totalCost":         "$25.00",
-				"startedAt":         "2024-01-01T10:00:00Z",
-				"resultsConfigMap":  "enriched-mission-results",
+				"phase":            "Running",
+				"totalCost":        "$25.00",
+				"startedAt":        "2024-01-01T10:00:00Z",
+				"resultsConfigMap": "enriched-mission-results",
 				"knightStatuses": []interface{}{
 					map[string]interface{}{
 						"name":           "galahad",
@@ -1559,55 +1559,55 @@ func TestMissionHandlerWithKnightAndChainStatuses(t *testing.T) {
 			},
 		},
 	}
-	
+
 	_, err := dynClient.Resource(missionGVR).Namespace("test-namespace").Create(nil, mission, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create mission: %v", err)
 	}
-	
+
 	req := httptest.NewRequest("GET", "/api/missions/enriched-mission", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
-	
+
 	var m MissionSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	
+
 	// Verify basic fields
 	if m.Name != "enriched-mission" {
 		t.Errorf("expected name 'enriched-mission', got '%s'", m.Name)
 	}
-	
+
 	if m.Phase != "Running" {
 		t.Errorf("expected phase 'Running', got '%s'", m.Phase)
 	}
-	
+
 	if m.CleanupPolicy != "Retain" {
 		t.Errorf("expected cleanupPolicy 'Retain', got '%s'", m.CleanupPolicy)
 	}
-	
+
 	if !m.RecruitExisting {
 		t.Error("expected recruitExisting=true")
 	}
-	
+
 	if !m.RetainResults {
 		t.Error("expected retainResults=true")
 	}
-	
+
 	if m.ResultsConfigMap != "enriched-mission-results" {
 		t.Errorf("expected resultsConfigMap 'enriched-mission-results', got '%s'", m.ResultsConfigMap)
 	}
-	
+
 	// Test KnightStatuses
 	if len(m.KnightStatuses) != 2 {
 		t.Fatalf("expected 2 knight statuses, got %d", len(m.KnightStatuses))
 	}
-	
+
 	// Find galahad
 	var galahad *MissionKnightStatusDTO
 	for i := range m.KnightStatuses {
@@ -1616,23 +1616,23 @@ func TestMissionHandlerWithKnightAndChainStatuses(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if galahad == nil {
 		t.Fatal("galahad not found in knightStatuses")
 	}
-	
+
 	if !galahad.Ready {
 		t.Error("expected galahad ready=true")
 	}
-	
+
 	if galahad.TasksCompleted != 50 {
 		t.Errorf("expected galahad tasksCompleted 50, got %d", galahad.TasksCompleted)
 	}
-	
+
 	if galahad.Ephemeral {
 		t.Error("expected galahad ephemeral=false")
 	}
-	
+
 	// Find percival
 	var percival *MissionKnightStatusDTO
 	for i := range m.KnightStatuses {
@@ -1641,29 +1641,29 @@ func TestMissionHandlerWithKnightAndChainStatuses(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if percival == nil {
 		t.Fatal("percival not found in knightStatuses")
 	}
-	
+
 	if !percival.Ephemeral {
 		t.Error("expected percival ephemeral=true")
 	}
-	
+
 	// Test ChainStatuses
 	if len(m.ChainStatuses) != 1 {
 		t.Fatalf("expected 1 chain status, got %d", len(m.ChainStatuses))
 	}
-	
+
 	chain := m.ChainStatuses[0]
 	if chain.Name != "recon-chain" {
 		t.Errorf("expected chain name 'recon-chain', got '%s'", chain.Name)
 	}
-	
+
 	if chain.ChainCRName != "enriched-mission-recon-chain" {
 		t.Errorf("expected chainCRName 'enriched-mission-recon-chain', got '%s'", chain.ChainCRName)
 	}
-	
+
 	if chain.Phase != "Running" {
 		t.Errorf("expected chain phase 'Running', got '%s'", chain.Phase)
 	}
@@ -1686,7 +1686,7 @@ func TestInputValidation(t *testing.T) {
 		{"special characters", "knight@test!", false},
 		{"too long", strings.Repeat("a", 64), false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := validKnightName.MatchString(tt.input)
@@ -1700,10 +1700,10 @@ func TestInputValidation(t *testing.T) {
 // TestTaskDispatchValidation tests task dispatch input validation
 func TestTaskDispatchValidation(t *testing.T) {
 	router := setupTestRouter()
-	
+
 	// Set up NATS mock (nil will cause proper error)
 	nc = nil
-	
+
 	tests := []struct {
 		name           string
 		requestBody    map[string]interface{}
@@ -1755,16 +1755,16 @@ func TestTaskDispatchValidation(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			body, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("POST", "/api/tasks/dispatch", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d (body: %s)", tt.expectedStatus, w.Code, w.Body.String())
 			}
@@ -1776,12 +1776,12 @@ func TestTaskDispatchValidation(t *testing.T) {
 func TestAuthMiddlewareProtectedEndpoints(t *testing.T) {
 	os.Setenv("DASHBOARD_API_KEY", "test-secret-key")
 	defer os.Unsetenv("DASHBOARD_API_KEY")
-	
+
 	router := setupTestRouter()
 	r := mux.NewRouter()
 	r.Use(authMiddleware)
 	r.PathPrefix("/api").Handler(router)
-	
+
 	protectedEndpoints := []struct {
 		method string
 		path   string
@@ -1795,7 +1795,7 @@ func TestAuthMiddlewareProtectedEndpoints(t *testing.T) {
 		{"DELETE", "/api/missions/test"},
 		{"GET", "/api/config"},
 	}
-	
+
 	for _, ep := range protectedEndpoints {
 		t.Run(ep.method+" "+ep.path, func(t *testing.T) {
 			var body *bytes.Reader
@@ -1804,24 +1804,24 @@ func TestAuthMiddlewareProtectedEndpoints(t *testing.T) {
 			} else {
 				body = bytes.NewReader([]byte{})
 			}
-			
+
 			req := httptest.NewRequest(ep.method, ep.path, body)
 			req.Header.Set("Content-Type", "application/json")
 			// No auth header - should fail
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
-			
+
 			if w.Code != http.StatusUnauthorized {
 				t.Errorf("expected 401 Unauthorized without auth, got %d", w.Code)
 			}
-			
+
 			// With valid auth - should succeed (or at least not 401)
 			req = httptest.NewRequest(ep.method, ep.path, body)
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer test-secret-key")
 			w = httptest.NewRecorder()
 			r.ServeHTTP(w, req)
-			
+
 			if w.Code == http.StatusUnauthorized {
 				t.Errorf("expected non-401 with valid auth, got %d", w.Code)
 			}
@@ -1833,23 +1833,23 @@ func TestAuthMiddlewareProtectedEndpoints(t *testing.T) {
 func TestHealthEndpointBypassesAuth(t *testing.T) {
 	os.Setenv("DASHBOARD_API_KEY", "secret")
 	defer os.Unsetenv("DASHBOARD_API_KEY")
-	
+
 	router := setupTestRouter()
 	r := mux.NewRouter()
 	r.Use(authMiddleware)
 	r.PathPrefix("/api").Handler(router)
-	
+
 	req := httptest.NewRequest("GET", "/api/health", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected /api/health to return 200 without auth, got %d", w.Code)
 	}
-	
+
 	var response map[string]string
 	json.Unmarshal(w.Body.Bytes(), &response)
-	
+
 	if response["status"] != "ok" {
 		t.Errorf("expected status=ok, got %s", response["status"])
 	}
@@ -1982,5 +1982,45 @@ func TestKnightSessionHandlerMissingCRFallsBack(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected fallback to NATS proxy (503 with nil NATS), got %d", w.Code)
+	}
+}
+
+func TestParseChainResource_StandardTypes(t *testing.T) {
+	obj := map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "c", "namespace": "ns"},
+		"spec": map[string]interface{}{
+			"timeoutSeconds":  int64(120),
+			"suspend":         true,
+			"roundTableRef":   map[string]interface{}{"name": "rt"},
+			"missionRef":      map[string]interface{}{"name": "m"},
+			"outputKnightRef": map[string]interface{}{"name": "gawain"},
+			"steps": []interface{}{
+				map[string]interface{}{"name": "s1", "knightRef": map[string]interface{}{"name": "galahad"}},
+			},
+		},
+	}
+	c := parseChainResource(obj, map[string]string{"galahad": "security"})
+	if c.TimeoutSeconds != 120 || !c.Suspend {
+		t.Errorf("timeout/suspend not read: %+v", c)
+	}
+	if c.RoundTableRef != "rt" || c.MissionRef != "m" || c.OutputKnight != "gawain" {
+		t.Errorf("refs not read: %+v", c)
+	}
+	if len(c.Steps) != 1 || c.Steps[0].Knight != "galahad" || c.Steps[0].Domain != "security" {
+		t.Errorf("step knightRef not read: %+v", c.Steps)
+	}
+}
+
+func TestParseMissionResource_StandardTypes(t *testing.T) {
+	m := parseMissionResource(map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "m"},
+		"spec": map[string]interface{}{
+			"ttlSeconds":     int64(3600),
+			"timeoutSeconds": int64(600),
+			"roundTableRef":  map[string]interface{}{"name": "rt"},
+		},
+	})
+	if m.TTLSeconds != 3600 || m.TimeoutSeconds != 600 || m.RoundTableRef != "rt" {
+		t.Errorf("unexpected mission: %+v", m)
 	}
 }
