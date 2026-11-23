@@ -1,0 +1,4 @@
+# Protected paths for .github/workflows/merge-guard.yml: one extended regex per
+# line, matched against changed file paths. PRs touching these get the
+# `protected-paths` label (visibility only). Read from the base branch.
+^\.github/

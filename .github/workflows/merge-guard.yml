@@ -1,0 +1,85 @@
+name: Merge guard
+
+# Enforces in CI what rt-lead's prompt only asks for (roundtable#260): on
+# 2026-11-23 rt-lead queued roundtable#266 with a `hold` label and no posted review.
+# - Any PR with the `hold` label fails.
+# - Bot-authored PRs (the knights) need a posted, non-dismissed review whose
+#   last "Verdict:" line is "Verdict: ship it".
+# - PRs that touch a protected path (regexes in .github/merge-guard-paths,
+#   read from the base branch) get the `protected-paths` label so they stand
+#   out. They still auto-merge on a ship-it review; the label is for visibility.
+# Runs in the merge queue too, so a `hold` added after queueing still stops it.
+# This file is identical in every roundtable-k8s repo; only merge-guard-paths differs.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  # write: only to add the protected-paths label.
+  pull-requests: write
+
+concurrency:
+  group: merge-guard-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  merge-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check hold label, review verdict and protected paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = merge_group ]; then
+            # gh-readonly-queue/main/pr-<number>-<sha>
+            PR="$(sed -nE 's#.*/pr-([0-9]+)-[0-9a-f]+$#\1#p' <<<"$QUEUE_REF")"
+            [ -n "$PR" ] || { echo "::error::Cannot parse a PR number from $QUEUE_REF"; exit 1; }
+          fi
+          pr="$(gh api "repos/$REPO/pulls/$PR")"
+
+          # Label PRs touching protected paths (visibility only; PR events only).
+          if [ "$EVENT" != merge_group ]; then
+            patterns="$(gh api -H 'Accept: application/vnd.github.raw' \
+              "repos/$REPO/contents/.github/merge-guard-paths?ref=$BASE_SHA" 2>/dev/null \
+              | grep -vE '^[[:space:]]*(#|$)' || true)"
+            if [ -n "$patterns" ]; then
+              hits="$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' \
+                | grep -E -f <(printf '%s\n' "$patterns") || true)"
+              if [ -n "$hits" ]; then
+                echo "Protected paths touched:"; printf '  %s\n' $hits
+                echo "::notice::PR #$PR touches protected paths."
+                if ! jq -e '[.labels[].name] | index("protected-paths")' <<<"$pr" >/dev/null; then
+                  gh api -X POST "repos/$REPO/issues/$PR/labels" -f 'labels[]=protected-paths' >/dev/null
+                fi
+              fi
+            fi
+          fi
+
+          if jq -e '[.labels[].name] | index("hold")' <<<"$pr" >/dev/null; then
+            echo "::error::PR #$PR has the hold label."
+            exit 1
+          fi
+          if [ "$(jq -r .user.type <<<"$pr")" != Bot ]; then
+            echo "PR #$PR is human-authored: no review verdict required."
+            exit 0
+          fi
+
+          verdict="$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
+            --jq '.[] | select(.state != "DISMISSED") | .body' \
+            | tr -d '\r' | grep -E '^Verdict: ' | tail -n 1 || true)"
+          echo "Latest verdict: ${verdict:-none}"
+          if [ "$verdict" != "Verdict: ship it" ]; then
+            echo "::error::PR #$PR needs a posted review ending in 'Verdict: ship it' before it can merge."
+            exit 1
+          fi
