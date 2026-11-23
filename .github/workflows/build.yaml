@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
       - name: Setup Node
@@ -47,6 +47,8 @@ jobs:
         working-directory: api
         run: go test ./...
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         if: github.event_name == 'push'
         uses: docker/login-action@v3
@@ -55,12 +57,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        if: github.event_name == 'push'
+      # Build the image on PRs and in the merge queue too (no push): a go.mod
+      # bump past the Dockerfile's Go version broke three main builds (#176).
+      - name: Build (and push on main)
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ github.event_name == 'push' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
