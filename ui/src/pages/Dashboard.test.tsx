@@ -42,6 +42,7 @@ vi.mock('../hooks/useFleet', () => ({
 }))
 
 vi.mock('../hooks/useWebSocket', () => ({
+  eventKey: (e: { subject: string; timestamp: string }) => `${e.subject}:${e.timestamp}`,
   useWebSocket: vi.fn(() => ({
     events: [],
     connected: true,
@@ -204,5 +205,60 @@ describe('DashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Week')).toBeInTheDocument()
     })
+  })
+})
+
+describe('DashboardPage session cost refresh (#152)', () => {
+  const result = (knight: string, ts: string, cost: number) => ({
+    type: 'result' as const,
+    subject: `fleet.results.t-${ts}`,
+    timestamp: ts,
+    live: true,
+    data: { knight, cost, success: true, task_id: `t-${ts}` },
+  })
+
+  async function setup(events: unknown[], sessionCost: () => number) {
+    const { useWebSocket } = await import('../hooks/useWebSocket')
+    const { apiFetch } = await import('../lib/api')
+    vi.mocked(apiFetch).mockImplementation(((url: string) => {
+      const m = /fleet\/(\w+)\/session/.exec(url)
+      // Only galahad has session stats
+      if (m?.[1] === 'galahad') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ session: { cost: sessionCost() } }) })
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
+    }) as unknown as typeof apiFetch)
+    const ws = vi.mocked(useWebSocket)
+    ws.mockReturnValue({ events: [], connected: true } as unknown as ReturnType<typeof useWebSocket>)
+    const view = renderDashboard()
+    await waitFor(() => expect(screen.getAllByText('$1.00').length).toBeGreaterThan(0))
+    ws.mockReturnValue({ events, connected: true } as unknown as ReturnType<typeof useWebSocket>)
+    return { view, apiFetch }
+  }
+
+  it('refreshes (debounced) session cost for a knight with session stats, without double-counting', async () => {
+    let cost = 1
+    const evs = [result('galahad', '2026-01-01T00:00:02Z', 0.5), result('galahad', '2026-01-01T00:00:01Z', 0.5)]
+    const { view, apiFetch } = await setup(evs, () => cost)
+    const before = vi.mocked(apiFetch).mock.calls.length
+    cost = 2
+    view.rerender(<BrowserRouter><DashboardPage /></BrowserRouter>)
+    await waitFor(() => expect(screen.getAllByText('$2.00').length).toBeGreaterThan(0), { timeout: 4000 })
+    // Two results in a burst => a single coalesced fetch; live costs not added on top
+    expect(vi.mocked(apiFetch).mock.calls.length - before).toBe(1)
+    expect(screen.queryByText('$3.00')).not.toBeInTheDocument()
+  })
+
+  it('backfills live cost for a knight without session stats and does not fetch', async () => {
+    const { view, apiFetch } = await setup([], () => 1)
+    const before = vi.mocked(apiFetch).mock.calls.length
+    const { useWebSocket } = await import('../hooks/useWebSocket')
+    vi.mocked(useWebSocket).mockReturnValue({
+      events: [result('lancelot', '2026-01-01T00:00:03Z', 0.25)], connected: true,
+    } as unknown as ReturnType<typeof useWebSocket>)
+    view.rerender(<BrowserRouter><DashboardPage /></BrowserRouter>)
+    await waitFor(() => expect(screen.getAllByText('$1.25').length).toBeGreaterThan(0))
+    await new Promise(r => setTimeout(r, 2300))
+    expect(vi.mocked(apiFetch).mock.calls.length).toBe(before)
   })
 })
