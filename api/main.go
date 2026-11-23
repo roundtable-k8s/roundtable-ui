@@ -1081,6 +1081,10 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 		// memory without bound (#97). See the wsWriter docs for the policy.
 		ws := newWSWriter(conn, wsQueueSize, func() { conn.Close() })
 		go ws.run()
+		var dispatchLimiter *tokenBucket
+		if rate, burst := wsDispatchLimits(); rate > 0 {
+			dispatchLimiter = newTokenBucket(rate, burst, nil)
+		}
 		safeWrite := func(critical bool, data []byte) { ws.enqueue(data, critical) }
 
 		// Done channel to clean up NATS subscriptions when WS closes
@@ -1227,6 +1231,9 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 				Task   string `json:"task"`
 			}
 			if json.Unmarshal(msg, &cmd) == nil && cmd.Action == "dispatch" {
+				if !checkDispatchLimit(dispatchLimiter, ws) {
+					continue
+				}
 				// Validate inputs
 				if !validKnightName.MatchString(cmd.Knight) || !validKnightName.MatchString(cmd.Domain) {
 					continue
