@@ -8,7 +8,8 @@ name: Merge guard
 # - PRs that touch a protected path (regexes in .github/merge-guard-paths,
 #   read from the base branch) get the `protected-paths` label so they stand
 #   out. They still auto-merge on a ship-it review; the label is for visibility.
-# Runs in the merge queue too, so a `hold` added after queueing still stops it.
+# The verdict is enforced in the merge queue (PR runs only report it); `hold`
+# fails everywhere, so a `hold` added after queueing still stops the merge.
 # This file is identical in every roundtable-k8s repo; only merge-guard-paths differs.
 on:
   pull_request:
@@ -87,6 +88,14 @@ jobs:
             | tr -d '\r' | grep -E '^Verdict: ' | tail -n 1 || true)"
           echo "Latest verdict: ${verdict:-none}"
           if [ "$verdict" != "Verdict: ship it" ]; then
+            # Enforced in the merge queue only. On PR events a missing review is
+            # the normal state until rt-lead posts one, and a failed run from the
+            # pull_request event stayed on the commit after a later
+            # pull_request_review run passed, which kept PRs out of the queue.
+            if [ "$EVENT" != merge_group ]; then
+              echo "::notice::PR #$PR has no 'Verdict: ship it' yet; the merge queue will block it until it does."
+              exit 0
+            fi
             echo "::error::PR #$PR needs a posted review or comment ending in 'Verdict: ship it' before it can merge."
             exit 1
           fi
