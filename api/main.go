@@ -22,6 +22,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	corev1 "k8s.io/api/core/v1"
@@ -1074,8 +1076,12 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 		}
 
 		// Serialized writer — gorilla websocket is not concurrent-write safe (#42, #96)
-		ws := &wsWriter{conn: conn}
-		safeWrite := func(data []byte) { ws.write(websocket.TextMessage, data) }
+		// Bounded outbound queue drained by one writer goroutine; NATS
+		// callbacks only enqueue, so a slow client cannot block them or grow
+		// memory without bound (#97). See the wsWriter docs for the policy.
+		ws := newWSWriter(conn, wsQueueSize, func() { conn.Close() })
+		go ws.run()
+		safeWrite := func(critical bool, data []byte) { ws.enqueue(data, critical) }
 
 		// Done channel to clean up NATS subscriptions when WS closes
 		done := make(chan struct{})
@@ -1094,7 +1100,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 				Timestamp: eventTimestamp(msg.Data),
 			}
 			data, _ := json.Marshal(event)
-			safeWrite(data)
+			safeWrite(false, data)
 		})
 		if err != nil {
 			slog.Error("NATS task sub error", "error", err)
@@ -1115,7 +1121,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 				Timestamp: eventTimestamp(msg.Data),
 			}
 			data, _ := json.Marshal(event)
-			safeWrite(data)
+			safeWrite(true, data)
 		})
 		if err != nil {
 			slog.Error("NATS result sub error", "error", err)
@@ -1138,7 +1144,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 				Timestamp: eventTimestamp(msg.Data),
 			}
 			data, _ := json.Marshal(event)
-			safeWrite(data)
+			safeWrite(true, data)
 		})
 		if err != nil {
 			slog.Error("NATS mission sub error", "error", err)
@@ -1160,7 +1166,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 				Timestamp: eventTimestamp(msg.Data),
 			}
 			data, _ := json.Marshal(event)
-			safeWrite(data)
+			safeWrite(true, data)
 		})
 		if err != nil {
 			slog.Error("NATS chain sub error", "error", err)
@@ -1179,7 +1185,7 @@ func wsHandler(fleetPrefix string) http.HandlerFunc {
 			if chainSub != nil {
 				chainSub.Unsubscribe()
 			}
-			ws.markClosed()
+			ws.close()
 			conn.Close()
 		}()
 
@@ -2200,23 +2206,204 @@ func envOr(key, def string) string {
 	return def
 }
 
+// WebSocket backpressure policy (#97)
+//
+// Each connection has a bounded outbound queue (wsQueueSize messages) drained
+// by a single writer goroutine, so NATS callbacks never block on the client.
+// When the queue is full:
+//   - droppable events (task stream events, which are high volume and
+//     superseded by later ones) are handled by evicting the oldest queued
+//     droppable message to make room; if the incoming message is itself
+//     droppable and nothing droppable is queued, it is dropped instead;
+//   - critical events (results, missions, chains) are never dropped silently:
+//     they evict the oldest droppable message, and if the queue holds only
+//     critical messages the connection is closed (client reconnects and
+//     refetches state over REST).
+//
+// Every drop increments roundtable_ui_ws_dropped_messages_total. If more than
+// wsMaxConsecutiveDrops messages are dropped without the writer making
+// progress, the client is considered stuck and the connection is closed.
+const (
+	wsQueueSize           = 256
+	wsMaxConsecutiveDrops = 1024
+)
+
+var wsDroppedMessages = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "roundtable_ui_ws_dropped_messages_total",
+	Help: "WebSocket messages dropped because a client's outbound queue was full.",
+})
+
 // wsConn is the subset of *websocket.Conn used by wsWriter.
 type wsConn interface {
 	SetWriteDeadline(t time.Time) error
 	WriteMessage(messageType int, data []byte) error
 }
 
+type wsMsg struct {
+	data     []byte
+	critical bool
+}
+
 // wsWriter serializes writes to a websocket connection and tracks whether it
 // has been closed. The closed flag is atomic so it can be read lock-free from
 // any goroutine (ping loop, NATS callbacks) without racing with writers (#96).
+// Queued delivery (enqueue/run) is bounded; see the backpressure policy above.
 type wsWriter struct {
 	conn   wsConn
-	mu     sync.Mutex
+	mu     sync.Mutex // serializes conn writes
 	closed atomic.Bool
+
+	qmu         sync.Mutex
+	queue       []wsMsg
+	capacity    int
+	consecDrops int
+	drops       atomic.Int64
+	onSaturated func()
+	wake        chan struct{}
+	stop        chan struct{}
+	exited      chan struct{}
+	stopOnce    sync.Once
 }
 
-// write sends a message and reports whether it was written successfully.
-// A failed write marks the writer closed.
+// newWSWriter creates a writer with a queue of the given capacity. Call run
+// in a goroutine to drain it. onSaturated (optional) is invoked once when the
+// writer closes the connection because the client cannot keep up.
+func newWSWriter(conn wsConn, capacity int, onSaturated func()) *wsWriter {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &wsWriter{
+		conn:        conn,
+		capacity:    capacity,
+		onSaturated: onSaturated,
+		wake:        make(chan struct{}, 1),
+		stop:        make(chan struct{}),
+		exited:      make(chan struct{}),
+	}
+}
+
+// enqueue queues data for delivery without blocking. It reports whether the
+// message was queued.
+func (w *wsWriter) enqueue(data []byte, critical bool) bool {
+	if w.closed.Load() {
+		return false
+	}
+	w.qmu.Lock()
+	if len(w.queue) >= w.capacity {
+		idx := -1
+		for i, m := range w.queue {
+			if !m.critical {
+				idx = i
+				break
+			}
+		}
+		switch {
+		case idx >= 0:
+			w.queue = append(w.queue[:idx], w.queue[idx+1:]...)
+			w.countDropLocked()
+		case !critical:
+			w.countDropLocked()
+			sat := w.consecDrops > wsMaxConsecutiveDrops
+			w.qmu.Unlock()
+			if sat {
+				w.saturated()
+			}
+			return false
+		default:
+			w.qmu.Unlock()
+			w.saturated()
+			return false
+		}
+	}
+	w.queue = append(w.queue, wsMsg{data: data, critical: critical})
+	sat := w.consecDrops > wsMaxConsecutiveDrops
+	w.qmu.Unlock()
+	if sat {
+		w.saturated()
+		return false
+	}
+	select {
+	case w.wake <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+func (w *wsWriter) countDropLocked() {
+	w.consecDrops++
+	w.drops.Add(1)
+	wsDroppedMessages.Inc()
+}
+
+// saturated closes the writer and notifies the owner so the connection is
+// torn down.
+func (w *wsWriter) saturated() {
+	if w.closed.Swap(true) {
+		return
+	}
+	slog.Warn("closing slow WebSocket client: outbound queue saturated")
+	w.shutdown()
+	if w.onSaturated != nil {
+		w.onSaturated()
+	}
+}
+
+func (w *wsWriter) shutdown() { w.stopOnce.Do(func() { close(w.stop) }) }
+
+func (w *wsWriter) pop() (wsMsg, bool) {
+	w.qmu.Lock()
+	defer w.qmu.Unlock()
+	if len(w.queue) == 0 {
+		return wsMsg{}, false
+	}
+	m := w.queue[0]
+	w.queue[0] = wsMsg{}
+	w.queue = w.queue[1:]
+	return m, true
+}
+
+// run drains the queue in order until the writer is closed or a write fails.
+// It must be started once per queued writer.
+func (w *wsWriter) run() {
+	defer close(w.exited)
+	for {
+		m, ok := w.pop()
+		if !ok {
+			select {
+			case <-w.wake:
+				continue
+			case <-w.stop:
+				return
+			}
+		}
+		select {
+		case <-w.stop:
+			return
+		default:
+		}
+		if !w.write(websocket.TextMessage, m.data) {
+			w.shutdown()
+			return
+		}
+		w.qmu.Lock()
+		w.consecDrops = 0
+		w.qmu.Unlock()
+	}
+}
+
+// close marks the writer closed, discards queued messages and signals the
+// drain goroutine to exit. It does not block; a goroutine stuck in a conn
+// write exits once the conn is closed or the write deadline fires.
+func (w *wsWriter) close() {
+	w.closed.Store(true)
+	w.shutdown()
+	w.qmu.Lock()
+	w.queue = nil
+	w.qmu.Unlock()
+}
+
+// write sends a message immediately and reports whether it was written
+// successfully. A failed write marks the writer closed.
 func (w *wsWriter) write(msgType int, data []byte) bool {
 	if w.closed.Load() {
 		return false
