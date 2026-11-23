@@ -27,7 +27,7 @@ export interface RoundTable {
   activeMissions?: number
   totalTasksCompleted?: number
   description?: string
-  suspended?: boolean
+  suspend?: boolean
   ephemeral?: boolean
 }
 
@@ -56,11 +56,11 @@ export interface Chain {
   steps: ChainStep[] | null
   schedule?: string
   description?: string
-  timeout?: number
-  outputKnight?: string
+  timeoutSeconds?: number
+  outputKnightRef?: string
   roundTableRef?: string
   missionRef?: string
-  suspended?: boolean
+  suspend?: boolean
   runsCompleted?: number
   runsFailed?: number
 }

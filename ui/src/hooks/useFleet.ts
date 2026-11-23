@@ -24,19 +24,18 @@ export interface Knight {
   skills: number           // keep for backward compat
   skillsList?: string[]    // actual skill names from CRD
   nixTools: number         // keep for backward compat
-  nixPackages?: string[]
   generatedSkills?: GeneratedSkill[]
   labels: Record<string, string>
   // fields from Knight CRD:
   phase?: string           // Pending | Provisioning | Ready | Degraded | Suspended
   model?: string           // e.g. claude-sonnet-4-20250514
   runtime?: string         // deployment | sandbox
-  suspended?: boolean
+  suspend?: boolean
   tasksCompleted?: number
   tasksFailed?: number
   totalCost?: string
   concurrency?: number
-  taskTimeout?: number
+  taskTimeoutSeconds?: number
   conditions?: KnightCondition[]
 }
 

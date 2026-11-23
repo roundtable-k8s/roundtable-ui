@@ -29,8 +29,8 @@ const baseMission: Mission = {
   chains: ['scan-services', 'check-rbac', 'report'],
   costBudgetUSD: '5.00',
   totalCost: '1.23',
-  ttl: 3600,
-  timeout: 600,
+  ttlSeconds: 3600,
+  timeoutSeconds: 600,
   roundTableRef: 'roundtable-alpha',
 }
 

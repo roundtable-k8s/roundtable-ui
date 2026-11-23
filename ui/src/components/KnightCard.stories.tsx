@@ -103,7 +103,7 @@ export const SuspendedKnight: Story = {
       status: 'offline', 
       ready: false,
       phase: 'Suspended',
-      suspended: true,
+      suspend: true,
       model: 'claude-sonnet-4-20250514'
     },
   },
@@ -139,7 +139,7 @@ export const WithPerformanceMetrics: Story = {
       tasksFailed: 5,
       totalCost: '$15.67',
       concurrency: 5,
-      taskTimeout: 600,
+      taskTimeoutSeconds: 600,
       skillsList: ['terraform', 'kubectl', 'aws-cli', 'gh']
     },
     activity: {

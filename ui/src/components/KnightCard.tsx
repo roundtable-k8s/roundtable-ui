@@ -54,7 +54,7 @@ export function KnightCard({ knight, onClick, activity }: KnightCardProps) {
       className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-5 hover:border-roundtable-gold/30 transition-all cursor-pointer group relative"
     >
       {/* Suspended overlay */}
-      {knight.suspended && (
+      {knight.suspend && (
         <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-lg z-10">
           SUSPENDED
         </div>

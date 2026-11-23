@@ -100,10 +100,10 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
       const body: any = {
         name: form.name,
         objective: form.objective,
-        roundTableRef: form.roundTableRef,
+        roundTableRef: { name: form.roundTableRef },
         costBudgetUSD: form.costBudgetUSD,
-        ttl: form.ttl,
-        timeout: form.timeout,
+        ttlSeconds: form.ttl,
+        timeoutSeconds: form.timeout,
         knights: form.metaMission ? [] : form.knights.filter(k => k.name.trim()),
         metaMission: form.metaMission,
         successCriteria: form.successCriteria || undefined,
@@ -116,8 +116,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
       // Add planner config if metaMission is enabled
       if (form.metaMission) {
         body.planner = {
-          knightRef: form.planner.knightRef.trim(),
-          timeout: form.planner.timeout,
+          knightRef: { name: form.planner.knightRef.trim() },
+          timeoutSeconds: form.planner.timeout,
           context: form.planner.context || undefined,
           allowSkillGeneration: form.planner.allowSkillGeneration,
           maxChains: form.planner.maxChains,
