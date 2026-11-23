@@ -4,7 +4,7 @@ import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, Tre
 import { Link } from 'react-router-dom'
 import { useFleet } from '../hooks/useFleet'
 import { fetchWithTimeout } from '../hooks/useKnightSession'
-import { useWebSocket } from '../hooks/useWebSocket'
+import { useWebSocket, eventKey } from '../hooks/useWebSocket'
 import { getKnightConfig, KNIGHT_NAMES } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState } from '../components/ui'
@@ -22,6 +22,29 @@ interface CostEntry {
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export const SESSION_COST_REFRESH_MS = 2000
+
+function sumCosts(perKnight: Record<string, number>): number {
+  return Object.values(perKnight).reduce((a, b) => a + b, 0)
+}
+
+/** Fetch session introspection cost for each knight; knights without session stats are omitted. */
+async function fetchSessionCosts(names: string[]): Promise<Record<string, number>> {
+  const results = await Promise.allSettled(
+    names.map(name =>
+      fetchWithTimeout(`/api/fleet/${name}/session?type=stats`).then(r => {
+        if (!r || !r.ok) throw new Error('introspect unavailable')
+        return r.json()
+      })
+    )
+  )
+  const perKnight: Record<string, number> = {}
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && r.value?.session?.cost) perKnight[names[i]] = r.value.session.cost
+  })
+  return perKnight
 }
 
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
@@ -42,33 +65,45 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   useEffect(() => {
     if (sessionCostsFetched.current || knights.length === 0) return
     sessionCostsFetched.current = true
-    ;(async () => {
-      try {
-        const names: string[] = knights.map((k) => k.name)
-
-        const results = await Promise.allSettled(
-          names.map(name =>
-            fetchWithTimeout(`/api/fleet/${name}/session?type=stats`).then(r => {
-              if (!r || !r.ok) throw new Error('introspect unavailable')
-              return r.json()
-            })
-          )
-        )
-
-        let total = 0
-        const perKnight: Record<string, number> = {}
-        results.forEach((r, i) => {
-          if (r.status === 'fulfilled' && r.value?.session?.cost) {
-            const cost = r.value.session.cost
-            total += cost
-            perKnight[names[i]] = cost
-          }
-        })
-
-        setSessionCosts({ total, perKnight })
-      } catch { /* ignore */ }
-    })()
+    fetchSessionCosts(knights.map((k) => k.name)).then((perKnight) => {
+      setSessionCosts({ total: sumCosts(perKnight), perKnight })
+    })
   }, [knights])
+
+  // Session cost is cumulative and only fetched at load, so tasks finishing
+  // while the dashboard is open would go uncounted for knights that have
+  // session stats (live costs only backfill knights without them). When a
+  // live result arrives for such a knight, re-fetch just that knight's session
+  // cost, debounced so a burst of results coalesces into one fetch per knight.
+  const sessionKnightsRef = useRef<Set<string>>(new Set())
+  sessionKnightsRef.current = new Set(Object.keys(sessionCosts.perKnight))
+  const seenResults = useRef<Set<string>>(new Set())
+  const pendingRefresh = useRef<Set<string>>(new Set())
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    for (const e of events) {
+      if (e.type !== 'result' || !e.live) continue
+      const key = eventKey(e)
+      if (seenResults.current.has(key)) continue
+      seenResults.current.add(key)
+      const { knight } = parseEvent(e)
+      if (knight && sessionKnightsRef.current.has(knight)) pendingRefresh.current.add(knight)
+    }
+    if (pendingRefresh.current.size === 0 || refreshTimer.current) return
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null
+      const names = [...pendingRefresh.current]
+      pendingRefresh.current.clear()
+      fetchSessionCosts(names).then((fresh) => {
+        if (Object.keys(fresh).length === 0) return
+        setSessionCosts((prev) => {
+          const perKnight = { ...prev.perKnight, ...fresh }
+          return { total: sumCosts(perKnight), perKnight }
+        })
+      })
+    }, SESSION_COST_REFRESH_MS)
+  }, [events])
+  useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current) }, [])
 
   const stats = useMemo(() => {
     let totalCost = 0
