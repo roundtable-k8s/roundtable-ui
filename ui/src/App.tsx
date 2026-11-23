@@ -1,21 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network } from 'lucide-react'
-import { FleetPage } from './pages/Fleet'
-import { TasksPage } from './pages/Tasks'
-import { BriefingsPage } from './pages/Briefings'
-import { LivePage } from './pages/Live'
-import { ChainsPage } from './pages/Chains'
-import { SessionsPage } from './pages/Sessions'
-import { DashboardPage } from './pages/Dashboard'
-import { MissionsPage } from './pages/Missions'
-import { CostDashboardPage } from './pages/CostDashboard'
-import { ArchitecturePage } from './pages/Architecture'
-import { RoundTablesPage } from './pages/RoundTables'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
 import { useTaskNotifications } from './hooks/useTaskNotifications'
+
+const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
+const TasksPage = lazy(() => import('./pages/Tasks').then(m => ({ default: m.TasksPage })))
+const BriefingsPage = lazy(() => import('./pages/Briefings').then(m => ({ default: m.BriefingsPage })))
+const LivePage = lazy(() => import('./pages/Live').then(m => ({ default: m.LivePage })))
+const ChainsPage = lazy(() => import('./pages/Chains').then(m => ({ default: m.ChainsPage })))
+const SessionsPage = lazy(() => import('./pages/Sessions').then(m => ({ default: m.SessionsPage })))
+const DashboardPage = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.DashboardPage })))
+const MissionsPage = lazy(() => import('./pages/Missions').then(m => ({ default: m.MissionsPage })))
+const CostDashboardPage = lazy(() => import('./pages/CostDashboard').then(m => ({ default: m.CostDashboardPage })))
+const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ default: m.ArchitecturePage })))
+const RoundTablesPage = lazy(() => import('./pages/RoundTables').then(m => ({ default: m.RoundTablesPage })))
+
+function PageLoading() {
+  return <div className="text-gray-400 p-4" role="status">Loading…</div>
+}
 
 function NotificationWatcher() {
   const { events } = useWebSocket()
@@ -111,6 +116,7 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 overflow-auto p-4 md:p-8 mt-14 md:mt-0">
         <ErrorBoundary>
+          <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/fleet" element={<FleetPage />} />
@@ -124,6 +130,7 @@ export default function App() {
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/architecture" element={<ArchitecturePage />} />
           </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
     </div>
