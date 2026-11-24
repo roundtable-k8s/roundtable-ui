@@ -535,3 +535,36 @@ func TestRunningHeartbeatIntervalEnv(t *testing.T) {
 		t.Fatalf("prefixes = %v", p)
 	}
 }
+
+// TestRunningTaskWireNames pins the JSON contract consumed by the Running page.
+func TestRunningTaskWireNames(t *testing.T) {
+	hb := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	b, err := json.Marshal(RunningTask{
+		TaskID: "t1", Status: runningStatusLost, LostReason: lostReasonPodGone,
+		LastHeartbeatAt: &hb, LastTool: &RunningToolEvent{Tool: "Bash", At: hb},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"reason", "lastHeartbeat"} {
+		if _, ok := m[k]; !ok {
+			t.Errorf("missing key %q in %s", k, b)
+		}
+	}
+	for _, k := range []string{"lostReason", "lastHeartbeatAt"} {
+		if _, ok := m[k]; ok {
+			t.Errorf("unexpected key %q in %s", k, b)
+		}
+	}
+	tool := m["lastTool"].(map[string]any)
+	if _, ok := tool["ts"]; !ok {
+		t.Errorf("lastTool missing ts: %s", b)
+	}
+	if _, ok := tool["at"]; ok {
+		t.Errorf("lastTool has legacy at: %s", b)
+	}
+}

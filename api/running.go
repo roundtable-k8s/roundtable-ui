@@ -99,7 +99,7 @@ type RunningToolEvent struct {
 	DurationMs    *int64    `json:"durationMs,omitempty"`
 	IsError       *bool     `json:"isError,omitempty"`
 	OutputPreview string    `json:"outputPreview,omitempty"`
-	At            time.Time `json:"at"`
+	At            time.Time `json:"ts"`
 }
 
 // RunningTask is one in-flight task as served by GET /api/running.
@@ -119,10 +119,10 @@ type RunningTask struct {
 	// Status is running, stale or lost. LostReason is pod_gone or
 	// max_deliveries when Status is lost.
 	Status     string `json:"status"`
-	LostReason string `json:"lostReason,omitempty"`
+	LostReason string `json:"reason,omitempty"`
 
 	StartedAt       time.Time  `json:"startedAt"`
-	LastHeartbeatAt *time.Time `json:"lastHeartbeatAt,omitempty"`
+	LastHeartbeatAt *time.Time `json:"lastHeartbeat,omitempty"`
 	LastEventAt     time.Time  `json:"lastEventAt"`
 	Seq             int64      `json:"seq"`
 
