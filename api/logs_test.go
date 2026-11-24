@@ -2,14 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -232,5 +236,63 @@ func TestKnightPods_Empty(t *testing.T) {
 	w := doGet(r, "/api/fleet/percival/pods")
 	if w.Code != http.StatusOK || w.Body.String() != "{\"pods\":[]}\n" {
 		t.Errorf("status %d body %q", w.Code, w.Body.String())
+	}
+}
+
+type errReader struct {
+	data string
+	err  error
+	done bool
+}
+
+func (e *errReader) Read(p []byte) (int, error) {
+	if e.done || e.data == "" {
+		return 0, e.err
+	}
+	e.done = true
+	return copy(p, e.data), nil
+}
+
+func TestWriteLogTail_ReadError(t *testing.T) {
+	boom := errors.New("stream reset")
+	tests := []struct {
+		name      string
+		r         io.Reader
+		code      int
+		truncated string
+		body      string
+	}{
+		{"ok", strings.NewReader("hello"), 200, "", "hello"},
+		{"error with nothing read", &errReader{err: boom}, 502, "", ""},
+		{"error after partial read", &errReader{data: "partial", err: boom}, 200, "true", "partial"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			writeLogTail(w, "galahad", "galahad-aaa-1", tt.r)
+			if w.Code != tt.code {
+				t.Errorf("status %d, want %d", w.Code, tt.code)
+			}
+			if got := w.Header().Get("X-Logs-Truncated"); got != tt.truncated {
+				t.Errorf("X-Logs-Truncated = %q, want %q", got, tt.truncated)
+			}
+			if tt.body != "" && w.Body.String() != tt.body {
+				t.Errorf("body %q, want %q", w.Body.String(), tt.body)
+			}
+		})
+	}
+}
+
+func TestKnightLogs_ListErrorIs500(t *testing.T) {
+	r, fc := setupLogsRouter(t, nil)
+	fc.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("apiserver down")
+	})
+	w := doGet(r, "/api/fleet/galahad/logs")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d, want 500", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Failed to list pods") {
+		t.Errorf("body %q", w.Body.String())
 	}
 }

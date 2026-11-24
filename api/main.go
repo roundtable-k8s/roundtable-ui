@@ -886,7 +886,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 		slog.Warn("Introspect: pod list failed", "knight", name, "error", podErr)
 	}
 
-	knightLevel := func() {
+	knightLevel := func(scope string) {
 		subject := knightIntrospectSubject(prefix, name)
 		data, err := req(subject, payload, timeout)
 		if err != nil {
@@ -894,7 +894,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
-		w.Header().Set(introspectScopeHeader, "knight")
+		w.Header().Set(introspectScopeHeader, scope)
 		writeRedactedJSON(w, data)
 	}
 
@@ -928,7 +928,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 			// An older runtime only listens on the knight subject; that is
 			// still this pod when it is the knight's only one.
 			if isNoResponders(err) && len(pods) == 1 {
-				knightLevel()
+				knightLevel("pod")
 				return
 			}
 			if isNoResponders(err) {
@@ -946,13 +946,13 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 
 	// No pod list (no Kubernetes access): keep the legacy knight-level path.
 	if podErr != nil || len(pods) == 0 {
-		knightLevel()
+		knightLevel("knight")
 		return
 	}
 
 	replies := fanOutIntrospect(req, prefix, name, pods, payload, timeout)
 	if allNoResponders(replies) {
-		knightLevel() // older runtime without per-pod subjects
+		knightLevel("knight") // older runtime without per-pod subjects
 		return
 	}
 
