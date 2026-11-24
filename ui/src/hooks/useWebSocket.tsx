@@ -10,10 +10,15 @@ export interface NatsEvent {
   live?: boolean
 }
 
-/** Message types delivered to topic listeners instead of the event feed. */
-export type WsTopic = 'running' | 'activity'
-const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running', 'activity'])
-export type TopicListener = (data: unknown) => void
+/**
+ * Message types delivered to topic listeners instead of the event feed.
+ * `chain` carries live Chain state (ChainSummary + envelope `op`), not
+ * feed events, so it is routed here too.
+ */
+export type WsTopic = 'running' | 'activity' | 'chain'
+const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running', 'activity', 'chain'])
+/** Receives the message's `data`, plus the whole envelope (e.g. for `op`). */
+export type TopicListener = (data: unknown, msg: Record<string, unknown>) => void
 
 const MAX_EVENTS = 200
 const RECONNECT_DELAY_MS = 3000
@@ -92,7 +97,7 @@ function useWebSocketConnection() {
         // Topic messages (e.g. running-task deltas) are state updates, not
         // feed events: route them to their listeners only.
         if (msg && typeof msg.type === 'string' && TOPICS.has(msg.type)) {
-          topicListeners.current.get(msg.type)?.forEach((fn) => fn(msg.data))
+          topicListeners.current.get(msg.type)?.forEach((fn) => fn(msg.data, msg))
           return
         }
         const event: NatsEvent = { ...msg, live: true }

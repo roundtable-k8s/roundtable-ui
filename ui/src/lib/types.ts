@@ -44,6 +44,79 @@ export interface ChainStep {
   continueOnFailure?: boolean
   outputPath?: string
   maxRetries?: number
+  /** forEach fan-out state; unset for ordinary steps. */
+  fanOut?: ChainFanOut | null
+  /** Bounded loop state; unset for ordinary steps. */
+  loop?: ChainLoop | null
+  /** Why the step is in its phase, e.g. WhenFalse / ChainFailed for Skipped. */
+  skipReason?: string
+  /** The step's `when` expression, shown with a WhenFalse skip. */
+  when?: string
+}
+
+/**
+ * Live-task join from the in-flight registry (/api/running) for a running
+ * item: which pod it runs on, how long it has run, and heartbeat age.
+ */
+export interface ChainTaskLive {
+  taskId?: string
+  pod?: string
+  elapsedSeconds?: number
+  heartbeatAgeSeconds?: number
+  startTime?: string | null
+  completionTime?: string | null
+  error?: string
+}
+
+/** One forEach item (operator status.stepStatuses[].fanOut.items[]). */
+export interface ChainItem extends ChainTaskLive {
+  index: number
+  phase: string
+  runId?: string
+  retries?: number
+  /** Output length in bytes. */
+  outputSize?: number
+}
+
+/**
+ * forEach fan-out progress. Counters cover every item; `items` lists only
+ * in-flight items plus a bounded set of finished ones — the rest are counted
+ * in `omittedItems`.
+ */
+export interface ChainFanOut {
+  total: number
+  pending?: number
+  running?: number
+  succeeded?: number
+  failed?: number
+  skipped?: number
+  omittedItems?: number
+  maxParallel?: number
+  items?: ChainItem[] | null
+}
+
+/** A loop body step in one round. */
+export interface ChainLoopStep extends ChainTaskLive {
+  name: string
+  phase: string
+  knight?: string
+  iteration?: number
+}
+
+export interface ChainLoopRound {
+  iteration: number
+  steps: ChainLoopStep[]
+}
+
+/** Loop step state: round counter, outcome and body steps per round. */
+export interface ChainLoop {
+  iteration: number
+  maxIterations: number
+  /** spec.loop.onExhausted: fail | continue */
+  onExhausted?: string
+  /** Converged | Exhausted | Failed once the loop ends. */
+  outcome?: string
+  rounds?: ChainLoopRound[] | null
 }
 
 export interface Chain {
