@@ -766,10 +766,10 @@ func runningHeartbeatInterval() time.Duration {
 }
 
 // activityPrefixes returns the NATS prefixes whose activity is tracked:
-// ACTIVITY_PREFIXES (comma separated) or the fleet prefix.
-func activityPrefixes(fleetPrefix string) []string {
+// ACTIVITY_PREFIXES (comma separated) or the prefixes of every table (#239).
+func activityPrefixes(tablePrefixes []string) []string {
 	var out []string
-	for _, p := range strings.Split(envOr("ACTIVITY_PREFIXES", fleetPrefix), ",") {
+	for _, p := range strings.Split(envOr("ACTIVITY_PREFIXES", strings.Join(tablePrefixes, ",")), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
@@ -782,8 +782,8 @@ func activityPrefixes(fleetPrefix string) []string {
 // the stale sweeper and pod reconciler. Background goroutines stop with ctx.
 // When act is non-nil the same activity events also feed the per-task
 // activity buffers (#184) and are swept on the same ticker.
-func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, fleetPrefix, namespace string) {
-	prefixes := activityPrefixes(fleetPrefix)
+func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, tablePrefixes []string, namespace string) {
+	prefixes := activityPrefixes(tablePrefixes)
 	for _, p := range prefixes {
 		subject := p + ".activity.>"
 		tokenIdx := strings.Count(p, ".") + 2 // <prefix>.activity.<Knight>.<taskId>

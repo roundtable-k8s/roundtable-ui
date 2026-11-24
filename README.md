@@ -260,8 +260,8 @@ The dashboard API server is configured via environment variables:
 | `NATS_URL` | NATS server URL | `nats://nats.database.svc:4222` |
 | `NAMESPACE` | Kubernetes namespace for Round Table resources | `roundtable` |
 | `PORT` | HTTP server port | `8080` |
-| `FLEET_PREFIX` | NATS subject prefix (e.g., `fleet-a`) | `fleet-a` |
-| `FLEET_STREAM` | JetStream stream name for results | `fleet_a_results` |
+| `FLEET_PREFIX` | Optional filter: only cover the RoundTable on this NATS prefix. Unset = every RoundTable in `NAMESPACE` (prefix and streams read from `spec.nats`); used as the only table when none can be discovered | unset (`fleet-a` fallback) |
+| `FLEET_STREAM` | Results stream for the `FLEET_PREFIX` table (overrides its `spec.nats.resultsStream`) | unset (`fleet_a_results` fallback) |
 | `GRAFANA_QUEUE_URL` | Optional long-term queue history link returned by the queue history endpoints; `{knight}` is replaced by the knight name | _(unset)_ |
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |

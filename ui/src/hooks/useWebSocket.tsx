@@ -4,6 +4,8 @@ import { apiGet } from '../lib/api'
 export interface NatsEvent {
   type: 'task' | 'result' | 'mission' | 'chain'
   subject: string
+  /** RoundTable the event belongs to (#239); absent from older APIs */
+  table?: string
   data: unknown
   timestamp: string
   /** True when the event arrived over the live WebSocket (vs seeded from history) */
@@ -126,13 +128,15 @@ function useWebSocketConnection() {
     mountedRef.current = true
 
     // Load historical events so there's always something to show
-    apiGet<{ results?: Array<{ type?: string; subject?: string; data?: unknown; timestamp?: string }> }>('/api/tasks')
+    type HistoryResult = { type?: string; subject?: string; table?: string; data?: unknown; timestamp?: string }
+    apiGet<{ results?: HistoryResult[] }>('/api/tasks')
       .then((data) => {
         if (!mountedRef.current) return
         const historical: NatsEvent[] = (data.results || [])
-          .map((r: { type?: string; subject?: string; data?: unknown; timestamp?: string }) => ({
+          .map((r: HistoryResult) => ({
             type: (r.type || 'result') as NatsEvent['type'],
             subject: r.subject || '',
+            ...(r.table ? { table: r.table } : {}),
             data: r.data,
             timestamp: r.timestamp || new Date().toISOString(),
           }))
