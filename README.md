@@ -211,6 +211,17 @@ npm run dev
 # Open browser to http://localhost:5173
 ```
 
+### Nix Development Shell
+
+`flake.nix` pins the toolchain CI uses (Node 22 and Go, plus git, gh and jq), so a
+local shell matches the build:
+
+```bash
+nix develop        # shell with node, npm, go, git, gh, jq on PATH
+nix build .#knight-tools   # the same tools as one environment (<result>/bin/*)
+nix flake check    # verifies the tool versions and that knight-tools contains the tools
+```
+
 ### Production Deployment
 
 The dashboard is deployed as part of the Round Table Helm chart:
