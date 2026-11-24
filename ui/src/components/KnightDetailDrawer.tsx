@@ -6,6 +6,7 @@ import { apiGet, apiGetText } from '../lib/api'
 import { formatCost, formatUptime, formatTimestamp } from '../lib/format'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition } from '../hooks/useFleet'
+import { sanitizeText } from '../lib/untrusted'
 
 interface Props {
   knight: Knight | null
@@ -291,7 +292,7 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
                     </summary>
                     <div className="px-3 pb-3">
                       <pre className="text-xs text-gray-400 whitespace-pre-wrap overflow-x-auto max-h-64">
-                        {skill.content}
+                        {sanitizeText(skill.content)}
                       </pre>
                     </div>
                   </details>
@@ -397,7 +398,7 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
                       </button>
                     </div>
                     <pre className="text-xs text-gray-300 font-mono overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words">
-                      {logs || 'No logs available'}
+                      {sanitizeText(logs) || 'No logs available'}
                     </pre>
                   </>
                 )}
@@ -466,13 +467,13 @@ function ActivityEntry({ entry }: { entry: any }) {
         </div>
       </div>
       {entry.text && (
-        <p className={`text-xs text-gray-400 mt-1 ${expanded ? 'whitespace-pre-wrap' : 'line-clamp-4'}`}>{entry.text}</p>
+        <p className={`text-xs text-gray-400 mt-1 ${expanded ? 'whitespace-pre-wrap' : 'line-clamp-4'}`}>{sanitizeText(entry.text)}</p>
       )}
       {entry.input && (
-        <p className={`text-xs text-gray-500 mt-1 font-mono ${expanded ? 'whitespace-pre-wrap break-all' : 'line-clamp-3'}`}>→ {entry.input}</p>
+        <p className={`text-xs text-gray-500 mt-1 font-mono ${expanded ? 'whitespace-pre-wrap break-all' : 'line-clamp-3'}`}>→ {sanitizeText(entry.input)}</p>
       )}
       {entry.output && (
-        <p className={`text-xs text-gray-500 mt-1 font-mono ${expanded ? 'whitespace-pre-wrap break-all' : 'line-clamp-3'}`}>← {entry.output}</p>
+        <p className={`text-xs text-gray-500 mt-1 font-mono ${expanded ? 'whitespace-pre-wrap break-all' : 'line-clamp-3'}`}>← {sanitizeText(entry.output)}</p>
       )}
       {entry.cost != null && entry.cost > 0 && (
         <div className="flex items-center gap-2 mt-1">

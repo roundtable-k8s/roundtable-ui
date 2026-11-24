@@ -1,8 +1,8 @@
 import { apiGet, apiGetText } from '../lib/api'
 import { useState, useEffect } from 'react'
 import { BookOpen, Calendar, FileText, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
 import { Spinner, EmptyState, PageHeader } from '../components/ui'
+import { SafeMarkdown } from '../components/SafeMarkdown'
 
 // Helper to format date in human-friendly format
 function formatDate(dateStr: string): string {
@@ -212,7 +212,7 @@ export function BriefingsPage() {
                     prose-li:text-gray-300 prose-li:marker:text-roundtable-gold
                     prose-blockquote:border-l-roundtable-gold prose-blockquote:text-gray-400
                     prose-hr:border-roundtable-steel">
-                    <ReactMarkdown>{content}</ReactMarkdown>
+                    <SafeMarkdown>{content}</SafeMarkdown>
                   </div>
                 )}
               </div>
