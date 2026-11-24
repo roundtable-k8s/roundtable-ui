@@ -1,6 +1,7 @@
 import { apiGet } from '../lib/api'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { RefreshCw, ChevronDown, ChevronRight, Clock, Link, Pause, Play } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
 import { formatDuration } from '../lib/format'
@@ -213,8 +214,14 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
   )
 }
 
-function ChainCard({ chain }: { chain: Chain }) {
-  const [expanded, setExpanded] = useState(false)
+function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean }) {
+  const [expanded, setExpanded] = useState(focused)
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!focused) return
+    setExpanded(true)
+    cardRef.current?.scrollIntoView?.({ block: 'start' })
+  }, [focused])
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
 
   const activeStep = selectedStep
@@ -222,7 +229,7 @@ function ChainCard({ chain }: { chain: Chain }) {
     : null
 
   return (
-    <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl overflow-hidden">
+    <div ref={cardRef} className={`bg-roundtable-slate border rounded-xl overflow-hidden ${focused ? 'border-roundtable-gold/50' : 'border-roundtable-steel'}`}>
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-roundtable-steel/30 transition-colors"
@@ -317,6 +324,9 @@ function ChainCard({ chain }: { chain: Chain }) {
 }
 
 export function ChainsPage() {
+  // ?chain=<name> deep link (e.g. from the Running page) expands that chain
+  const [searchParams] = useSearchParams()
+  const focusChain = searchParams.get('chain') || ''
   const [chains, setChains] = useState<Chain[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -412,7 +422,7 @@ export function ChainsPage() {
       )}
 
       <div className="space-y-3">
-        {chains.map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} />)}
+        {chains.map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
       </div>
     </div>
   )
