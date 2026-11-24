@@ -83,7 +83,7 @@ describe('PodLogsViewer', () => {
       '[abc-2] line from galahad-abc-2',
       '[abc-3] line from galahad-abc-3',
     ])
-    const prefixes = Array.from(screen.getByTestId('pod-logs').querySelectorAll('span')).map((s) => s.className)
+    const prefixes = Array.from(screen.getByTestId('pod-logs').querySelectorAll(':scope > span > span')).map((s) => s.className)
     expect(new Set(prefixes).size).toBe(3)
     for (const p of podsResp.pods) {
       expect(apiGetText).toHaveBeenCalledWith(`/api/fleet/galahad/logs?pod=${p.name}&timestamps=true`)
@@ -100,6 +100,44 @@ describe('PodLogsViewer', () => {
     fireEvent.change(screen.getByLabelText('Pod'), { target: { value: ALL_PODS } })
     await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('[abc-3] Error: No previous container logs'))
     expect(screen.getByTestId('pod-logs')).toHaveTextContent('[abc-1] line from galahad-abc-1')
+  })
+
+  it('skips pods without the selected container in merged mode instead of requesting them', async () => {
+    apiGet.mockResolvedValue({
+      pods: [pod('galahad-abc-1'), pod('galahad-abc-2'), pod('galahad-abc-3', { containers: [{ name: 'knight', ready: true, restartCount: 0, hasPrevious: false }] })],
+      default: 'galahad-abc-1',
+    })
+    render(<PodLogsViewer knightName="galahad" />)
+    await waitFor(() => expect(apiGetText).toHaveBeenCalled())
+    fireEvent.change(screen.getByLabelText('Pod'), { target: { value: ALL_PODS } })
+    await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('[abc-2] line from galahad-abc-2'))
+    apiGetText.mockClear()
+    fireEvent.change(screen.getByLabelText('Container'), { target: { value: 'nats-sidecar' } })
+    await waitFor(() => expect(apiGetText).toHaveBeenCalledTimes(2))
+    expect(apiGetText).not.toHaveBeenCalledWith(expect.stringContaining('pod=galahad-abc-3'))
+    expect(screen.getByTestId('pod-logs')).toHaveTextContent('[abc-3] skipped: no container "nats-sidecar"')
+    expect(screen.getByTestId('pod-logs')).not.toHaveTextContent('Error')
+  })
+
+  it('refresh fetches logs exactly once', async () => {
+    render(<PodLogsViewer knightName="galahad" />)
+    await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('galahad-abc-2'))
+    apiGetText.mockClear()
+    apiGet.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(apiGetText).toHaveBeenCalledTimes(1))
+    expect(apiGet).toHaveBeenCalledTimes(1)
+    expect(lastUrl()).toBe('/api/fleet/galahad/logs?pod=galahad-abc-2')
+  })
+
+  it('renders merged lines as valid markup (no block elements inside pre)', async () => {
+    render(<PodLogsViewer knightName="galahad" />)
+    await waitFor(() => expect(apiGetText).toHaveBeenCalled())
+    fireEvent.change(screen.getByLabelText('Pod'), { target: { value: ALL_PODS } })
+    await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('[abc-1]'))
+    const pre = screen.getByTestId('pod-logs')
+    expect(pre.querySelector('div')).toBeNull()
+    expect(pre.querySelectorAll(':scope > span.block').length).toBe(3)
   })
 
   it('shows a fetch error', async () => {
