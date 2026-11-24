@@ -811,6 +811,19 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			return
 		}
 
+		// pod selects one pod's per-pod subject; runId selects the run's
+		// session on that pod (#219). Both end up in NATS subjects/payloads.
+		podParam := r.URL.Query().Get("pod")
+		if podParam != "" && !validPodName(podParam) {
+			http.Error(w, "Invalid pod name", http.StatusBadRequest)
+			return
+		}
+		runID := r.URL.Query().Get("runId")
+		if runID != "" && !validRunID.MatchString(runID) {
+			http.Error(w, "Invalid runId", http.StatusBadRequest)
+			return
+		}
+
 		// Fetch the Knight CR once — it supplies both the readiness signal and
 		// the NATS prefix, so non-fleet-a knights (e.g. chelonian, rt-dev) are
 		// queried on their own table's subject instead of the hardcoded
@@ -838,7 +851,8 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			}
 		}
 
-		if nc == nil {
+		req := sessionRequester()
+		if req == nil {
 			http.Error(w, "NATS not available", http.StatusServiceUnavailable)
 			return
 		}
@@ -859,6 +873,9 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 				}
 			}
 		}
+		if runID != "" {
+			introspectReq["runId"] = runID
+		}
 		payload, _ := json.Marshal(introspectReq)
 
 		// history/session read JSONL off the knight's PVC — give them more headroom
@@ -868,18 +885,107 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			timeout = 12 * time.Second
 		}
 
-		// Knight names in NATS are capitalized (e.g., "Galahad")
-		capitalName := capitalizeKnight(name)
-		subject := fmt.Sprintf("%s.introspect.%s", prefix, capitalName)
-		msg, err := nc.Request(subject, payload, timeout)
+		serveIntrospect(w, ctx, req, prefix, name, podParam, reqType, payload, timeout)
+	}
+}
+
+// serveIntrospect routes one introspect request to the right pod(s); see
+// introspect.go for the per-pod model.
+func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectRequester, prefix, name, podParam, reqType string, payload []byte, timeout time.Duration) {
+	namespace := envOr("NAMESPACE", "roundtable")
+	pods, podErr := knightPodsForIntrospect(ctx, namespace, name)
+	if podErr != nil {
+		slog.Warn("Introspect: pod list failed", "knight", name, "error", podErr)
+	}
+
+	knightLevel := func() {
+		subject := knightIntrospectSubject(prefix, name)
+		data, err := req(subject, payload, timeout)
 		if err != nil {
 			slog.Warn("Knight introspect timeout", "knight", name, "subject", subject, "error", err)
 			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
-
-		writeRedactedJSON(w, msg.Data)
+		w.Header().Set(introspectScopeHeader, "knight")
+		writeRedactedJSON(w, data)
 	}
+
+	// Explicit pod: only that pod may answer.
+	if podParam != "" {
+		if podErr != nil {
+			http.Error(w, "Cannot verify pod: pod list unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		known := false
+		for _, p := range pods {
+			if p == podParam {
+				known = true
+				break
+			}
+		}
+		if !known {
+			http.Error(w, "Unknown pod for this knight", http.StatusNotFound)
+			return
+		}
+		subject := podIntrospectSubject(prefix, name, podParam)
+		data, err := req(subject, payload, timeout)
+		if err != nil {
+			// An older runtime only listens on the knight subject; that is
+			// still this pod when it is the knight's only one.
+			if isNoResponders(err) && len(pods) == 1 {
+				knightLevel()
+				return
+			}
+			if isNoResponders(err) {
+				http.Error(w, "Pod does not support per-pod introspection", http.StatusBadGateway)
+				return
+			}
+			slog.Warn("Knight introspect timeout", "knight", name, "subject", subject, "error", err)
+			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			return
+		}
+		w.Header().Set(introspectScopeHeader, "pod")
+		writeRedactedJSON(w, withPod(data, podParam))
+		return
+	}
+
+	// No pod list (no Kubernetes access): keep the legacy knight-level path.
+	if podErr != nil || len(pods) == 0 {
+		knightLevel()
+		return
+	}
+
+	replies := fanOutIntrospect(req, prefix, name, pods, payload, timeout)
+	if allNoResponders(replies) {
+		knightLevel() // older runtime without per-pod subjects
+		return
+	}
+
+	var out []byte
+	switch reqType {
+	case "stats", "history":
+		var agg map[string]interface{}
+		var ok bool
+		if reqType == "stats" {
+			agg, ok = aggregateStats(name, replies)
+		} else {
+			agg, ok = mergeHistory(replies)
+		}
+		if !ok {
+			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			return
+		}
+		out, _ = json.Marshal(agg)
+	default: // session, recent, tree: the pod that has the data answers
+		pick, ok := pickFirstFound(replies)
+		if !ok {
+			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			return
+		}
+		out = withPod(pick.Data, pick.Pod)
+	}
+	w.Header().Set(introspectScopeHeader, "aggregate")
+	writeRedactedJSON(w, out)
 }
 
 func taskHistoryHandler(fleetPrefix, streamName string) http.HandlerFunc {

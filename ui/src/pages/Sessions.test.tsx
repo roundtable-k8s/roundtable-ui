@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import { ToolCallCard, TreeNodeView } from './Sessions'
-import type { SessionEntry, SessionTreeNode } from '../hooks/useKnightSession'
+import { ToolCallCard, TreeNodeView, sessionHistoryKey, sessionQuery } from './Sessions'
+import type { SessionEntry, SessionTreeNode, SessionHistoryItem } from '../hooks/useKnightSession'
 
 function entry(over: Partial<SessionEntry>): SessionEntry {
   return { id: 'e1', parentId: null, type: 'message', timestamp: '2026-07-08T06:05:35Z', ...over }
@@ -43,5 +43,26 @@ describe('TreeNodeView indentation', () => {
     const { container } = render(<TreeNodeView node={node({})} depth={3} />)
     const padded = container.querySelector('[style*="padding-left"]') as HTMLElement
     expect(padded.style.paddingLeft).toBe('48px')
+  })
+})
+
+describe('per-pod session selection (#219)', () => {
+  const item = (over: Partial<SessionHistoryItem>): SessionHistoryItem =>
+    ({ id: '019f4162-77c7', startedAt: null, entryCount: 1, messageCount: 1, firstPrompt: '', sizeBytes: null, ...over })
+
+  it('keys a past session by its pod so the same pod is asked for the transcript', () => {
+    const key = sessionHistoryKey(item({ pod: 'galahad-7d9f-abc' }))
+    expect(key).toBe('galahad-7d9f-abc/019f4162-77c7')
+    expect(sessionQuery(key)).toBe('id=019f4162-77c7&pod=galahad-7d9f-abc')
+  })
+
+  it('keeps the bare id when the API did not report a pod (older runtime)', () => {
+    const key = sessionHistoryKey(item({}))
+    expect(key).toBe('019f4162-77c7')
+    expect(sessionQuery(key)).toBe('id=019f4162-77c7')
+  })
+
+  it('gives the same id on two pods distinct keys', () => {
+    expect(sessionHistoryKey(item({ pod: 'a' }))).not.toBe(sessionHistoryKey(item({ pod: 'b' })))
   })
 })

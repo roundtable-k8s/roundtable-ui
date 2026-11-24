@@ -37,7 +37,22 @@ const TREE_INDENT_PX = 16
 function sessionLabel(s: SessionHistoryItem): string {
   const when = s.startedAt ? new Date(s.startedAt).toLocaleString() : 'unknown time'
   const prompt = s.firstPrompt ? ` — ${s.firstPrompt.slice(0, 60)}` : ''
-  return `${when} · ${s.messageCount} msgs${prompt}`
+  const pod = s.pod ? ` · ${s.pod}` : ''
+  return `${when} · ${s.messageCount} msgs${pod}${prompt}`
+}
+
+// Picker value for a past session: "<pod>/<id>" so the transcript is always
+// fetched from the pod it lives on (#219). Neither pod names nor session ids
+// contain "/".
+export function sessionHistoryKey(s: SessionHistoryItem): string {
+  return s.pod ? `${s.pod}/${s.id}` : s.id
+}
+
+// Query string selecting a past session from its picker value.
+export function sessionQuery(key: string): string {
+  const slash = key.indexOf('/')
+  if (slash < 0) return `id=${encodeURIComponent(key)}`
+  return `id=${encodeURIComponent(key.slice(slash + 1))}&pod=${encodeURIComponent(key.slice(0, slash))}`
 }
 
 export function TreeNodeView({ node, depth = 0 }: { node: SessionTreeNode & { children?: SessionTreeNode[] }; depth?: number }) {
@@ -240,7 +255,7 @@ export function SessionsPage() {
 
       // Archived session: replay its persisted entries (timeline/tools views).
       if (isArchived) {
-        const res = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=session&id=${encodeURIComponent(selectedSession)}&limit=300`)
+        const res = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=session&${sessionQuery(selectedSession)}&limit=300`)
         if (!res || !res.ok) {
           setEntries([])
           setArchivedMeta(null)
@@ -432,7 +447,7 @@ export function SessionsPage() {
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-white max-w-xl flex-1">
             <option value="live">🟢 Live (active session)</option>
             {sessions.map(s => (
-              <option key={s.id} value={s.id}>{sessionLabel(s)}</option>
+              <option key={sessionHistoryKey(s)} value={sessionHistoryKey(s)}>{sessionLabel(s)}</option>
             ))}
           </select>
           {isArchived && (
@@ -486,6 +501,21 @@ export function SessionsPage() {
               <BarChart3 className="w-4 h-4" /> Fleet Comparison
             </button>
           </div>
+        </div>
+      )}
+      {!isArchived && stats?.session && stats.supported !== false && (stats.pods?.length ?? 0) > 1 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 text-xs" aria-label="Per-pod breakdown">
+          <span className="text-gray-500">
+            Totals across {stats.respondedPods ?? stats.pods!.length}/{stats.podCount ?? stats.pods!.length} pods:
+          </span>
+          {stats.pods!.map(p => (
+            <span key={p.pod} className={`px-2 py-1 rounded-full border ${p.ok ? 'border-roundtable-steel text-gray-300' : 'border-red-500/30 text-red-400'}`}>
+              <span className="font-mono">{p.pod}</span>
+              {p.ok
+                ? ` · ${p.stats?.session?.totalMessages ?? 0} msgs · ${formatCost(p.stats?.session?.cost ?? 0)} · ${p.stats?.runtime?.activeTasks ?? 0} active`
+                : ` · ${p.error || 'no reply'}`}
+            </span>
+          ))}
         </div>
       )}
 
