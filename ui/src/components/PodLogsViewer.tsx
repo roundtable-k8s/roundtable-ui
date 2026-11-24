@@ -13,9 +13,26 @@ interface Props {
 
 type LogsState =
   | { kind: 'single'; pod: string; text: string }
-  | { kind: 'all'; lines: MergedLogLine[]; errors: { pod: string; message: string }[] }
+  | { kind: 'all'; lines: MergedLogLine[]; errors: { pod: string; message: string }[]; skipped: string[] }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Unknown error')
+
+interface PodEntry {
+  name: string
+  containers: string[]
+}
+
+/** Encodes the pod list as a string so effects only re-run when the set (or its containers) changes. */
+const podSignature = (pods: KnightPod[]) =>
+  pods.map((p) => `${p.name}|${p.containers.map((c) => c.name).join('+')}`).join(';')
+
+const parseSignature = (sig: string): PodEntry[] =>
+  sig
+    ? sig.split(';').map((s) => {
+        const [name, cs] = s.split('|')
+        return { name, containers: cs ? cs.split('+') : [] }
+      })
+    : []
 
 /**
  * Pod logs for one knight (#218): pick a pod (default: the pod with the most
@@ -31,6 +48,8 @@ export function PodLogsViewer({ knightName }: Props) {
   const [logs, setLogs] = useState<LogsState | null>(null)
   const [logsError, setLogsError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Bumped by Refresh to re-fetch logs even when the pod set is unchanged.
+  const [refreshTick, setRefreshTick] = useState(0)
   // Drops responses of superseded requests (pod switched mid-fetch).
   const reqId = useRef(0)
 
@@ -56,7 +75,7 @@ export function PodLogsViewer({ knightName }: Props) {
 
   const pod = pods.find((p) => p.name === selected)
   // Stable dependency so a pod-list reload only refetches when the set changes.
-  const podNames = pods.map((p) => p.name).join(',')
+  const podSig = podSignature(pods)
   const podIndex = useMemo(() => new Map(pods.map((p, i) => [p.name, i])), [pods])
 
   // Reset the container when it isn't in the newly selected pod.
@@ -71,18 +90,21 @@ export function PodLogsViewer({ knightName }: Props) {
     setLogsError(null)
     try {
       if (selected === ALL_PODS) {
-        const names = podNames ? podNames.split(',') : []
+        const entries = parseSignature(podSig)
+        // Pods without the selected container are skipped instead of answering 400.
+        const targets = entries.filter((e) => !container || e.containers.includes(container))
+        const skipped = entries.filter((e) => container && !e.containers.includes(container)).map((e) => e.name)
         const results = await Promise.allSettled(
-          names.map((p) => apiGetText(podLogsUrl(knightName, { pod: p, container, previous, timestamps: true }))),
+          targets.map((t) => apiGetText(podLogsUrl(knightName, { pod: t.name, container, previous, timestamps: true }))),
         )
         if (id !== reqId.current) return
         const streams: { pod: string; text: string }[] = []
         const errors: { pod: string; message: string }[] = []
         results.forEach((r, i) => {
-          if (r.status === 'fulfilled') streams.push({ pod: names[i], text: r.value })
-          else errors.push({ pod: names[i], message: errMsg(r.reason) })
+          if (r.status === 'fulfilled') streams.push({ pod: targets[i].name, text: r.value })
+          else errors.push({ pod: targets[i].name, message: errMsg(r.reason) })
         })
-        setLogs({ kind: 'all', lines: mergePodLogs(streams), errors })
+        setLogs({ kind: 'all', lines: mergePodLogs(streams), errors, skipped })
       } else {
         const text = await apiGetText(podLogsUrl(knightName, { pod: selected, container, previous }))
         if (id !== reqId.current) return
@@ -95,11 +117,11 @@ export function PodLogsViewer({ knightName }: Props) {
     } finally {
       if (id === reqId.current) setLoading(false)
     }
-  }, [knightName, selected, container, previous, podNames])
+  }, [knightName, selected, container, previous, podSig])
 
   useEffect(() => {
     fetchLogs()
-  }, [fetchLogs])
+  }, [fetchLogs, refreshTick])
 
   // Containers offered: the selected pod's, or the union across pods.
   const containers = useMemo(() => {
@@ -156,8 +178,9 @@ export function PodLogsViewer({ knightName }: Props) {
         <span className="ml-auto text-gray-500">Last 100 lines{selected === ALL_PODS ? ' per pod' : ''}</span>
         <button
           onClick={() => {
+            // One logs request: the tick triggers it; a changed pod set refetches via podSig.
             loadPods()
-            fetchLogs()
+            setRefreshTick((t) => t + 1)
           }}
           className="text-roundtable-gold hover:text-roundtable-gold/80"
         >
@@ -176,16 +199,21 @@ export function PodLogsViewer({ knightName }: Props) {
         </pre>
       ) : logs?.kind === 'all' ? (
         <pre data-testid="pod-logs" className="text-xs text-gray-300 font-mono overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words">
+          {logs.skipped.map((p) => (
+            <span key={`skip-${p}`} className="block text-gray-500">
+              <span className={podColor(podIndex.get(p) ?? 0)}>[{shortPodName(p, knightName)}]</span> skipped: no container &quot;{container}&quot;
+            </span>
+          ))}
           {logs.errors.map((e) => (
-            <div key={`err-${e.pod}`} className="text-red-400">
+            <span key={`err-${e.pod}`} className="block text-red-400">
               <span className={podColor(podIndex.get(e.pod) ?? 0)}>[{shortPodName(e.pod, knightName)}]</span> Error: {sanitizeText(e.message)}
-            </div>
+            </span>
           ))}
           {logs.lines.length === 0 && logs.errors.length === 0 && 'No logs available'}
           {logs.lines.map((l, i) => (
-            <div key={i}>
+            <span key={i} className="block">
               <span className={podColor(podIndex.get(l.pod) ?? 0)}>[{shortPodName(l.pod, knightName)}]</span> {sanitizeText(l.text)}
-            </div>
+            </span>
           ))}
         </pre>
       ) : (
