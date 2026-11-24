@@ -85,9 +85,13 @@ jobs:
               gh api --paginate "repos/$REPO/issues/$PR/comments" \
                 --jq '.[] | [.created_at, .body] | @json'
             } | jq -rs 'sort_by(.[0]) | .[] | .[1]' \
-            | tr -d '\r' | grep -E '^Verdict: ' | tail -n 1 || true)"
+            | tr -d '\r' | sed -E 's/[*_`]//g; s/^[[:space:]>#-]+//' \
+            | grep -iE '^verdict:' | tail -n 1 || true)"
           echo "Latest verdict: ${verdict:-none}"
-          if [ "$verdict" != "Verdict: ship it" ]; then
+          # Markdown and case are ignored and text may follow ("Verdict: **ship it**
+          # — queued"), but the words must be "ship it": LGTM or "no blocking
+          # issues" don't count.
+          if ! grep -qiE '^verdict:[[:space:]]*ship it([^[:alnum:]]|$)' <<<"$verdict"; then
             # Enforced in the merge queue only. On PR events a missing review is
             # the normal state until rt-lead posts one, and a failed run from the
             # pull_request event stayed on the commit after a later
