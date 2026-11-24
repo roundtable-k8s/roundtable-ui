@@ -16,7 +16,7 @@ import (
 
 const logsTestNS = "test-namespace"
 
-func makeKnightPod(knight, name string, ready bool, started time.Time, prevTerminated bool) *corev1.Pod {
+func makeLogTestPod(knight, name string, ready bool, started time.Time, prevTerminated bool) *corev1.Pod {
 	cs := corev1.ContainerStatus{Name: "knight", Ready: ready}
 	if prevTerminated {
 		cs.RestartCount = 2
@@ -51,10 +51,10 @@ func setupLogsRouter(t *testing.T, reg *runningRegistry) (*mux.Router, *k8sfake.
 	t.Helper()
 	now := time.Now()
 	fc := k8sfake.NewSimpleClientset(
-		makeKnightPod("galahad", "galahad-aaa-1", true, now.Add(-3*time.Hour), false),
-		makeKnightPod("galahad", "galahad-aaa-2", true, now.Add(-1*time.Hour), true),
-		makeKnightPod("galahad", "galahad-aaa-3", false, now.Add(-1*time.Minute), false),
-		makeKnightPod("lancelot", "lancelot-bbb-1", true, now, false),
+		makeLogTestPod("galahad", "galahad-aaa-1", true, now.Add(-3*time.Hour), false),
+		makeLogTestPod("galahad", "galahad-aaa-2", true, now.Add(-1*time.Hour), true),
+		makeLogTestPod("galahad", "galahad-aaa-3", false, now.Add(-1*time.Minute), false),
+		makeLogTestPod("lancelot", "lancelot-bbb-1", true, now, false),
 	)
 	k8sClient = fc
 	r := mux.NewRouter()

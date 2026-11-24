@@ -95,9 +95,9 @@ func podStartTime(p *corev1.Pod) time.Time {
 	return p.CreationTimestamp.Time
 }
 
-// sortKnightPods orders pods for the picker and returns them: most recent
+// sortLogPods orders pods for the picker and returns them: most recent
 // activity first, then ready before not ready, then newest first, then name.
-func sortKnightPods(pods []corev1.Pod, activity map[string]time.Time) []corev1.Pod {
+func sortLogPods(pods []corev1.Pod, activity map[string]time.Time) []corev1.Pod {
 	out := append([]corev1.Pod(nil), pods...)
 	sort.SliceStable(out, func(i, j int) bool {
 		ai, aj := activity[out[i].Name], activity[out[j].Name]
@@ -167,7 +167,7 @@ func knightPodsHandler(namespace string, reg *runningRegistry) http.HandlerFunc 
 		}
 		activity := lastActivityByPod(reg, name)
 		resp := knightPodsResponse{Pods: []KnightPodInfo{}}
-		for _, p := range sortKnightPods(pods, activity) {
+		for _, p := range sortLogPods(pods, activity) {
 			resp.Pods = append(resp.Pods, buildKnightPodInfo(&p, activity))
 		}
 		if len(resp.Pods) > 0 {
@@ -254,7 +254,7 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		// label-selected list, never fetched by name directly.
 		var pod *corev1.Pod
 		if podName == "" {
-			sorted := sortKnightPods(pods, nil)
+			sorted := sortLogPods(pods, nil)
 			pod = &sorted[0]
 		} else {
 			for i := range pods {
