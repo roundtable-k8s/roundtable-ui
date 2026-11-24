@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { TreePine, ChevronRight, ChevronDown, Wrench, MessageSquare, Search, BarChart3, History } from 'lucide-react'
 import { getKnightConfig, buildKnightConfigFromFleet } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
@@ -158,7 +159,12 @@ export function ToolCallCard({ entry }: { entry: SessionEntry }) {
 
 export function SessionsPage() {
   const { knights, loading: fleetLoading } = useFleet()
-  const [selectedKnight, setSelectedKnight] = useState('')
+  // ?knight= preselects a knight (e.g. the transcript link from Task activity, #214).
+  const [searchParams] = useSearchParams()
+  const [selectedKnight, setSelectedKnight] = useState(() => {
+    const k = searchParams.get('knight')?.toLowerCase() || ''
+    return /^[a-z0-9][a-z0-9-]{0,62}$/.test(k) ? k : ''
+  })
   const [view, setView] = useState<'timeline' | 'tree' | 'tools'>('timeline')
   const [entries, setEntries] = useState<SessionEntry[]>([])
   const [treeNodes, setTreeNodes] = useState<SessionTreeNode[]>([])

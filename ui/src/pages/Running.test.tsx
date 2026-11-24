@@ -27,7 +27,10 @@ const tasks: RunningTask[] = [
 
 let state: RunningState
 vi.mock('../hooks/useRunning', () => ({ useRunning: () => state }))
-vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ connected: true }) }))
+const send = vi.fn(() => true)
+vi.mock('../hooks/useWebSocket', () => ({
+  useWebSocket: () => ({ connected: true, events: [], send, subscribeTopic: () => () => {} }),
+}))
 
 function renderPage(url = '/running') {
   return render(
@@ -90,10 +93,26 @@ describe('RunningPage', () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(screen.getByText('lancelot-xyz'))
-    const dialog = screen.getByRole('dialog', { name: 'Task task-stale-1' })
+    const dialog = screen.getByRole('dialog', { name: 'Task activity task-stale-1' })
     expect(within(dialog).getByText('lancelot-xyz')).toBeInTheDocument()
+    expect(send).toHaveBeenCalledWith({ subscribe: 'activity', taskId: 'task-stale-1' })
     await user.click(within(dialog).getByLabelText('Close'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(send).toHaveBeenCalledWith({ unsubscribe: 'activity', taskId: 'task-stale-1' })
+  })
+
+  it('keeps the panel open after the task leaves the running list', () => {
+    const { rerender } = renderPage('/running?task=task-run-1')
+    expect(screen.getByRole('dialog', { name: 'Task activity task-run-1' })).toBeInTheDocument()
+    state = { ...state, tasks: new Map() }
+    rerender(
+      <MemoryRouter initialEntries={['/running?task=task-run-1']}>
+        <RunningPage />
+      </MemoryRouter>,
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Task activity task-run-1' })
+    // header falls back to the last registry entry
+    expect(within(dialog).getByText('galahad-abc')).toBeInTheDocument()
   })
 
   it('shows the lost reason in the panel', () => {

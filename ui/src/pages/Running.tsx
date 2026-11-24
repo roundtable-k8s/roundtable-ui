@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Activity, X } from 'lucide-react'
+import { Activity } from 'lucide-react'
 import { useRunning } from '../hooks/useRunning'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { PageHeader, StatCard, EmptyState, ErrorBanner, Drawer } from '../components/ui'
+import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
+import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import {
@@ -61,62 +62,28 @@ function lastToolLabel(task: RunningTask): string {
   return tool ? sanitizeText(tool) : ''
 }
 
-function TaskDetail({ task, now, onClose }: { task: RunningTask; now: number; onClose: () => void }) {
+/** Registry details shown above the activity timeline while the task is in flight. */
+function RunningExtra({ task, now }: { task: RunningTask; now: number }) {
   const rows: Array<[string, ReactNode]> = [
     ['Status', <StatusBadge key="s" status={task.status} />],
-    ['Knight', task.knight],
-    ['Pod', task.pod || '—'],
     ['Node', task.node || '—'],
     ['Slot', task.slot != null ? `${task.slot}${task.concurrency != null ? ` of ${task.concurrency}` : ''}` : '—'],
-    ['Task ID', <code key="t" className="break-all">{task.taskId}</code>],
-    ['Run ID', task.runId ? <code key="r" className="break-all">{task.runId}</code> : '—'],
-    ['Chain / step', <ChainCell key="c" task={task} />],
-    ['Model', task.model || '—'],
-    ['Elapsed', formatAge(task.startedAt, now)],
     ['Heartbeat age', formatAge(task.lastHeartbeat, now)],
     ['Turns', task.turns ?? '—'],
     ['Tokens', task.inputTokens != null || task.outputTokens != null
       ? `${(task.inputTokens ?? 0).toLocaleString()} in / ${(task.outputTokens ?? 0).toLocaleString()} out`
       : '—'],
-    ['Cost so far', task.costUsd != null ? formatCost(task.costUsd) : '—'],
   ]
   if (task.reason) rows.splice(1, 0, ['Reason', sanitizeText(task.reason)])
-  const tool = lastToolLabel(task)
   return (
-    <Drawer onClose={onClose}>
-      <div className="p-6" role="dialog" aria-label={`Task ${task.taskId}`}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Task activity</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-200">
-            <X className="w-5 h-5" />
-          </button>
+    <dl className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1.5 text-sm" aria-label="Running status">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-gray-500">{k}</dt>
+          <dd className="col-span-2 text-gray-200 tabular-nums">{v}</dd>
         </div>
-        <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
-          {rows.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-gray-500">{k}</dt>
-              <dd className="col-span-2 text-gray-200">{v}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-300 mb-2">Last tool</h3>
-          {tool ? (
-            <div className="text-sm bg-roundtable-navy/50 rounded-lg p-3">
-              <span className={task.lastTool?.isError ? 'text-red-400' : 'text-gray-200'}>{tool}</span>
-              {task.lastTool?.argsSummary && (
-                <pre className="mt-1 text-xs text-gray-400 whitespace-pre-wrap break-all">{sanitizeText(task.lastTool.argsSummary)}</pre>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">No tool calls yet.</p>
-          )}
-        </div>
-        <p className="mt-6 text-xs text-gray-500">
-          The live tool-call and message timeline for this task appears here once the activity stream (#184) is available.
-        </p>
-      </div>
-    </Drawer>
+      ))}
+    </dl>
   )
 }
 
@@ -149,6 +116,13 @@ export function RunningPage() {
   )
   const rows = useMemo(() => filterRunning(all, { knight, chain, status }), [all, knight, chain, status])
   const selected = selectedId ? tasks.get(selectedId) : undefined
+  // Remember the last registry entry so the drawer keeps its header once the
+  // task finishes and leaves /api/running.
+  const [lastSelected, setLastSelected] = useState<RunningTask | undefined>(undefined)
+  useEffect(() => {
+    if (selected) setLastSelected(selected)
+  }, [selected])
+  const hint = selected ?? (lastSelected?.taskId === selectedId ? lastSelected : undefined)
 
   const onRowKey = (e: KeyboardEvent, id: string) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -269,7 +243,14 @@ export function RunningPage() {
         </div>
       )}
 
-      {selected && <TaskDetail task={selected} now={now} onClose={() => setParam('task', '')} />}
+      {selectedId && (
+        <TaskActivityPanel
+          taskId={selectedId}
+          hint={hint}
+          extra={selected ? <RunningExtra task={selected} now={now} /> : undefined}
+          onClose={() => setParam('task', '')}
+        />
+      )}
     </div>
   )
 }

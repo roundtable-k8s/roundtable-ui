@@ -11,7 +11,10 @@ class FakeWS {
   onclose: ((e: { code: number; reason: string }) => void) | null = null
   onerror: (() => void) | null = null
   onmessage: ((e: { data: string }) => void) | null = null
+  readyState = 0
+  sent: string[] = []
   constructor() { FakeWS.last = this }
+  send(d: string) { this.sent.push(d) }
   close() {}
 }
 
@@ -36,5 +39,22 @@ describe('useWebSocket topics', () => {
     unsub()
     act(() => FakeWS.last.onmessage!({ data: JSON.stringify({ type: 'running', data: { op: 'remove', taskId: 't2' } }) }))
     expect(seen).toHaveLength(1)
+  })
+})
+
+describe('useWebSocket activity', () => {
+  it('routes activity messages to listeners and sends commands only when open', () => {
+    const { result } = renderHook(() => useWebSocket(), { wrapper })
+    const seen: unknown[] = []
+    act(() => { result.current.subscribeTopic('activity', (d) => seen.push(d)) })
+
+    expect(result.current.send({ subscribe: 'activity', taskId: 't1' })).toBe(false)
+    FakeWS.last.readyState = 1
+    expect(result.current.send({ subscribe: 'activity', taskId: 't1' })).toBe(true)
+    expect(FakeWS.last.sent).toEqual([JSON.stringify({ subscribe: 'activity', taskId: 't1' })])
+
+    act(() => FakeWS.last.onmessage!({ data: JSON.stringify({ type: 'activity', subject: 'activity', data: { op: 'unsubscribed', taskId: 't1' }, timestamp: '2026-11-24T10:00:00Z' }) }))
+    expect(seen).toEqual([{ op: 'unsubscribed', taskId: 't1' }])
+    expect(result.current.events).toHaveLength(0)
   })
 })
