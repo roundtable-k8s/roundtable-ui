@@ -41,8 +41,7 @@ import (
 const (
 	queueSampleInterval   = 15 * time.Second
 	queueHistoryRetention = 6 * time.Hour
-	defaultTasksStream    = "fleet_a_tasks" // Knight spec.nats.stream default
-	kedaHPAPrefix         = "keda-hpa-"     // KEDA names its HPA keda-hpa-<ScaledObject>
+	kedaHPAPrefix         = "keda-hpa-" // KEDA names its HPA keda-hpa-<ScaledObject>
 	queueSampleTimeout    = 5 * time.Second
 )
 
