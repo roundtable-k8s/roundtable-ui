@@ -375,8 +375,8 @@ func main() {
 	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(fleetPrefix)).Methods("POST")
 
 	// Chain endpoints
-	api.HandleFunc("/chains", chainsHandler(namespace)).Methods("GET")
-	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace)).Methods("GET")
+	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
+	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, running)).Methods("GET")
 
 	// Mission endpoints
 	api.HandleFunc("/missions", missionsHandler(namespace)).Methods("GET")
@@ -1432,6 +1432,8 @@ type ChainSummary struct {
 	Suspend        bool          `json:"suspend,omitempty"`
 	RunsCompleted  int           `json:"runsCompleted,omitempty"`
 	RunsFailed     int           `json:"runsFailed,omitempty"`
+	// RunID identifies the current (or most recent) chain run (#227).
+	RunID string `json:"runId,omitempty"`
 }
 
 type StepSummary struct {
@@ -1447,9 +1449,31 @@ type StepSummary struct {
 	ContinueOnFailure bool     `json:"continueOnFailure,omitempty"`
 	OutputPath        string   `json:"outputPath,omitempty"`
 	MaxRetries        int      `json:"maxRetries,omitempty"`
+
+	// Run state of the step's current task (#227). InFlight joins a running
+	// task with the in-flight registry (pod, elapsed, heartbeat age).
+	TaskID   string             `json:"taskId,omitempty"`
+	Error    string             `json:"error,omitempty"`
+	Reason   string             `json:"reason,omitempty"`
+	InFlight *ChainTaskInFlight `json:"inFlight,omitempty"`
+
+	// when: the gate expression, and why the step was skipped (#227).
+	When        string `json:"when,omitempty"`
+	Skipped     bool   `json:"skipped,omitempty"`
+	SkipReason  string `json:"skipReason,omitempty"`
+	SkipMessage string `json:"skipMessage,omitempty"`
+
+	// forEach fan-out (#227).
+	ForEach       bool                `json:"forEach,omitempty"`
+	MaxParallel   int                 `json:"maxParallel,omitempty"`
+	FailurePolicy string              `json:"failurePolicy,omitempty"`
+	FanOut        *ChainFanOutSummary `json:"fanOut,omitempty"`
+
+	// Bounded loop (#227).
+	Loop *ChainLoopSummary `json:"loop,omitempty"`
 }
 
-func chainsHandler(namespace string) http.HandlerFunc {
+func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
 			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
@@ -1466,7 +1490,9 @@ func chainsHandler(namespace string) http.HandlerFunc {
 		knightDomains := getKnightDomainMap(r.Context(), namespace)
 		chains := []ChainSummary{}
 		for _, item := range list.Items {
-			chains = append(chains, parseChainResource(item.Object, knightDomains))
+			c := parseChainResource(item.Object, knightDomains)
+			joinChainInFlight(&c, running)
+			chains = append(chains, c)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1474,7 +1500,7 @@ func chainsHandler(namespace string) http.HandlerFunc {
 	}
 }
 
-func chainDetailHandler(namespace string) http.HandlerFunc {
+func chainDetailHandler(namespace string, running *runningRegistry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
 			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
@@ -1496,6 +1522,7 @@ func chainDetailHandler(namespace string) http.HandlerFunc {
 
 		knightDomains := getKnightDomainMap(r.Context(), namespace)
 		chain := parseChainResource(obj.Object, knightDomains)
+		joinChainInFlight(&chain, running)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(chain)
 	}
@@ -1526,6 +1553,7 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 	// Scheduled-run counters from status
 	chain.RunsCompleted = getInt(status, "runsCompleted")
 	chain.RunsFailed = getInt(status, "runsFailed")
+	chain.RunID = getStr(status, "runId")
 
 	// Timing (CRD fields: startedAt, completedAt)
 	if t := getStr(status, "startedAt"); t != "" {
@@ -1604,6 +1632,8 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 			step.OutputPath = getStr(ss, "outputPath")
 			step.MaxRetries = getInt(getNestedMap(ss, "retry"), "maxAttempts")
 		}
+		applyStepSpecExtras(&step, specStepMap[stepName])
+		applyStepStatusExtras(&step, sm, specStepMap[stepName])
 
 		chain.Steps = append(chain.Steps, step)
 	}
@@ -1629,6 +1659,7 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 				OutputPath:        getStr(sm, "outputPath"),
 				MaxRetries:        getInt(getNestedMap(sm, "retry"), "maxAttempts"),
 			}
+			applyStepSpecExtras(&step, sm)
 			if deps := getSlice(sm, "dependsOn"); deps != nil {
 				for _, d := range deps {
 					if ds, ok := d.(string); ok {

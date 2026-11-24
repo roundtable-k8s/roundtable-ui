@@ -1,0 +1,58 @@
+{
+  "apiVersion": "ai.roundtable.io/v1alpha1",
+  "kind": "Chain",
+  "metadata": {"name": "fanout-scan", "namespace": "roundtable"},
+  "spec": {
+    "steps": [
+      {"name": "discover", "knightRef": {"name": "galahad"}, "task": "list hosts"},
+      {
+        "name": "scan",
+        "knightRef": {"name": "galahad"},
+        "task": "scan {{ .Item }}",
+        "dependsOn": ["discover"],
+        "forEach": {"from": "discover", "maxItems": 50},
+        "maxParallel": 2,
+        "failurePolicy": "continue"
+      },
+      {
+        "name": "notify",
+        "knightRef": {"name": "gawain"},
+        "task": "notify",
+        "dependsOn": ["discover"],
+        "when": "steps.discover.output.contains(\"urgent\")"
+      },
+      {"name": "cleanup", "knightRef": {"name": "gawain"}, "task": "cleanup", "dependsOn": ["scan"]}
+    ]
+  },
+  "status": {
+    "phase": "Running",
+    "runId": "1795548808",
+    "startedAt": "2026-11-24T11:50:00Z",
+    "stepStatuses": [
+      {"name": "discover", "phase": "Succeeded", "taskId": "fanout-scan-1795548808-discover", "output": "[\"a\",\"b\"]", "startedAt": "2026-11-24T11:50:00Z", "completedAt": "2026-11-24T11:51:00Z"},
+      {
+        "name": "scan",
+        "phase": "Running",
+        "startedAt": "2026-11-24T11:51:00Z",
+        "fanOut": {
+          "total": 12,
+          "itemsHash": "abc123",
+          "itemPhases": "SSSSSSFSRRPP",
+          "pending": 2,
+          "running": 2,
+          "succeeded": 7,
+          "failed": 1,
+          "items": [
+            {"index": 9, "phase": "Running", "runId": "1795548808-9", "taskId": "fanout-scan-1795548808-scan-9", "startedAt": "2026-11-24T11:58:30Z"},
+            {"index": 6, "phase": "Failed", "runId": "1795548808-6", "taskId": "fanout-scan-1795548808-scan-6", "error": "connection refused", "retries": 2, "startedAt": "2026-11-24T11:52:00Z", "completedAt": "2026-11-24T11:55:00Z"},
+            {"index": 7, "phase": "Succeeded", "runId": "1795548808-7", "taskId": "fanout-scan-1795548808-scan-7", "output": "22/tcp open", "startedAt": "2026-11-24T11:55:00Z", "completedAt": "2026-11-24T11:57:00Z"},
+            {"index": 8, "phase": "Running", "runId": "1795548808-8", "taskId": "fanout-scan-1795548808-scan-8", "startedAt": "2026-11-24T11:58:00Z"}
+          ],
+          "omittedItems": 6
+        }
+      },
+      {"name": "notify", "phase": "Skipped", "reason": "WhenFalse", "completedAt": "2026-11-24T11:51:00Z"},
+      {"name": "cleanup", "phase": "Pending"}
+    ]
+  }
+}
