@@ -49,6 +49,11 @@ vi.mock('../hooks/useWebSocket', () => ({
   })),
 }))
 
+const runningState = vi.hoisted(() => ({
+  current: { tasks: new Map(), loading: false, error: null as string | null, unavailable: false },
+}))
+vi.mock('../hooks/useRunning', () => ({ useRunning: () => runningState.current }))
+
 vi.mock('../lib/api', () => ({
   apiGet: vi.fn((url: string) => {
     if (url === '/api/chains') {
@@ -181,6 +186,17 @@ describe('DashboardPage', () => {
     renderDashboard()
     const links = screen.getAllByRole('link', { name: /View all/i })
     expect(links.some(l => l.getAttribute('href') === '/fleet')).toBe(true)
+  })
+
+  it('shows the running-task count linking to the Running page', () => {
+    const t = (taskId: string, status: string) => [taskId, { taskId, knight: 'galahad', status, startedAt: '' }] as const
+    runningState.current = { ...runningState.current, tasks: new Map([t('a', 'running'), t('b', 'running'), t('c', 'stale'), t('d', 'lost')]) }
+    renderDashboard()
+    const card = screen.getByRole('link', { name: 'Running tasks' })
+    expect(card).toHaveAttribute('href', '/running')
+    expect(card).toHaveTextContent('Running Tasks4')
+    expect(card).toHaveTextContent('1 stale • 1 lost')
+    runningState.current = { ...runningState.current, tasks: new Map() }
   })
 
   it('renders chains link', () => {

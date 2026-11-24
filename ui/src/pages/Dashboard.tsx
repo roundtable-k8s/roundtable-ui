@@ -1,10 +1,12 @@
 import { apiGet } from '../lib/api'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
+import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useFleet } from '../hooks/useFleet'
 import { fetchWithTimeout } from '../hooks/useKnightSession'
 import { useWebSocket, eventKey } from '../hooks/useWebSocket'
+import { useRunning } from '../hooks/useRunning'
+import { countByStatus } from '../lib/running'
 import { getKnightConfig, KNIGHT_NAMES } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState } from '../components/ui'
@@ -50,6 +52,7 @@ async function fetchSessionCosts(names: string[]): Promise<Record<string, number
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
   const { knights } = useFleet()
   const { events, connected } = useWebSocket()
+  const running = useRunning()
   const [chains, setChains] = useState<Chain[]>([])
   const [sessionCosts, setSessionCosts] = useState<{ total: number; perKnight: Record<string, number> }>({ total: 0, perKnight: {} })
   const [costExpanded, setCostExpanded] = useState(defaultCostExpanded)
@@ -201,6 +204,13 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     return { totalCost, costByKnight, dailyCosts, topTasks }
   }, [filteredCostEntries])
 
+  const runningCounts = useMemo(() => countByStatus(running.tasks.values()), [running.tasks])
+  const runningTotal = runningCounts.running + runningCounts.stale + runningCounts.lost
+  const runningDetail = [
+    runningCounts.stale > 0 ? `${runningCounts.stale} stale` : '',
+    runningCounts.lost > 0 ? `${runningCounts.lost} lost` : '',
+  ].filter(Boolean).join(' • ') || undefined
+
   const online = knights.filter(k => k.status === 'online').length
   const runningChains = chains.filter(c => c.phase === 'Running' || c.phase === 'StepRunning')
 
@@ -213,8 +223,17 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
       />
 
       {/* Top-level metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
         <StatCard label="Knights Online" value={`${online}/${knights.length}`} color="text-green-400" icon={<Zap className="w-5 h-5" />} />
+        <Link to="/running" aria-label="Running tasks" className="block rounded-xl hover:ring-1 hover:ring-roundtable-gold/40">
+          <StatCard
+            label="Running Tasks"
+            value={running.unavailable ? '—' : runningTotal}
+            color={runningCounts.lost > 0 ? 'text-red-400' : runningCounts.stale > 0 ? 'text-yellow-400' : runningTotal > 0 ? 'text-blue-400' : 'text-gray-400'}
+            icon={<Loader className="w-5 h-5" />}
+            detail={runningDetail}
+          />
+        </Link>
         <StatCard label="Tasks Dispatched" value={stats.totalTasks} color="text-blue-400" icon={<Activity className="w-5 h-5" />} />
         <StatCard label="Completed" value={stats.totalResults} color="text-green-400" />
         <StatCard label="Failures" value={stats.failures} color={stats.failures > 0 ? 'text-red-400' : 'text-gray-400'} icon={stats.failures > 0 ? <AlertTriangle className="w-5 h-5" /> : undefined} />

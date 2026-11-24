@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
@@ -16,6 +16,7 @@ const DashboardPage = lazy(() => import('./pages/Dashboard').then(m => ({ defaul
 const MissionsPage = lazy(() => import('./pages/Missions').then(m => ({ default: m.MissionsPage })))
 const CostDashboardPage = lazy(() => import('./pages/CostDashboard').then(m => ({ default: m.CostDashboardPage })))
 const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ default: m.ArchitecturePage })))
+const RunningPage = lazy(() => import('./pages/Running').then(m => ({ default: m.RunningPage })))
 const RoundTablesPage = lazy(() => import('./pages/RoundTables').then(m => ({ default: m.RoundTablesPage })))
 
 function PageLoading() {
@@ -32,6 +33,7 @@ function NotificationWatcher() {
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Command Center' },
   { path: '/fleet', icon: Shield, label: 'Fleet' },
+  { path: '/running', icon: Activity, label: 'Running' },
   { path: '/missions', icon: Target, label: 'Missions' },
   { path: '/roundtables', icon: Crown, label: 'Round Tables' },
   { path: '/quests', icon: Scroll, label: 'Dispatch' },
@@ -120,6 +122,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/fleet" element={<FleetPage />} />
+            <Route path="/running" element={<RunningPage />} />
             <Route path="/missions" element={<MissionsPage />} />
             <Route path="/roundtables" element={<RoundTablesPage />} />
             <Route path="/quests" element={<TasksPage />} />

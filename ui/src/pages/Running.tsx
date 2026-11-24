@@ -1,0 +1,275 @@
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Activity, X } from 'lucide-react'
+import { useRunning } from '../hooks/useRunning'
+import { useWebSocket } from '../hooks/useWebSocket'
+import { PageHeader, StatCard, EmptyState, ErrorBanner, Drawer } from '../components/ui'
+import { formatCost } from '../lib/format'
+import { sanitizeText } from '../lib/untrusted'
+import {
+  countByStatus,
+  filterRunning,
+  formatAge,
+  type RunningStatus,
+  type RunningTask,
+} from '../lib/running'
+
+const STATUS_STYLES: Record<RunningStatus, { row: string; badge: string; text: string }> = {
+  running: { row: '', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30', text: 'text-gray-300' },
+  stale: { row: 'bg-yellow-500/10', badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', text: 'text-yellow-400' },
+  lost: { row: 'bg-red-500/10', badge: 'bg-red-500/20 text-red-400 border-red-500/30', text: 'text-red-400' },
+}
+
+/** Re-render every second so elapsed / heartbeat age stay live. */
+function useNow(intervalMs = 1000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(id)
+  }, [intervalMs])
+  return now
+}
+
+function StatusBadge({ status }: { status: RunningStatus }) {
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[status].badge}`}>
+      {status}
+    </span>
+  )
+}
+
+function chainHref(chainName: string): string {
+  return `/chains?chain=${encodeURIComponent(chainName)}`
+}
+
+function ChainCell({ task }: { task: RunningTask }) {
+  if (!task.chainName) return <span className="text-gray-600">—</span>
+  return (
+    <Link
+      to={chainHref(task.chainName)}
+      onClick={(e) => e.stopPropagation()}
+      className="text-roundtable-gold hover:underline"
+    >
+      {task.chainName}
+      {task.stepName && <span className="text-gray-400"> / {task.stepName}</span>}
+    </Link>
+  )
+}
+
+function lastToolLabel(task: RunningTask): string {
+  const tool = task.currentTool || task.lastTool?.tool
+  return tool ? sanitizeText(tool) : ''
+}
+
+function TaskDetail({ task, now, onClose }: { task: RunningTask; now: number; onClose: () => void }) {
+  const rows: Array<[string, ReactNode]> = [
+    ['Status', <StatusBadge key="s" status={task.status} />],
+    ['Knight', task.knight],
+    ['Pod', task.pod || '—'],
+    ['Node', task.node || '—'],
+    ['Slot', task.slot != null ? `${task.slot}${task.concurrency != null ? ` of ${task.concurrency}` : ''}` : '—'],
+    ['Task ID', <code key="t" className="break-all">{task.taskId}</code>],
+    ['Run ID', task.runId ? <code key="r" className="break-all">{task.runId}</code> : '—'],
+    ['Chain / step', <ChainCell key="c" task={task} />],
+    ['Model', task.model || '—'],
+    ['Elapsed', formatAge(task.startedAt, now)],
+    ['Heartbeat age', formatAge(task.lastHeartbeat, now)],
+    ['Turns', task.turns ?? '—'],
+    ['Tokens', task.inputTokens != null || task.outputTokens != null
+      ? `${(task.inputTokens ?? 0).toLocaleString()} in / ${(task.outputTokens ?? 0).toLocaleString()} out`
+      : '—'],
+    ['Cost so far', task.costUsd != null ? formatCost(task.costUsd) : '—'],
+  ]
+  if (task.reason) rows.splice(1, 0, ['Reason', sanitizeText(task.reason)])
+  const tool = lastToolLabel(task)
+  return (
+    <Drawer onClose={onClose}>
+      <div className="p-6" role="dialog" aria-label={`Task ${task.taskId}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Task activity</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-200">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-gray-500">{k}</dt>
+              <dd className="col-span-2 text-gray-200">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-gray-300 mb-2">Last tool</h3>
+          {tool ? (
+            <div className="text-sm bg-roundtable-navy/50 rounded-lg p-3">
+              <span className={task.lastTool?.isError ? 'text-red-400' : 'text-gray-200'}>{tool}</span>
+              {task.lastTool?.argsSummary && (
+                <pre className="mt-1 text-xs text-gray-400 whitespace-pre-wrap break-all">{sanitizeText(task.lastTool.argsSummary)}</pre>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No tool calls yet.</p>
+          )}
+        </div>
+        <p className="mt-6 text-xs text-gray-500">
+          The live tool-call and message timeline for this task appears here once the activity stream (#184) is available.
+        </p>
+      </div>
+    </Drawer>
+  )
+}
+
+export function RunningPage() {
+  const { tasks, loading, error, unavailable } = useRunning()
+  const { connected } = useWebSocket()
+  const now = useNow()
+  const [params, setParams] = useSearchParams()
+  const knight = params.get('knight') || ''
+  const chain = params.get('chain') || ''
+  const statusParam = params.get('status') || ''
+  const status = (['running', 'stale', 'lost'].includes(statusParam) ? statusParam : '') as RunningStatus | ''
+  const selectedId = params.get('task')
+
+  const setParam = (key: string, value: string) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }
+
+  const all = useMemo(() => [...tasks.values()], [tasks])
+  const counts = useMemo(() => countByStatus(all), [all])
+  const knights = useMemo(() => [...new Set(all.map((t) => t.knight))].sort(), [all])
+  const chains = useMemo(
+    () => [...new Set(all.map((t) => t.chainName).filter((c): c is string => !!c))].sort(),
+    [all],
+  )
+  const rows = useMemo(() => filterRunning(all, { knight, chain, status }), [all, knight, chain, status])
+  const selected = selectedId ? tasks.get(selectedId) : undefined
+
+  const onRowKey = (e: KeyboardEvent, id: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setParam('task', id)
+    }
+  }
+
+  const selectClass = 'bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-1.5 text-sm text-gray-200'
+
+  return (
+    <div>
+      <PageHeader
+        icon={Activity}
+        title="Running"
+        subtitle={<>Every in-flight task across all knight pods • {connected ? '🟢 Live' : '🔴 Disconnected'}</>}
+      />
+
+      <div className="grid grid-cols-3 gap-4 mb-6 max-w-xl">
+        <StatCard label="Running" value={counts.running} color="text-blue-400" />
+        <StatCard label="Stale" value={counts.stale} color={counts.stale > 0 ? 'text-yellow-400' : 'text-gray-400'} />
+        <StatCard label="Lost" value={counts.lost} color={counts.lost > 0 ? 'text-red-400' : 'text-gray-400'} />
+      </div>
+
+      {unavailable && (
+        <div className="mb-6">
+          <ErrorBanner>This API does not report running tasks yet (GET /api/running not found).</ErrorBanner>
+        </div>
+      )}
+      {error && (
+        <div className="mb-6">
+          <ErrorBanner>Failed to load running tasks: {error}</ErrorBanner>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 mb-4">
+        <label className="flex items-center gap-2 text-sm text-gray-400">
+          Knight
+          <select aria-label="Filter by knight" className={selectClass} value={knight} onChange={(e) => setParam('knight', e.target.value)}>
+            <option value="">All</option>
+            {knights.map((k) => <option key={k} value={k}>{k}</option>)}
+            {knight && !knights.includes(knight) && <option value={knight}>{knight}</option>}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-400">
+          Chain
+          <select aria-label="Filter by chain" className={selectClass} value={chain} onChange={(e) => setParam('chain', e.target.value)}>
+            <option value="">All</option>
+            {chains.map((c) => <option key={c} value={c}>{c}</option>)}
+            {chain && !chains.includes(chain) && <option value={chain}>{chain}</option>}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-400">
+          Status
+          <select aria-label="Filter by status" className={selectClass} value={status} onChange={(e) => setParam('status', e.target.value)}>
+            <option value="">All</option>
+            <option value="running">Running</option>
+            <option value="stale">Stale</option>
+            <option value="lost">Lost</option>
+          </select>
+        </label>
+      </div>
+
+      {rows.length === 0 ? (
+        loading ? (
+          <div className="text-gray-400 p-4" role="status">Loading…</div>
+        ) : (
+          <EmptyState icon={Activity} title={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'} />
+        )
+      ) : (
+        <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 border-b border-roundtable-steel">
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Knight</th>
+                <th className="px-3 py-2 font-medium">Pod</th>
+                <th className="px-3 py-2 font-medium">Slot</th>
+                <th className="px-3 py-2 font-medium">Task</th>
+                <th className="px-3 py-2 font-medium">Run</th>
+                <th className="px-3 py-2 font-medium">Chain / step</th>
+                <th className="px-3 py-2 font-medium">Model</th>
+                <th className="px-3 py-2 font-medium">Elapsed</th>
+                <th className="px-3 py-2 font-medium">Heartbeat</th>
+                <th className="px-3 py-2 font-medium">Last tool</th>
+                <th className="px-3 py-2 font-medium text-right">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((t) => (
+                <tr
+                  key={t.taskId}
+                  data-status={t.status}
+                  tabIndex={0}
+                  onClick={() => setParam('task', t.taskId)}
+                  onKeyDown={(e) => onRowKey(e, t.taskId)}
+                  title={t.reason ? sanitizeText(t.reason) : undefined}
+                  className={`border-b border-roundtable-steel/50 last:border-0 cursor-pointer hover:bg-roundtable-steel/30 focus:outline-none focus:bg-roundtable-steel/40 ${STATUS_STYLES[t.status].row}`}
+                >
+                  <td className="px-3 py-2"><StatusBadge status={t.status} /></td>
+                  <td className="px-3 py-2 text-gray-200 capitalize">{t.knight}</td>
+                  <td className="px-3 py-2 text-gray-400 font-mono text-xs">{t.pod || '—'}</td>
+                  <td className="px-3 py-2 text-gray-400">{t.slot ?? '—'}</td>
+                  <td className="px-3 py-2 text-gray-400 font-mono text-xs" title={t.taskId}>{t.taskId.slice(0, 12)}</td>
+                  <td className="px-3 py-2 text-gray-400 font-mono text-xs" title={t.runId}>{t.runId ? t.runId.slice(0, 12) : '—'}</td>
+                  <td className="px-3 py-2"><ChainCell task={t} /></td>
+                  <td className="px-3 py-2 text-gray-400">{t.model || '—'}</td>
+                  <td className="px-3 py-2 text-gray-300 tabular-nums">{formatAge(t.startedAt, now)}</td>
+                  <td className={`px-3 py-2 tabular-nums ${STATUS_STYLES[t.status].text}`}>
+                    {formatAge(t.lastHeartbeat, now)}
+                  </td>
+                  <td className="px-3 py-2 text-gray-400 max-w-[12rem] truncate">{lastToolLabel(t) || '—'}</td>
+                  <td className="px-3 py-2 text-right text-roundtable-gold tabular-nums">{t.costUsd != null ? formatCost(t.costUsd) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selected && <TaskDetail task={selected} now={now} onClose={() => setParam('task', '')} />}
+    </div>
+  )
+}

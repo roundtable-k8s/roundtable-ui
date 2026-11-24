@@ -10,6 +10,11 @@ export interface NatsEvent {
   live?: boolean
 }
 
+/** Message types delivered to topic listeners instead of the event feed. */
+export type WsTopic = 'running'
+const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running'])
+export type TopicListener = (data: unknown) => void
+
 const MAX_EVENTS = 200
 const RECONNECT_DELAY_MS = 3000
 const MAX_RECONNECT_DELAY_MS = 30000
@@ -38,6 +43,7 @@ function useWebSocketConnection() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
   const seenEvents = useRef(new Set<string>())
+  const topicListeners = useRef(new Map<string, Set<TopicListener>>())
 
   const connect = useCallback(() => {
     if (!mountedRef.current) return
@@ -82,7 +88,14 @@ function useWebSocketConnection() {
     ws.onmessage = (e) => {
       if (!mountedRef.current) return
       try {
-        const event: NatsEvent = { ...JSON.parse(e.data), live: true }
+        const msg = JSON.parse(e.data)
+        // Topic messages (e.g. running-task deltas) are state updates, not
+        // feed events: route them to their listeners only.
+        if (msg && typeof msg.type === 'string' && TOPICS.has(msg.type)) {
+          topicListeners.current.get(msg.type)?.forEach((fn) => fn(msg.data))
+          return
+        }
+        const event: NatsEvent = { ...msg, live: true }
         const key = eventKey(event)
         if (seenEvents.current.has(key)) return // deduplicate
         seenEvents.current.add(key)
@@ -152,7 +165,18 @@ function useWebSocketConnection() {
     seenEvents.current.clear()
   }, [])
 
-  return { events, connected, error, clearEvents }
+  /** Listen for `{type: topic, data}` messages; returns an unsubscribe fn. */
+  const subscribeTopic = useCallback((topic: WsTopic, fn: TopicListener) => {
+    let set = topicListeners.current.get(topic)
+    if (!set) {
+      set = new Set()
+      topicListeners.current.set(topic, set)
+    }
+    set.add(fn)
+    return () => { set.delete(fn) }
+  }, [])
+
+  return { events, connected, error, clearEvents, subscribeTopic }
 }
 
 type WebSocketState = ReturnType<typeof useWebSocketConnection>
