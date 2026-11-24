@@ -327,6 +327,15 @@ func main() {
 	activity := newActivityStore()
 	startRunningRegistry(runningCtx, running, activity, fleetPrefix, namespace)
 
+	// Queue history sampler (#205): 15s samples, 6h in-memory ring buffer
+	samplerCtx, stopSampler := context.WithCancel(context.Background())
+	defer stopSampler()
+	var sampler *queueSampler
+	if dynClient != nil {
+		sampler = newClusterQueueSampler(namespace)
+		go sampler.run(samplerCtx)
+	}
+
 	// Simple rate limiter (#12)
 	rateLimiter := newRateLimiter(100, time.Second) // 100 req/s
 
@@ -354,6 +363,8 @@ func main() {
 	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
 	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/queue/history", knightQueueHistoryHandler(sampler)).Methods("GET")
+	api.HandleFunc("/queues/history", queuesHistoryHandler(sampler)).Methods("GET")
 
 	// Task endpoints
 	api.HandleFunc("/tasks", taskHistoryHandler(fleetPrefix, fleetStream)).Methods("GET")
@@ -428,6 +439,7 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		slog.Info("Shutting down")
+		stopSampler()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)

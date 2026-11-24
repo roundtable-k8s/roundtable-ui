@@ -255,6 +255,7 @@ The dashboard API server is configured via environment variables:
 | `PORT` | HTTP server port | `8080` |
 | `FLEET_PREFIX` | NATS subject prefix (e.g., `fleet-a`) | `fleet-a` |
 | `FLEET_STREAM` | JetStream stream name for results | `fleet_a_results` |
+| `GRAFANA_QUEUE_URL` | Optional long-term queue history link returned by the queue history endpoints; `{knight}` is replaced by the knight name | _(unset)_ |
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
@@ -303,6 +304,8 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/fleet/{knight}/session?type={stats|recent|tree}` — Knight session introspection
 - `GET /api/fleet/{knight}/queue` — Knight's JetStream task queue (pending, ack-pending, redelivered, oldest wait, free slots)
 - `GET /api/queues` — Task queues of all knights
+- `GET /api/fleet/{knight}/queue/history?since=1h` — Sampled queue backlog and replicas (every 15 s, last 6 h, in memory) plus KEDA/HPA scale events with reasons
+- `GET /api/queues/history?since=1h` — The same history for every knight
 
 ### Task Dispatch
 - `GET /api/tasks` — List recent tasks from JetStream
