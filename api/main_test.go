@@ -1079,7 +1079,7 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 		},
 	}
 
-	status := buildKnightStatus(cr, pod)
+	status := buildKnightStatus(cr, pod, nil)
 
 	// Test basic fields
 	if status.Name != "galahad" {
