@@ -85,6 +85,8 @@ func setupTestRouter() *mux.Router {
 	api.HandleFunc("/fleet", fleetHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}", knightHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
+	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
 
 	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(fleetPrefix)).Methods("POST")
 

@@ -286,6 +286,7 @@ func main() {
 		slog.Error("JetStream init failed", "error", err)
 		os.Exit(1)
 	}
+	queues = jsQueueBackend{js: js}
 	slog.Info("NATS connected", "url", natsURL)
 
 	// Connect to Kubernetes (in-cluster, falling back to kubeconfig for local dev)
@@ -344,6 +345,8 @@ func main() {
 	api.HandleFunc("/fleet/{knight}", knightHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/logs", knightLogsHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
+	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
 
 	// Task endpoints
 	api.HandleFunc("/tasks", taskHistoryHandler(fleetPrefix, fleetStream)).Methods("GET")
