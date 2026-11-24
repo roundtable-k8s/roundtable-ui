@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -377,12 +378,7 @@ func main() {
 	api.HandleFunc("/ws", wsHandler(fleetPrefix))
 
 	// Config endpoint to expose fleet prefix to frontend (#60)
-	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"fleetPrefix": fleetPrefix,
-		})
-	}).Methods("GET")
+	api.HandleFunc("/config", configHandler(fleetPrefix, os.Getenv("GRAFANA_QUEUES_URL"))).Methods("GET")
 
 	// Health
 	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -2192,6 +2188,37 @@ func capitalizeKnight(name string) string {
 		return name
 	}
 	return string(unicode.ToUpper(rune(name[0]))) + name[1:]
+}
+
+// configHandler serves GET /api/config: settings the frontend needs.
+// grafanaQueuesUrl (from GRAFANA_QUEUES_URL) is the Grafana dashboard with
+// long-term queue and scaling history (#206); it is only exposed when it is an
+// absolute http(s) URL, so the UI never renders a javascript: or relative link.
+func configHandler(fleetPrefix, grafanaQueuesURL string) http.HandlerFunc {
+	cfg := map[string]string{"fleetPrefix": fleetPrefix}
+	if u := safeExternalURL(grafanaQueuesURL); u != "" {
+		cfg["grafanaQueuesUrl"] = u
+	} else if grafanaQueuesURL != "" {
+		slog.Warn("Ignoring GRAFANA_QUEUES_URL: not an absolute http(s) URL")
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	}
+}
+
+// safeExternalURL returns raw when it parses as an absolute http(s) URL with a
+// host, and "" otherwise.
+func safeExternalURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return ""
+	}
+	return u.String()
 }
 
 func envOr(key, def string) string {

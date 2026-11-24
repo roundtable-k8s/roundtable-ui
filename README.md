@@ -247,6 +247,7 @@ The dashboard API server is configured via environment variables:
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
+| `GRAFANA_QUEUES_URL` | Optional Grafana dashboard for long-term queue/scaling history; the Queues page links to it (absolute http(s) only, `var-knight` appended per knight) | _(none)_ |
 
 ### Authentication
 

@@ -99,12 +99,7 @@ func setupTestRouter() *mux.Router {
 	api.HandleFunc("/roundtables", roundTablesHandler(namespace)).Methods("GET")
 	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
 
-	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"fleetPrefix": fleetPrefix,
-		})
-	}).Methods("GET")
+	api.HandleFunc("/config", configHandler(fleetPrefix, "")).Methods("GET")
 
 	return r
 }
@@ -2022,5 +2017,39 @@ func TestParseMissionResource_StandardTypes(t *testing.T) {
 	})
 	if m.TTLSeconds != 3600 || m.TimeoutSeconds != 600 || m.RoundTableRef != "rt" {
 		t.Errorf("unexpected mission: %+v", m)
+	}
+}
+
+// TestConfigGrafanaQueuesURL checks that only absolute http(s) Grafana URLs
+// reach the frontend (#206).
+func TestConfigGrafanaQueuesURL(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"https://grafana.example.com/d/queues?orgId=1", "https://grafana.example.com/d/queues?orgId=1"},
+		{"  http://grafana:3000/d/q  ", "http://grafana:3000/d/q"},
+		{"javascript:alert(1)", ""},
+		{"/grafana/d/queues", ""},
+		{"ftp://grafana.example.com", ""},
+		{"https://", ""},
+	}
+	for _, c := range cases {
+		w := httptest.NewRecorder()
+		configHandler("fleet-a", c.in)(w, httptest.NewRequest("GET", "/api/config", nil))
+		var resp map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("%q: bad JSON: %v", c.in, err)
+		}
+		got, ok := resp["grafanaQueuesUrl"]
+		if c.want == "" && ok {
+			t.Errorf("%q: expected no grafanaQueuesUrl, got %q", c.in, got)
+		}
+		if c.want != "" && got != c.want {
+			t.Errorf("%q: grafanaQueuesUrl = %q, want %q", c.in, got, c.want)
+		}
+		if resp["fleetPrefix"] != "fleet-a" {
+			t.Errorf("%q: fleetPrefix = %q", c.in, resp["fleetPrefix"])
+		}
 	}
 }

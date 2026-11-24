@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Inbox } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
@@ -16,6 +16,7 @@ const DashboardPage = lazy(() => import('./pages/Dashboard').then(m => ({ defaul
 const MissionsPage = lazy(() => import('./pages/Missions').then(m => ({ default: m.MissionsPage })))
 const CostDashboardPage = lazy(() => import('./pages/CostDashboard').then(m => ({ default: m.CostDashboardPage })))
 const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ default: m.ArchitecturePage })))
+const QueuesPage = lazy(() => import('./pages/Queues').then(m => ({ default: m.QueuesPage })))
 const RoundTablesPage = lazy(() => import('./pages/RoundTables').then(m => ({ default: m.RoundTablesPage })))
 
 function PageLoading() {
@@ -35,6 +36,7 @@ const navItems = [
   { path: '/missions', icon: Target, label: 'Missions' },
   { path: '/roundtables', icon: Crown, label: 'Round Tables' },
   { path: '/quests', icon: Scroll, label: 'Dispatch' },
+  { path: '/queues', icon: Inbox, label: 'Queues' },
   { path: '/flow', icon: GitGraph, label: 'Message Flow' },
   { path: '/chains', icon: Link2, label: 'Chains' },
   { path: '/costs', icon: DollarSign, label: 'Cost Details' },
@@ -123,6 +125,7 @@ export default function App() {
             <Route path="/missions" element={<MissionsPage />} />
             <Route path="/roundtables" element={<RoundTablesPage />} />
             <Route path="/quests" element={<TasksPage />} />
+            <Route path="/queues" element={<QueuesPage />} />
             <Route path="/flow" element={<LivePage />} />
             <Route path="/chronicles" element={<BriefingsPage />} />
             <Route path="/chains" element={<ChainsPage />} />
