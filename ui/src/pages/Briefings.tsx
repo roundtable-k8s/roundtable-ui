@@ -44,19 +44,26 @@ function navigateDay(currentDate: string, direction: 'prev' | 'next'): string {
   return `${y}-${m}-${d}`
 }
 
+interface BriefingEntry {
+  name: string
+  dir: string
+}
+
+const entryKey = (b: BriefingEntry) => `${b.dir}/${b.name}`
+
 export function BriefingsPage() {
-  const [briefings, setBriefings] = useState<string[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
+  const [briefings, setBriefings] = useState<BriefingEntry[]>([])
+  const [selected, setSelected] = useState<BriefingEntry | null>(null)
   const [content, setContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState(false)
 
   useEffect(() => {
-    apiGet<string[]>('/api/briefings')
+    apiGet<BriefingEntry[]>('/api/briefings')
       .then((data) => {
         // Sort newest first
-        const sorted = data.sort().reverse()
+        const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name) || a.dir.localeCompare(b.dir)).reverse()
         setBriefings(sorted)
         setLoading(false)
         
@@ -74,8 +81,9 @@ export function BriefingsPage() {
       setContentError(false)
       setContent('')
       
-      const date = selected.replace('.md', '')
-      apiGetText(`/api/briefings/${date}`)
+      const date = selected.name.replace('.md', '')
+      const query = selected.dir ? `?dir=${encodeURIComponent(selected.dir)}` : ''
+      apiGetText(`/api/briefings/${date}${query}`)
         .then((text) => {
           setContent(text)
           setContentLoading(false)
@@ -89,13 +97,13 @@ export function BriefingsPage() {
 
   const handleNavigateDay = (direction: 'prev' | 'next') => {
     if (!selected) return
-    const currentDate = selected.replace('.md', '')
-    const newDate = navigateDay(currentDate, direction)
-    const newFileName = `${newDate}.md`
-    setSelected(newFileName)
+    const currentDate = selected.name.replace('.md', '')
+    const newFileName = `${navigateDay(currentDate, direction)}.md`
+    // Prefer an existing entry; otherwise let the server search all dirs.
+    setSelected(briefings.find((b) => b.name === newFileName) ?? { name: newFileName, dir: '' })
   }
 
-  const selectedDate = selected ? selected.replace('.md', '') : ''
+  const selectedDate = selected ? selected.name.replace('.md', '') : ''
   const wordCount = content ? countWords(content) : 0
   const readingTime = content ? calculateReadingTime(content) : ''
 
@@ -115,15 +123,16 @@ export function BriefingsPage() {
             <div className="space-y-1 max-h-[70vh] overflow-y-auto">
               {briefings.map((b) => (
                 <button
-                  key={b}
+                  key={entryKey(b)}
                   onClick={() => setSelected(b)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                    selected === b
+                    selected && entryKey(selected) === entryKey(b)
                       ? 'bg-roundtable-gold/10 text-roundtable-gold'
                       : 'text-gray-400 hover:text-white hover:bg-roundtable-steel/50'
                   }`}
                 >
-                  📜 {b.replace('.md', '')}
+                  <span>📜 {b.name.replace('.md', '')}</span>
+                  <span className="block text-xs text-gray-500 truncate" title={b.dir}>{b.dir}</span>
                 </button>
               ))}
             </div>
@@ -184,6 +193,7 @@ export function BriefingsPage() {
                     <Clock className="w-3 h-3" />
                     {readingTime}
                   </span>
+                  {selected?.dir && <span title="Source directory">📁 {selected.dir}</span>}
                 </div>
               )}
 

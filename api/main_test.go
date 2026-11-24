@@ -637,7 +637,7 @@ func TestBriefingHandler(t *testing.T) {
 
 	router := mux.NewRouter()
 	api := router.PathPrefix("/api").Subrouter()
-	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath)).Methods("GET")
+	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath, []string{"Briefings/Daily", "Agents/Briefings"})).Methods("GET")
 
 	tests := []struct {
 		name           string
@@ -2024,5 +2024,53 @@ func TestParseMissionResource_StandardTypes(t *testing.T) {
 	})
 	if m.TTLSeconds != 3600 || m.TimeoutSeconds != 600 || m.RoundTableRef != "rt" {
 		t.Errorf("unexpected mission: %+v", m)
+	}
+}
+
+func TestBriefingMultipleDirs(t *testing.T) {
+	tmp := t.TempDir()
+	os.MkdirAll(tmp+"/Briefings/Daily", 0755)
+	os.MkdirAll(tmp+"/Agents/Briefings", 0755)
+	os.WriteFile(tmp+"/Briefings/Daily/2024-01-01.md", []byte("old"), 0644)
+	os.WriteFile(tmp+"/Agents/Briefings/2024-01-02.md", []byte("new"), 0644)
+	dirs := parseBriefingDirs(defaultBriefingDirs + ",missing/dir,../etc,/abs")
+	if len(dirs) != 3 {
+		t.Fatalf("unexpected dirs %v", dirs)
+	}
+	router := mux.NewRouter()
+	router.HandleFunc("/api/briefings", briefingListHandler(tmp, dirs))
+	router.HandleFunc("/api/briefings/{date}", briefingHandler(tmp, dirs))
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings", nil))
+	var got []briefingEntry
+	json.NewDecoder(w.Body).Decode(&got)
+	if w.Code != 200 || len(got) != 2 || got[1].Dir != "Agents/Briefings" {
+		t.Fatalf("list: %d %v", w.Code, got)
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings/2024-01-02", nil))
+	if w.Code != 200 || w.Body.String() != "new" || w.Header().Get("X-Briefing-Dir") != "Agents/Briefings" {
+		t.Fatalf("get: %d %q", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings/2024-01-02?dir=Briefings/Daily", nil))
+	if w.Code != 404 {
+		t.Fatalf("wrong dir should 404, got %d", w.Code)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings/2024-01-02?dir=../..", nil))
+	if w.Code != 403 {
+		t.Fatalf("unconfigured dir should 403, got %d", w.Code)
+	}
+}
+
+func TestBriefingListMissingDirs(t *testing.T) {
+	h := briefingListHandler(t.TempDir(), parseBriefingDirs(defaultBriefingDirs))
+	w := httptest.NewRecorder()
+	h(w, httptest.NewRequest("GET", "/api/briefings", nil))
+	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Fatalf("got %d %q", w.Code, w.Body.String())
 	}
 }
