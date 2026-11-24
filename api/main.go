@@ -324,7 +324,8 @@ func main() {
 	runningCtx, stopRunning := context.WithCancel(context.Background())
 	defer stopRunning()
 	running := newRunningRegistry(defaultRunningMaxEntries, runningHeartbeatInterval())
-	startRunningRegistry(runningCtx, running, fleetPrefix, namespace)
+	activity := newActivityStore()
+	startRunningRegistry(runningCtx, running, activity, fleetPrefix, namespace)
 
 	// Simple rate limiter (#12)
 	rateLimiter := newRateLimiter(100, time.Second) // 100 req/s
@@ -386,7 +387,7 @@ func main() {
 	api.HandleFunc("/running", runningHandler(running)).Methods("GET")
 
 	// WebSocket for real-time NATS events
-	api.HandleFunc("/ws", wsHandler(fleetPrefix, running))
+	api.HandleFunc("/ws", wsHandler(fleetPrefix, running, activity))
 
 	// Config endpoint to expose fleet prefix to frontend (#60)
 	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
@@ -1053,7 +1054,7 @@ func briefingHandler(vaultPath string) http.HandlerFunc {
 	}
 }
 
-func wsHandler(fleetPrefix string, running *runningRegistry) http.HandlerFunc {
+func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check NATS health BEFORE upgrading (#19). Upgrading first and then
 		// closing makes the client fire onopen (UI shows "Connected") before
@@ -1185,8 +1186,17 @@ func wsHandler(fleetPrefix string, running *runningRegistry) http.HandlerFunc {
 			})
 		}
 
+		// Task activity (#184): only the tasks this client subscribed to.
+		var activityWatches *activityClient
+		if activity != nil {
+			activityWatches = newActivityClient(activity, ws.enqueue)
+		}
+
 		// Cleanup on exit
 		defer func() {
+			if activityWatches != nil {
+				activityWatches.close()
+			}
 			if unsubRunning != nil {
 				unsubRunning()
 			}
@@ -1232,6 +1242,10 @@ func wsHandler(fleetPrefix string, running *runningRegistry) http.HandlerFunc {
 				break
 			}
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
+			if activityWatches != nil && activityWatches.handle(msg) {
+				continue
+			}
 
 			// Client can dispatch tasks via WebSocket too
 			var cmd struct {

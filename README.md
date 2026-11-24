@@ -334,6 +334,7 @@ The dashboard exposes a comprehensive REST API:
 
 ### Real-time Events
 - `GET /api/ws` — WebSocket connection for live NATS events
+  - Task activity: send `{"subscribe":"activity","taskId":"…"}` (and `{"unsubscribe":"activity","taskId":"…"}`) to watch up to 10 tasks per connection. The server replies with an `activity` event `{op:"backlog"}` holding the task's last 200 events (kept 15 minutes after `task.finished`), then `{op:"event"}` for each live event of that task only. Live events are droppable; `{op:"gap", fromSeq, toSeq}` marks events dropped for this client, and clients should also treat a `seq` jump as a gap.
 
 ### System
 - `GET /api/config` — Get dashboard configuration (fleet prefix)

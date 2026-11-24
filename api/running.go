@@ -272,20 +272,28 @@ func bound(s string, max int) string {
 // handleActivity applies one raw activity message. subjectKnight is the
 // <Knight> token of the subject, used when the payload lacks a knight.
 func (r *runningRegistry) handleActivity(data []byte, subjectKnight string) {
-	if len(data) > maxActivityEventBytes {
-		return
+	if ev, ok := parseActivityEvent(data, subjectKnight); ok {
+		r.apply(ev)
 	}
+}
+
+// parseActivityEvent decodes and validates one raw activity message.
+// subjectKnight fills in a missing knight.
+func parseActivityEvent(data []byte, subjectKnight string) (activityEvent, bool) {
 	var ev activityEvent
+	if len(data) > maxActivityEventBytes {
+		return ev, false
+	}
 	if err := json.Unmarshal(data, &ev); err != nil {
-		return
+		return ev, false
 	}
 	if ev.V > activityVersion {
-		return // a major we do not know
+		return ev, false // a major we do not know
 	}
 	if ev.Knight == "" {
 		ev.Knight = subjectKnight
 	}
-	r.apply(ev)
+	return ev, true
 }
 
 func (r *runningRegistry) apply(ev activityEvent) {
@@ -772,7 +780,9 @@ func activityPrefixes(fleetPrefix string) []string {
 // startRunningRegistry subscribes the registry to activity events and JetStream
 // MAX_DELIVERIES advisories, bootstraps it from pod introspection and starts
 // the stale sweeper and pod reconciler. Background goroutines stop with ctx.
-func startRunningRegistry(ctx context.Context, reg *runningRegistry, fleetPrefix, namespace string) {
+// When act is non-nil the same activity events also feed the per-task
+// activity buffers (#184) and are swept on the same ticker.
+func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, fleetPrefix, namespace string) {
 	prefixes := activityPrefixes(fleetPrefix)
 	for _, p := range prefixes {
 		subject := p + ".activity.>"
@@ -782,7 +792,14 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, fleetPrefix
 			if parts := strings.Split(msg.Subject, "."); len(parts) > tokenIdx {
 				knight = parts[tokenIdx]
 			}
-			reg.handleActivity(msg.Data, knight)
+			ev, ok := parseActivityEvent(msg.Data, knight)
+			if !ok {
+				return
+			}
+			reg.apply(ev)
+			if act != nil {
+				act.add(ev, msg.Data)
+			}
 		}); err != nil {
 			slog.Error("Running: activity subscribe failed", "subject", subject, "error", err)
 		}
@@ -821,6 +838,9 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, fleetPrefix
 				return
 			case <-sweep.C:
 				reg.sweep()
+				if act != nil {
+					act.sweep()
+				}
 			case <-pods.C:
 				if k8sClient == nil {
 					continue
