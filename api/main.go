@@ -116,7 +116,8 @@ type PlanningResult struct {
 
 // TaskEvent represents a NATS task/result/mission/chain event
 type TaskEvent struct {
-	Type      string          `json:"type"` // task, result, mission, chain
+	Type      string          `json:"type"`         // task, result, chain
+	Op        string          `json:"op,omitempty"` // chain: upsert | delete
 	Subject   string          `json:"subject"`
 	Data      json.RawMessage `json:"data"`
 	Timestamp time.Time       `json:"timestamp"`
@@ -334,6 +335,13 @@ func main() {
 	activity := newActivityStore()
 	startRunningRegistry(runningCtx, running, activity, fleetPrefix, namespace)
 
+	// Live chain updates over WS (#228)
+	var chains *chainWatcher
+	if dynClient != nil {
+		chains = newChainWatcher(dynClient, namespace)
+		go chains.run(runningCtx)
+	}
+
 	// Queue history sampler (#205): 15s samples, 6h in-memory ring buffer
 	samplerCtx, stopSampler := context.WithCancel(context.Background())
 	defer stopSampler()
@@ -406,7 +414,7 @@ func main() {
 	api.HandleFunc("/running", runningHandler(running)).Methods("GET")
 
 	// WebSocket for real-time NATS events
-	api.HandleFunc("/ws", wsHandler(fleetPrefix, running, activity))
+	api.HandleFunc("/ws", wsHandler(fleetPrefix, running, activity, chains))
 
 	// Config endpoint to expose fleet prefix to frontend (#60)
 	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
@@ -1151,7 +1159,7 @@ func briefingHandler(vaultPath string) http.HandlerFunc {
 	}
 }
 
-func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityStore) http.HandlerFunc {
+func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityStore, chains *chainWatcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check NATS health BEFORE upgrading (#19). Upgrading first and then
 		// closing makes the client fire onopen (UI shows "Connected") before
@@ -1229,48 +1237,12 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 			return
 		}
 
-		// Subscribe to mission status events (#75)
-		missionSub, err := nc.Subscribe(fleetPrefix+".missions.>", func(msg *nats.Msg) {
-			select {
-			case <-done:
-				return
-			default:
-			}
-			event := TaskEvent{
-				Type:      "mission",
-				Subject:   msg.Subject,
-				Data:      msg.Data,
-				Timestamp: eventTimestamp(msg.Data),
-			}
-			data, _ := json.Marshal(event)
-			safeWrite(true, data)
-		})
-		if err != nil {
-			slog.Error("NATS mission sub error", "error", err)
-			// Non-fatal: missions subject may not exist yet
-			missionSub = nil
-		}
-
-		// Subscribe to chain progress events (#75)
-		chainSub, err := nc.Subscribe(fleetPrefix+".chains.>", func(msg *nats.Msg) {
-			select {
-			case <-done:
-				return
-			default:
-			}
-			event := TaskEvent{
-				Type:      "chain",
-				Subject:   msg.Subject,
-				Data:      msg.Data,
-				Timestamp: eventTimestamp(msg.Data),
-			}
-			data, _ := json.Marshal(event)
-			safeWrite(true, data)
-		})
-		if err != nil {
-			slog.Error("NATS chain sub error", "error", err)
-			// Non-fatal
-			chainSub = nil
+		// Chain changes (#228) come from a Kubernetes watch on Chain
+		// resources. The operator never published <prefix>.chains.> or
+		// <prefix>.missions.> on NATS, so those subscriptions were removed.
+		var unsubChains func()
+		if chains != nil {
+			unsubChains = chains.subscribe(func(data []byte) { safeWrite(true, data) })
 		}
 
 		// In-flight registry deltas (#199): a snapshot first, then upserts and
@@ -1297,15 +1269,12 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 			if unsubRunning != nil {
 				unsubRunning()
 			}
+			if unsubChains != nil {
+				unsubChains()
+			}
 			close(done)
 			taskSub.Unsubscribe()
 			resultSub.Unsubscribe()
-			if missionSub != nil {
-				missionSub.Unsubscribe()
-			}
-			if chainSub != nil {
-				chainSub.Unsubscribe()
-			}
 			ws.close()
 			conn.Close()
 		}()
@@ -1401,11 +1370,15 @@ var (
 
 // getKnightDomainMap builds a name→domain lookup from Knight CRs.
 func getKnightDomainMap(ctx context.Context, namespace string) map[string]string {
+	return knightDomainMap(ctx, dynClient, namespace)
+}
+
+func knightDomainMap(ctx context.Context, client dynamic.Interface, namespace string) map[string]string {
 	m := map[string]string{}
-	if dynClient == nil {
+	if client == nil {
 		return m
 	}
-	list, err := dynClient.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	list, err := client.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return m
 	}
