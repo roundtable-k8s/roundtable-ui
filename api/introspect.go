@@ -136,7 +136,13 @@ func knightIntrospectSubject(prefix, knight string) string {
 }
 
 // replyFound reports whether a reply carries data rather than a
-// "not found"/error answer ({"error": "..."} or {"found": false}).
+// "not found"/error answer. A reply is found only if all hold:
+//   - it has no error (absent, null, "" or false);
+//   - it is not {"found": false};
+//   - it either has "found": true or at least one key other than
+//     "error" and "found" (so {} and {"error": null} carry nothing).
+//
+// {"sessions": []} is therefore found: an empty list is still data.
 func replyFound(data []byte) bool {
 	var m map[string]interface{}
 	if err := json.Unmarshal(data, &m); err != nil {
@@ -148,7 +154,15 @@ func replyFound(data []byte) bool {
 	if f, ok := m["found"].(bool); ok && !f {
 		return false
 	}
-	return true
+	if f, ok := m["found"].(bool); ok && f {
+		return true
+	}
+	for k := range m {
+		if k != "error" && k != "found" {
+			return true
+		}
+	}
+	return false
 }
 
 // pickFirstFound returns the first reply (pod order) that has the data; if

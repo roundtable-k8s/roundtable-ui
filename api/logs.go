@@ -245,7 +245,12 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		}
 
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
-		if err != nil || len(pods) == 0 {
+		if err != nil {
+			slog.Error("List knight pods failed", "knight", name, "error", err)
+			jsonError(w, "Failed to list pods", http.StatusInternalServerError)
+			return
+		}
+		if len(pods) == 0 {
 			jsonError(w, "Knight not found", http.StatusNotFound)
 			return
 		}
@@ -299,9 +304,24 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		defer stream.Close()
 
 		// Redact the (size-capped) log tail before it leaves the API (#188).
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("X-Pod-Name", pod.Name)
-		raw, _ := io.ReadAll(io.LimitReader(stream, knightLogMaxBytes))
-		w.Write([]byte(redactSecrets(string(raw))))
+		writeLogTail(w, name, pod.Name, stream)
 	}
+}
+
+// writeLogTail copies the size-capped, redacted log tail to w. A read error
+// is logged: with nothing read it is a 502, otherwise the partial tail is
+// returned with X-Logs-Truncated: true.
+func writeLogTail(w http.ResponseWriter, knight, pod string, stream io.Reader) {
+	raw, readErr := io.ReadAll(io.LimitReader(stream, knightLogMaxBytes))
+	if readErr != nil {
+		slog.Error("Log read error", "knight", knight, "pod", pod, "bytes", len(raw), "error", readErr)
+		if len(raw) == 0 {
+			jsonError(w, "Failed to read logs", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("X-Logs-Truncated", "true")
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Pod-Name", pod)
+	w.Write([]byte(redactSecrets(string(raw))))
 }

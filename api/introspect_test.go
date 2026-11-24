@@ -408,3 +408,44 @@ func TestIntrospectPodGoneScaledToZero(t *testing.T) {
 		t.Errorf("no pod: status %d body %v, want 200 {}", w.Code, body)
 	}
 }
+
+func TestReplyFound(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{`{"error": null}`, false},
+		{`{}`, false},
+		{`{"error": "boom"}`, false},
+		{`{"error": ""}`, false},
+		{`{"found": false}`, false},
+		{`{"found": true}`, true},
+		{`{"sessions": []}`, true},
+		{`{"error": null, "stats": {}}`, true},
+		{`{"error": false, "found": true}`, true},
+		{`{"found": false, "sessions": []}`, false},
+		{`not json`, false},
+	}
+	for _, tt := range tests {
+		if got := replyFound([]byte(tt.in)); got != tt.want {
+			t.Errorf("replyFound(%s) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestIntrospectPodParamNoResponderSinglePodScope(t *testing.T) {
+	f := &fakeIntrospect{answer: func(s string) ([]byte, error) {
+		if s == "fleet-a.introspect.Galahad" {
+			return []byte(`{"knight":"Galahad"}`), nil
+		}
+		return nil, nats.ErrNoResponders
+	}}
+	h := setupIntrospectTest(t, f, makeKnightPod("galahad-a", "galahad", true))
+	w, _ := doSession(t, h, "type=stats&pod=galahad-a")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	if got := w.Header().Get(introspectScopeHeader); got != "pod" {
+		t.Errorf("scope = %q, want pod", got)
+	}
+}
