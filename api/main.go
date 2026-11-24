@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -2307,6 +2308,9 @@ func getSlice(obj map[string]interface{}, key string) []interface{} {
 	return nil
 }
 
+// Cache policy (#237): files under /assets/ have content-hashed names, so they
+// are cached forever. Every other response (index.html and SPA fallbacks) must
+// be revalidated on each load so a new deploy is picked up immediately.
 func spaHandler(staticDir string) http.HandlerFunc {
 	fs := http.Dir(staticDir)
 	fileServer := http.FileServer(fs)
@@ -2314,12 +2318,31 @@ func spaHandler(staticDir string) http.HandlerFunc {
 		p := r.URL.Path
 		// If the path has an extension (asset file), serve it directly
 		if strings.Contains(filepath.Base(p), ".") {
+			if isHashedAsset(staticDir, p) {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			fileServer.ServeHTTP(w, r)
 			return
 		}
 		// For all other paths, serve index.html (SPA routing)
+		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
 	}
+}
+
+// isHashedAsset reports whether urlPath names an existing regular file under
+// /assets/. The existence check keeps a 404 for a missing asset from being
+// cached as immutable.
+func isHashedAsset(staticDir, urlPath string) bool {
+	if !strings.HasPrefix(urlPath, "/assets/") {
+		return false
+	}
+	// path.Clean on a rooted path cannot escape the root, so the joined path
+	// stays inside staticDir.
+	fi, err := os.Stat(filepath.Join(staticDir, filepath.FromSlash(path.Clean(urlPath))))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // capitalizeKnight safely capitalizes a knight name for NATS subjects
