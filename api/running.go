@@ -88,6 +88,10 @@ type activityEvent struct {
 	DurationMs    *int64 `json:"durationMs"`
 	IsError       *bool  `json:"isError"`
 	OutputPreview string `json:"outputPreview"`
+
+	Preview    string `json:"preview"`
+	Success    *bool  `json:"success"`
+	ErrorClass string `json:"errorClass"`
 }
 
 // RunningToolEvent is the last tool event seen for a running task.

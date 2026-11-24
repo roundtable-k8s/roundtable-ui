@@ -334,6 +334,10 @@ The dashboard exposes a comprehensive REST API:
 
 ### Real-time Events
 - `GET /api/ws` — WebSocket connection for live NATS events
+  - Task activity: send `{"subscribe":"activity","taskId":"…"}` (and `{"unsubscribe":"activity","taskId":"…"}`).
+    The server replies with `{"type":"activity","data":{"op":"backlog",…}}` (the last 200 events of the task,
+    kept 15 minutes after it finishes), then live `op:"event"` messages for that task only. At most 10 watched
+    tasks per connection; live events are droppable, and `seq` gaps show where events went missing.
 
 ### System
 - `GET /api/config` — Get dashboard configuration (fleet prefix)

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { GitGraph, Wifi, WifiOff, Filter } from 'lucide-react'
+import { GitGraph, Wifi, WifiOff, Filter, Activity } from 'lucide-react'
 import { useWebSocket, type NatsEvent } from '../hooks/useWebSocket'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
@@ -7,6 +7,7 @@ import { getKnightConfig, KNIGHT_CONFIG, knightNameForDomain } from '../lib/knig
 import { parseEvent, parseEventData } from '../lib/events'
 import { FleetGraph } from '../components/FleetGraph'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
+import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { PageHeader, StatCard, EmptyState } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 
@@ -17,6 +18,7 @@ export function LivePage() {
   const [filterType, setFilterType] = useState<string>('')
   const [filterDomain, setFilterDomain] = useState<string>('')
   const [selectedKnight, setSelectedKnight] = useState<Knight | null>(null)
+  const [activityTaskId, setActivityTaskId] = useState<string | null>(null)
 
   const handleKnightClick = useCallback((knightName: string) => {
     const fleet = fleetKnights.find(k => k.name === knightName)
@@ -177,7 +179,8 @@ export function LivePage() {
           <div className="space-y-2">
             {recentEvents.map((event, i) => (
               <EventCard key={i} event={event} index={i}
-                expanded={expandedId === i} onToggle={() => setExpandedId(expandedId === i ? null : i)} />
+                expanded={expandedId === i} onToggle={() => setExpandedId(expandedId === i ? null : i)}
+                onActivity={setActivityTaskId} />
             ))}
           </div>
         )}
@@ -185,14 +188,18 @@ export function LivePage() {
 
       {/* Knight detail drawer */}
       <KnightDetailDrawer knight={selectedKnight} onClose={() => setSelectedKnight(null)} />
+
+      {/* Task activity drawer (#184) */}
+      {activityTaskId && <TaskActivityPanel taskId={activityTaskId} onClose={() => setActivityTaskId(null)} />}
     </div>
   )
 }
 
-function EventCard({ event, index, expanded, onToggle }: {
+function EventCard({ event, index, expanded, onToggle, onActivity }: {
   event: NatsEvent; index: number; expanded: boolean; onToggle: () => void
+  onActivity?: (taskId: string) => void
 }) {
-  const { knight, data } = parseEvent(event)
+  const { knight, data, taskId } = parseEvent(event)
   const cfg = knight ? getKnightConfig(knight) : null
   const isTask = event.type === 'task'
   const taskText = (data.task as string) || (data.result as string) || (data.summary as string) || ''
@@ -234,6 +241,17 @@ function EventCard({ event, index, expanded, onToggle }: {
         <span className="text-gray-600 ml-auto flex-shrink-0">
           {formatTimestamp(event.timestamp)}
         </span>
+        {taskId && onActivity && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onActivity(taskId) }}
+            className="flex items-center gap-1 text-gray-400 hover:text-roundtable-gold flex-shrink-0"
+            aria-label={`Task activity for ${taskId}`}
+            title="Task activity"
+          >
+            <Activity className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="px-3 pb-2">
         <p className={`text-xs text-gray-400 ${expanded ? '' : 'line-clamp-2'}`}>{taskText}</p>

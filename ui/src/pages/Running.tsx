@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useMemo, type KeyboardEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Activity, X } from 'lucide-react'
+import { Activity } from 'lucide-react'
 import { useRunning } from '../hooks/useRunning'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { PageHeader, StatCard, EmptyState, ErrorBanner, Drawer } from '../components/ui'
+import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
+import { TaskActivityPanel } from '../components/TaskActivityPanel'
+import { useNow } from '../hooks/useNow'
 import { formatCost } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import {
@@ -18,16 +20,6 @@ const STATUS_STYLES: Record<RunningStatus, { row: string; badge: string; text: s
   running: { row: '', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30', text: 'text-gray-300' },
   stale: { row: 'bg-yellow-500/10', badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', text: 'text-yellow-400' },
   lost: { row: 'bg-red-500/10', badge: 'bg-red-500/20 text-red-400 border-red-500/30', text: 'text-red-400' },
-}
-
-/** Re-render every second so elapsed / heartbeat age stay live. */
-function useNow(intervalMs = 1000): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
-  return now
 }
 
 function StatusBadge({ status }: { status: RunningStatus }) {
@@ -59,65 +51,6 @@ function ChainCell({ task }: { task: RunningTask }) {
 function lastToolLabel(task: RunningTask): string {
   const tool = task.currentTool || task.lastTool?.tool
   return tool ? sanitizeText(tool) : ''
-}
-
-function TaskDetail({ task, now, onClose }: { task: RunningTask; now: number; onClose: () => void }) {
-  const rows: Array<[string, ReactNode]> = [
-    ['Status', <StatusBadge key="s" status={task.status} />],
-    ['Knight', task.knight],
-    ['Pod', task.pod || '—'],
-    ['Node', task.node || '—'],
-    ['Slot', task.slot != null ? `${task.slot}${task.concurrency != null ? ` of ${task.concurrency}` : ''}` : '—'],
-    ['Task ID', <code key="t" className="break-all">{task.taskId}</code>],
-    ['Run ID', task.runId ? <code key="r" className="break-all">{task.runId}</code> : '—'],
-    ['Chain / step', <ChainCell key="c" task={task} />],
-    ['Model', task.model || '—'],
-    ['Elapsed', formatAge(task.startedAt, now)],
-    ['Heartbeat age', formatAge(task.lastHeartbeat, now)],
-    ['Turns', task.turns ?? '—'],
-    ['Tokens', task.inputTokens != null || task.outputTokens != null
-      ? `${(task.inputTokens ?? 0).toLocaleString()} in / ${(task.outputTokens ?? 0).toLocaleString()} out`
-      : '—'],
-    ['Cost so far', task.costUsd != null ? formatCost(task.costUsd) : '—'],
-  ]
-  if (task.reason) rows.splice(1, 0, ['Reason', sanitizeText(task.reason)])
-  const tool = lastToolLabel(task)
-  return (
-    <Drawer onClose={onClose}>
-      <div className="p-6" role="dialog" aria-label={`Task ${task.taskId}`}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Task activity</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-200">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
-          {rows.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-gray-500">{k}</dt>
-              <dd className="col-span-2 text-gray-200">{v}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-300 mb-2">Last tool</h3>
-          {tool ? (
-            <div className="text-sm bg-roundtable-navy/50 rounded-lg p-3">
-              <span className={task.lastTool?.isError ? 'text-red-400' : 'text-gray-200'}>{tool}</span>
-              {task.lastTool?.argsSummary && (
-                <pre className="mt-1 text-xs text-gray-400 whitespace-pre-wrap break-all">{sanitizeText(task.lastTool.argsSummary)}</pre>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">No tool calls yet.</p>
-          )}
-        </div>
-        <p className="mt-6 text-xs text-gray-500">
-          The live tool-call and message timeline for this task appears here once the activity stream (#184) is available.
-        </p>
-      </div>
-    </Drawer>
-  )
 }
 
 export function RunningPage() {
@@ -269,7 +202,7 @@ export function RunningPage() {
         </div>
       )}
 
-      {selected && <TaskDetail task={selected} now={now} onClose={() => setParam('task', '')} />}
+      {selectedId && <TaskActivityPanel taskId={selectedId} running={selected} onClose={() => setParam('task', '')} />}
     </div>
   )
 }

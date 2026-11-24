@@ -158,7 +158,8 @@ export function ToolCallCard({ entry }: { entry: SessionEntry }) {
 
 export function SessionsPage() {
   const { knights, loading: fleetLoading } = useFleet()
-  const [selectedKnight, setSelectedKnight] = useState('')
+  // ?knight= deep link (e.g. from the task activity panel, #184).
+  const [selectedKnight, setSelectedKnight] = useState(() => new URLSearchParams(window.location.search).get('knight') || '')
   const [view, setView] = useState<'timeline' | 'tree' | 'tools'>('timeline')
   const [entries, setEntries] = useState<SessionEntry[]>([])
   const [treeNodes, setTreeNodes] = useState<SessionTreeNode[]>([])

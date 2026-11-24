@@ -27,7 +27,9 @@ const tasks: RunningTask[] = [
 
 let state: RunningState
 vi.mock('../hooks/useRunning', () => ({ useRunning: () => state }))
-vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ connected: true }) }))
+vi.mock('../hooks/useWebSocket', () => ({
+  useWebSocket: () => ({ connected: true, events: [], watchActivity: () => () => {} }),
+}))
 
 function renderPage(url = '/running') {
   return render(
@@ -98,7 +100,13 @@ describe('RunningPage', () => {
 
   it('shows the lost reason in the panel', () => {
     renderPage('/running?task=task-lost-1')
-    expect(screen.getByText('pod deleted')).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Task task-lost-1' })
+    expect(within(dialog).getByText(/pod deleted/)).toBeInTheDocument()
+  })
+
+  it('keeps the activity panel open after the task leaves the registry', () => {
+    renderPage('/running?task=finished-already')
+    expect(screen.getByRole('dialog', { name: 'Task finished-already' })).toBeInTheDocument()
   })
 
   it('shows counts and an empty state', () => {

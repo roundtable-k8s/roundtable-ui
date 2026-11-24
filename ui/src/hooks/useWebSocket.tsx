@@ -11,8 +11,8 @@ export interface NatsEvent {
 }
 
 /** Message types delivered to topic listeners instead of the event feed. */
-export type WsTopic = 'running'
-const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running'])
+export type WsTopic = 'running' | 'activity'
+const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running', 'activity'])
 export type TopicListener = (data: unknown) => void
 
 const MAX_EVENTS = 200
@@ -44,6 +44,14 @@ function useWebSocketConnection() {
   const mountedRef = useRef(true)
   const seenEvents = useRef(new Set<string>())
   const topicListeners = useRef(new Map<string, Set<TopicListener>>())
+  // Task activity subscriptions (#184): taskId → number of watchers. Sent to
+  // the server on the first watcher and again after every reconnect.
+  const activityWatches = useRef(new Map<string, number>())
+
+  const sendJSON = useCallback((msg: unknown) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === 1 /* OPEN */) ws.send(JSON.stringify(msg))
+  }, [])
 
   const connect = useCallback(() => {
     if (!mountedRef.current) return
@@ -62,6 +70,10 @@ function useWebSocketConnection() {
       setConnected(true)
       setError(null)
       reconnectDelay.current = RECONNECT_DELAY_MS // Reset backoff on success
+      // Server-side subscriptions die with the connection: renew them.
+      for (const taskId of activityWatches.current.keys()) {
+        ws.send(JSON.stringify({ subscribe: 'activity', taskId }))
+      }
     }
 
     ws.onerror = () => {
@@ -176,7 +188,36 @@ function useWebSocketConnection() {
     return () => { set.delete(fn) }
   }, [])
 
-  return { events, connected, error, clearEvents, subscribeTopic }
+  /**
+   * Watch one task's activity stream: `fn` receives every `activity` payload
+   * for taskId (backlog first, then live events, also after reconnects).
+   * Returns a release fn; the server subscription ends with the last watcher.
+   */
+  const watchActivity = useCallback((taskId: string, fn: TopicListener) => {
+    const listener: TopicListener = (data) => {
+      const id = (data as { taskId?: unknown } | null)?.taskId
+      if (id === taskId) fn(data)
+    }
+    const unsubscribe = subscribeTopic('activity', listener)
+    const n = activityWatches.current.get(taskId) ?? 0
+    activityWatches.current.set(taskId, n + 1)
+    if (n === 0) sendJSON({ subscribe: 'activity', taskId })
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      unsubscribe()
+      const left = (activityWatches.current.get(taskId) ?? 1) - 1
+      if (left > 0) {
+        activityWatches.current.set(taskId, left)
+      } else {
+        activityWatches.current.delete(taskId)
+        sendJSON({ unsubscribe: 'activity', taskId })
+      }
+    }
+  }, [subscribeTopic, sendJSON])
+
+  return { events, connected, error, clearEvents, subscribeTopic, watchActivity }
 }
 
 type WebSocketState = ReturnType<typeof useWebSocketConnection>
