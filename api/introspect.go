@@ -422,11 +422,19 @@ func withPod(data []byte, pod string) []byte {
 	return out
 }
 
+// knightPodSuffixRE is the Deployment pod suffix shape: <rs-hash>-<pod-hash>.
+var knightPodSuffixRE = regexp.MustCompile(`^[a-z0-9]{5,10}-[a-z0-9]{5}$`)
+
 // looksLikeKnightPod reports whether pod is named like one of knight's
-// Deployment pods (<knight>-<hash>-<suffix>). It only picks the error shape
-// for a pod that is not currently ready; it never grants access.
+// Deployment pods (<knight>-<rs-hash>-<pod-hash>). The remainder after the
+// knight prefix must have exactly that shape, so a pod of knight "foo-bar"
+// (foo-bar-<rs-hash>-<pod-hash>) is not taken for one of knight "foo". It
+// only picks the error shape for a pod that is not currently ready (a
+// scaled-away pod no longer exists in the cluster, so the name is all there
+// is to go on); it never grants access.
 func looksLikeKnightPod(knight, pod string) bool {
-	return strings.HasPrefix(pod, strings.ToLower(knight)+"-")
+	rest, ok := strings.CutPrefix(pod, strings.ToLower(knight)+"-")
+	return ok && knightPodSuffixRE.MatchString(rest)
 }
 
 // writePodGone answers a request for a pod that no longer serves

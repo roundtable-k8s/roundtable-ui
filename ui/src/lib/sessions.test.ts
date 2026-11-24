@@ -68,8 +68,14 @@ describe('podGoneFrom', () => {
     expect(await podGoneFrom(res, 'other')).toBe('galahad-x')
   })
 
-  it('falls back to the requested pod when the 410 body is not JSON', async () => {
-    expect(await podGoneFrom(new Response('gone', { status: 410 }), 'galahad-y')).toBe('galahad-y')
+  it('falls back to the requested pod when podGone is set without a pod', async () => {
+    expect(await podGoneFrom(new Response('{"podGone":true}', { status: 410 }), 'galahad-y')).toBe('galahad-y')
+  })
+
+  it('ignores a 410 without podGone: true (e.g. from a proxy)', async () => {
+    expect(await podGoneFrom(new Response('gone', { status: 410 }), 'galahad-y')).toBeNull()
+    expect(await podGoneFrom(new Response('{"error":"gone","pod":"x"}', { status: 410 }), 'galahad-y')).toBeNull()
+    expect(await podGoneFrom(new Response('{"podGone":"yes"}', { status: 410 }), 'galahad-y')).toBeNull()
   })
 
   it('is null for other responses and for client timeouts', async () => {
