@@ -51,4 +51,5 @@ export const KNIGHT_STATUS_DOT: Record<string, string> = {
   offline: 'bg-red-500',
   starting: 'bg-yellow-500',
   busy: 'bg-blue-500',
+  'scaled-to-zero': 'bg-gray-500',
 }

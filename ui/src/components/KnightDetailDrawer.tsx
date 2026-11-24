@@ -4,6 +4,7 @@ import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet, apiGetText } from '../lib/api'
 import { formatCost, formatUptime, formatTimestamp } from '../lib/format'
+import { PodsPanel } from './PodsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition } from '../hooks/useFleet'
 import { sanitizeText } from '../lib/untrusted'
@@ -101,8 +102,8 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
         <div className="p-4 space-y-6">
           {/* Status bar */}
           <div className="flex items-center gap-3 flex-wrap">
-            <span className={`w-2.5 h-2.5 rounded-full ${knight.ready ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-            <span className="text-sm text-gray-300">{knight.ready ? 'Online' : 'Offline'}</span>
+            <span className={`w-2.5 h-2.5 rounded-full ${knight.status === 'scaled-to-zero' ? 'bg-gray-500' : knight.ready ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+            <span className="text-sm text-gray-300">{knight.status === 'scaled-to-zero' ? 'Scaled to zero' : knight.ready ? 'Online' : 'Offline'}</span>
             <span className="text-xs text-gray-500">•</span>
             <span className="text-xs text-gray-500">{knight.age} uptime</span>
             <span className="text-xs text-gray-500">•</span>
@@ -236,6 +237,17 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Pods & scaling */}
+          {(knightDetail?.pods || knightDetail?.scaling) && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+                <Cpu className="w-4 h-4" />
+                Pods
+              </h3>
+              <PodsPanel knight={knightDetail} />
             </div>
           )}
 

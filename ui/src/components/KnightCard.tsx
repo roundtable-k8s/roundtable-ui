@@ -2,6 +2,7 @@ import { Shield, Wifi, WifiOff, RotateCw, Cpu, CheckCircle, XCircle, DollarSign 
 import type { Knight } from '../hooks/useFleet'
 import { getKnightConfig } from '../lib/knights'
 import { formatRelativeTime } from '../lib/format'
+import { ReplicaDots } from './ReplicaDots'
 import { phaseColor, KNIGHT_STATUS_DOT } from '../lib/status'
 
 interface KnightActivity {
@@ -88,7 +89,7 @@ export function KnightCard({ knight, onClick, activity }: KnightCardProps) {
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${KNIGHT_STATUS_DOT[knight.status]} animate-pulse`} />
-            <span className="text-xs text-gray-400 capitalize">{knight.status}</span>
+            <span className="text-xs text-gray-400 capitalize">{knight.status === 'scaled-to-zero' ? 'scaled to zero' : knight.status}</span>
           </div>
           {knight.phase && (
             <span className={`text-xs px-2 py-0.5 rounded border ${phaseColor(knight.phase)}`}>
@@ -97,6 +98,10 @@ export function KnightCard({ knight, onClick, activity }: KnightCardProps) {
           )}
         </div>
       </div>
+
+      {(knight.pods || knight.scaling) && (
+        <div className="mb-3"><ReplicaDots knight={knight} /></div>
+      )}
 
       <div className="grid grid-cols-3 gap-3 text-center">
         <div className="bg-roundtable-navy/50 rounded-lg p-2">
