@@ -256,9 +256,9 @@ func skipMessage(reason, when string) string {
 		}
 		return "when evaluated to false"
 	case stepReasonChainFailed:
-		return "skipped because the chain failed before this step ran"
+		return "the chain failed before this step ran"
 	case "":
-		return "skipped"
+		return ""
 	default:
 		return reason
 	}

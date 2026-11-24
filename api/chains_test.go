@@ -213,8 +213,8 @@ func TestSkipMessage(t *testing.T) {
 	cases := []struct{ reason, when, want string }{
 		{"WhenFalse", "x == 1", "when evaluated to false: x == 1"},
 		{"WhenFalse", "", "when evaluated to false"},
-		{"ChainFailed", "x", "skipped because the chain failed before this step ran"},
-		{"", "", "skipped"},
+		{"ChainFailed", "x", "the chain failed before this step ran"},
+		{"", "", ""},
 		{"Other", "", "Other"},
 	}
 	for _, tc := range cases {

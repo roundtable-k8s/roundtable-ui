@@ -234,3 +234,17 @@ func TestChainWatcherJoinsInFlightOnEveryUpdate(t *testing.T) {
 	_, cs = sink.next(t, 2*time.Second)
 	check("watch update", cs)
 }
+
+func TestCachedDomainsNegativeCache(t *testing.T) {
+	calls := 0
+	get := cachedDomains(time.Hour, func(ctx context.Context) map[string]string {
+		calls++
+		return nil
+	})
+	for i := 0; i < 3; i++ {
+		get(context.Background())
+	}
+	if calls != 1 {
+		t.Fatalf("failing fn called %d times within ttl, want 1", calls)
+	}
+}
