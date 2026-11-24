@@ -13,10 +13,39 @@ export interface GeneratedSkill {
   content: string
 }
 
+export interface KnightPod {
+  name: string
+  node?: string
+  phase: string
+  ready: boolean
+  restarts: number
+  lastTerminationReason?: string
+  age: string
+  image?: string
+  draining: boolean
+  // Kubernetes quantity strings ("150m", "256Mi"); usage absent without metrics-server
+  cpu?: string
+  memory?: string
+  cpuRequest?: string
+  cpuLimit?: string
+  memoryRequest?: string
+  memoryLimit?: string
+}
+
+export interface KnightScaling {
+  autoscaled: boolean
+  minReplicas: number
+  maxReplicas: number
+  desiredReplicas?: number
+  currentReplicas: number
+  readyReplicas: number
+  lastScaleTime?: string
+}
+
 export interface Knight {
   name: string
   domain: string
-  status: 'online' | 'offline' | 'starting' | 'busy'
+  status: 'online' | 'offline' | 'starting' | 'busy' | 'scaled-to-zero'
   ready: boolean
   restarts: number
   age: string
@@ -37,6 +66,8 @@ export interface Knight {
   concurrency?: number
   taskTimeoutSeconds?: number
   conditions?: KnightCondition[]
+  pods?: KnightPod[]
+  scaling?: KnightScaling
 }
 
 export function useFleet(refreshInterval = 10000) {
