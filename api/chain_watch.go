@@ -117,8 +117,9 @@ func (c *chainWatcher) emit(ctx context.Context, op string, obj *unstructured.Un
 }
 
 // cachedDomains memoises fn for ttl so a burst of chain changes costs one
-// Knight list instead of one per change. A nil result (failed list) is cached
-// too, so a failing list is retried at most once per ttl.
+// Knight list instead of one per change. The result is cached even when the list
+// failed (knightDomainMap then returns an empty map), so a failing list is
+// retried at most once per ttl.
 func cachedDomains(ttl time.Duration, fn func(ctx context.Context) map[string]string) func(ctx context.Context) map[string]string {
 	var (
 		mu     sync.Mutex
