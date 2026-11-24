@@ -28,6 +28,10 @@ describe('skipReasonText', () => {
   it('explains when-skips with the expression', () => {
     expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1' })).toBe('when condition was false: x == 1')
   })
+  it('prefers the API skipMessage when present', () => {
+    expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1', skipMessage: 'api says so' })).toBe('api says so')
+    expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1', skipMessage: '' })).toBe('when condition was false: x == 1')
+  })
   it('explains chain-failed skips and passes unknown reasons through', () => {
     expect(skipReasonText({ skipReason: 'ChainFailed' })).toBe('the chain failed before this step ran')
     expect(skipReasonText({ skipReason: 'Cancelled' })).toBe('Cancelled')

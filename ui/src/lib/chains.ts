@@ -42,7 +42,8 @@ export function sortedItems(f: ChainFanOut): ChainItem[] {
 }
 
 /** Human-readable reason for a skipped step. */
-export function skipReasonText(step: Pick<ChainStep, 'skipReason' | 'when'>): string {
+export function skipReasonText(step: Pick<ChainStep, 'skipReason' | 'when' | 'skipMessage'>): string {
+  if (step.skipMessage) return step.skipMessage
   switch (step.skipReason) {
     case 'WhenFalse':
       return step.when ? `when condition was false: ${step.when}` : 'when condition was false'

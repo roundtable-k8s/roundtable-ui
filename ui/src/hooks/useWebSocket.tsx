@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, createContext, useContext, ty
 import { apiGet } from '../lib/api'
 
 export interface NatsEvent {
-  type: 'task' | 'result' | 'mission' | 'chain'
+  type: 'task' | 'result' | 'chain'
   subject: string
   data: unknown
   timestamp: string
