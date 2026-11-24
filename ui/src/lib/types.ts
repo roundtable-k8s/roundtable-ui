@@ -52,20 +52,37 @@ export interface ChainStep {
   skipReason?: string
   /** The step's `when` expression, shown with a WhenFalse skip. */
   when?: string
+  /** Pre-formatted skip message from the API. */
+  skipMessage?: string
+  /** forEach concurrency cap (on the step, not inside fanOut). */
+  maxParallel?: number
 }
 
-/**
- * Live-task join from the in-flight registry (/api/running) for a running
- * item: which pod it runs on, how long it has run, and heartbeat age.
- */
+/** In-flight registry view of a running task (api ChainTaskInFlight). */
+export interface ChainTaskInFlight {
+  knight?: string
+  pod?: string
+  node?: string
+  /** running | stale | lost */
+  status?: string
+  reason?: string
+  startedAt?: string
+  elapsedMs: number
+  lastHeartbeat?: string
+  heartbeatAgeMs?: number
+  currentTool?: string
+}
+
+/** Fields shared by fan-out items and loop body steps. */
 export interface ChainTaskLive {
   taskId?: string
-  pod?: string
-  elapsedSeconds?: number
-  heartbeatAgeSeconds?: number
+  /** Set by the API only while the task is running and in the registry. */
+  inFlight?: ChainTaskInFlight | null
   startTime?: string | null
   completionTime?: string | null
   error?: string
+  outputBytes?: number
+  retries?: number
 }
 
 /** One forEach item (operator status.stepStatuses[].fanOut.items[]). */
@@ -73,9 +90,6 @@ export interface ChainItem extends ChainTaskLive {
   index: number
   phase: string
   runId?: string
-  retries?: number
-  /** Output length in bytes. */
-  outputSize?: number
 }
 
 /**
@@ -91,7 +105,6 @@ export interface ChainFanOut {
   failed?: number
   skipped?: number
   omittedItems?: number
-  maxParallel?: number
   items?: ChainItem[] | null
 }
 

@@ -78,11 +78,13 @@ export function elapsedLabel(t: ChainTaskLive, now = Date.now()): string {
     const end = t.completionTime ? new Date(t.completionTime).getTime() : now
     return shortDuration((end - new Date(t.startTime).getTime()) / 1000)
   }
-  return t.elapsedSeconds !== undefined ? shortDuration(t.elapsedSeconds) : '—'
+  const ms = t.inFlight?.elapsedMs
+  return ms !== undefined ? shortDuration(ms / 1000) : '—'
 }
 
 export function heartbeatLabel(t: ChainTaskLive): string {
-  return t.heartbeatAgeSeconds !== undefined ? `${shortDuration(t.heartbeatAgeSeconds)} ago` : '—'
+  const ms = t.inFlight?.heartbeatAgeMs
+  return ms !== undefined ? `${shortDuration(ms / 1000)} ago` : '—'
 }
 
 /** Deep link to a task's live activity on the Running page. */

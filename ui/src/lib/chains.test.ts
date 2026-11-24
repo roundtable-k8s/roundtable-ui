@@ -44,9 +44,9 @@ it('loop rounds and label', () => {
 it('elapsed and heartbeat labels', () => {
   const now = Date.parse('2026-11-24T10:01:05Z')
   expect(elapsedLabel({ startTime: '2026-11-24T10:00:00Z' }, now)).toBe('1m 5s')
-  expect(elapsedLabel({ elapsedSeconds: 30 })).toBe('30s')
+  expect(elapsedLabel({ inFlight: { elapsedMs: 30000 } })).toBe('30s')
   expect(elapsedLabel({})).toBe('—')
-  expect(heartbeatLabel({ heartbeatAgeSeconds: 4 })).toBe('4s ago')
+  expect(heartbeatLabel({ inFlight: { elapsedMs: 0, heartbeatAgeMs: 4000 } })).toBe('4s ago')
   expect(runningHref('a b')).toBe('/running?task=a%20b')
 })
 

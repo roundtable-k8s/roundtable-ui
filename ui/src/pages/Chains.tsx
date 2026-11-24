@@ -174,7 +174,7 @@ const SEGMENTS: Array<{ key: 'done' | 'running' | 'failed' | 'skipped'; label: s
 function LiveTaskCells({ t }: { t: ChainItem | ChainLoopStep }) {
   return (
     <>
-      <td className="px-2 py-1 font-mono text-gray-300">{t.pod || '—'}</td>
+      <td className="px-2 py-1 font-mono text-gray-300">{t.inFlight?.pod || '—'}</td>
       <td className="px-2 py-1 text-gray-400">{elapsedLabel(t)}</td>
       <td className="px-2 py-1 text-gray-400">{t.phase === 'Running' ? heartbeatLabel(t) : '—'}</td>
       <td className="px-2 py-1">
@@ -211,7 +211,7 @@ export function FanOutProgress({ step }: { step: ChainStep & { fanOut: ChainFanO
           {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           <span>{summary} of {c.total}</span>
           {c.omitted > 0 && <span className="text-gray-500">({c.omitted} finished not listed)</span>}
-          {step.fanOut.maxParallel ? <span className="ml-auto text-gray-500">max {step.fanOut.maxParallel} parallel</span> : null}
+          {step.maxParallel ? <span className="ml-auto text-gray-500">max {step.maxParallel} parallel</span> : null}
         </div>
         <div
           role="progressbar"
@@ -246,7 +246,7 @@ export function FanOutProgress({ step }: { step: ChainStep & { fanOut: ChainFanO
                 <td className="px-2 py-1 text-gray-300">{item.index}</td>
                 <td className="px-2 py-1"><PhaseBadge phase={item.phase} />{item.retries ? <span className="text-yellow-400 ml-1">retry {item.retries}</span> : null}</td>
                 <LiveTaskCells t={item} />
-                <td className="px-2 py-1 text-gray-400">{item.outputSize ? formatBytes(item.outputSize) : '—'}</td>
+                <td className="px-2 py-1 text-gray-400">{item.outputBytes ? formatBytes(item.outputBytes) : '—'}</td>
                 <td className="px-2 py-1 text-red-400 max-w-xs truncate" title={item.error ? sanitizeText(item.error) : undefined}>
                   {item.error ? sanitizeText(item.error) : ''}
                 </td>

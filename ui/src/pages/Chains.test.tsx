@@ -6,6 +6,8 @@ import { ChainsPage, FALLBACK_POLL_MS } from './Chains'
 import { apiGet } from '../lib/api'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from '../lib/types'
+import apiFanout from '../test/fixtures/api/fanout.json'
+import apiLoop from '../test/fixtures/api/pr-pipeline-loop.json'
 import type { TopicListener } from '../hooks/useWebSocket'
 
 vi.mock('../lib/api', () => ({ apiGet: vi.fn() }))
@@ -109,7 +111,7 @@ describe('ChainsPage live updates', () => {
 
     const next = prPipelineChain()
     next.steps![1].loop!.iteration = 3
-    next.steps![1].loop!.rounds!.push({ iteration: 3, steps: [{ name: 'review', phase: 'Running', iteration: 3, pod: 'galahad-new' }] })
+    next.steps![1].loop!.rounds!.push({ iteration: 3, steps: [{ name: 'review', phase: 'Running', iteration: 3, inFlight: { pod: 'galahad-new', elapsedMs: 1000 } }] })
     emitChain(next)
 
     expect(screen.getByRole('region', { name: 'step review-fix' })).toHaveTextContent('round 3/5')
@@ -148,5 +150,30 @@ describe('ChainsPage live updates', () => {
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1))
     await act(async () => { vi.advanceTimersByTime(FALLBACK_POLL_MS * 3) })
     expect(mockApiGet).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Fixtures in test/fixtures/api are the real API output (api/testdata/chains/*.json
+// run through parseChainResource + joinChainInFlight), so these guard the DTO shape.
+describe('ChainsPage with real API payloads', () => {
+  it('shows pod, elapsed, heartbeat, output size and max parallel for a running fan-out item', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === '/api/chains' ? Promise.resolve([apiFanout, apiLoop]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=fanout-scan')
+    const step = await screen.findByRole('region', { name: 'step scan' })
+    expect(step).toHaveTextContent('max 2 parallel')
+    const row = within(step).getAllByRole('row').slice(1).find(r => within(r).getAllByRole('cell')[0].textContent === '8')!
+    expect(row).toHaveTextContent('galahad-abc-1')
+    expect(row).toHaveTextContent('10s ago')
+    const finished = within(step).getAllByRole('row').slice(1).find(r => within(r).getAllByRole('cell')[0].textContent === '7')!
+    expect(finished).toHaveTextContent('11 B')
+  })
+
+  it('shows the pod of a running loop body step', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === '/api/chains' ? Promise.resolve([apiFanout, apiLoop]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=pr-pipeline-roundtable-ui-187')
+    const step = await screen.findByRole('region', { name: 'step fixloop' })
+    expect(step).toHaveTextContent('galahad-abc-1')
   })
 })

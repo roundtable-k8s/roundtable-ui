@@ -1,0 +1,131 @@
+{
+  "name": "pr-pipeline-roundtable-ui-187",
+  "namespace": "roundtable",
+  "phase": "Running",
+  "currentStep": "fixloop",
+  "startTime": "2026-11-24T11:00:00Z",
+  "completionTime": null,
+  "steps": [
+    {
+      "name": "implement",
+      "knight": "rt-ui",
+      "domain": "",
+      "phase": "Succeeded",
+      "startTime": "2026-11-24T11:00:00Z",
+      "completionTime": "2026-11-24T11:20:00Z",
+      "result": "PR #230",
+      "dependsOn": null,
+      "retryCount": 0,
+      "taskId": "pr-1795548808-implement"
+    },
+    {
+      "name": "review",
+      "knight": "rt-reviewer",
+      "domain": "",
+      "phase": "Succeeded",
+      "startTime": "2026-11-24T11:20:00Z",
+      "completionTime": "2026-11-24T11:30:00Z",
+      "result": "Verdict: needs fixes",
+      "dependsOn": [
+        "implement"
+      ],
+      "retryCount": 0,
+      "taskId": "pr-1795548808-review"
+    },
+    {
+      "name": "fixloop",
+      "knight": "",
+      "domain": "",
+      "phase": "Running",
+      "startTime": "2026-11-24T11:30:00Z",
+      "completionTime": null,
+      "result": null,
+      "dependsOn": [
+        "review"
+      ],
+      "retryCount": 0,
+      "loop": {
+        "iteration": 2,
+        "maxIterations": 3,
+        "onExhausted": "continue",
+        "until": "last.output.contains(\"Verdict: ship it\")",
+        "from": "review",
+        "body": [
+          "fix",
+          "rereview"
+        ],
+        "rounds": [
+          {
+            "iteration": 1,
+            "steps": [
+              {
+                "name": "rereview",
+                "knight": "rt-reviewer",
+                "iteration": 1,
+                "phase": "Succeeded",
+                "taskId": "pr-1795548808-fixloop-rereview-1",
+                "outputBytes": 20,
+                "startTime": "2026-11-24T11:45:00Z",
+                "completionTime": "2026-11-24T11:55:00Z"
+              }
+            ]
+          },
+          {
+            "iteration": 2,
+            "steps": [
+              {
+                "name": "fix",
+                "knight": "rt-ui",
+                "iteration": 2,
+                "phase": "Running",
+                "taskId": "pr-1795548808-fixloop-fix-2",
+                "outputBytes": 0,
+                "startTime": "2026-11-24T11:58:00Z",
+                "inFlight": {
+                  "knight": "Galahad",
+                  "pod": "galahad-abc-1",
+                  "node": "node-1",
+                  "status": "running",
+                  "startedAt": "2026-11-24T11:58:00Z",
+                  "elapsedMs": 120000,
+                  "lastHeartbeat": "2026-11-24T11:59:55Z",
+                  "heartbeatAgeMs": 5000
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "merge",
+      "knight": "rt-ui",
+      "domain": "",
+      "phase": "Pending",
+      "startTime": null,
+      "completionTime": null,
+      "result": null,
+      "dependsOn": [
+        "fixloop"
+      ],
+      "retryCount": 0,
+      "when": "steps.fixloop.outcome == \"Converged\""
+    },
+    {
+      "name": "needs-human",
+      "knight": "rt-ui",
+      "domain": "",
+      "phase": "Pending",
+      "startTime": null,
+      "completionTime": null,
+      "result": null,
+      "dependsOn": [
+        "fixloop"
+      ],
+      "retryCount": 0,
+      "when": "steps.fixloop.outcome == \"Exhausted\""
+    }
+  ],
+  "roundTableRef": "roundtable-dev",
+  "runId": "1795548808"
+}
