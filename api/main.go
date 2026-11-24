@@ -1171,7 +1171,7 @@ func briefingListHandler(vaultPath string, dirs []string) http.HandlerFunc {
 				continue
 			}
 			for _, e := range entries {
-				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && briefingDateRe.MatchString(strings.TrimSuffix(e.Name(), ".md")) {
 					briefings = append(briefings, briefingEntry{Name: e.Name(), Dir: d})
 				}
 			}

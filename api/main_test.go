@@ -2033,6 +2033,7 @@ func TestBriefingMultipleDirs(t *testing.T) {
 	os.MkdirAll(tmp+"/Agents/Briefings", 0755)
 	os.WriteFile(tmp+"/Briefings/Daily/2024-01-01.md", []byte("old"), 0644)
 	os.WriteFile(tmp+"/Agents/Briefings/2024-01-02.md", []byte("new"), 0644)
+	os.WriteFile(tmp+"/Agents/Briefings/weekly-summary.md", []byte("x"), 0644)
 	dirs := parseBriefingDirs(defaultBriefingDirs + ",missing/dir,../etc,/abs")
 	if len(dirs) != 3 {
 		t.Fatalf("unexpected dirs %v", dirs)
