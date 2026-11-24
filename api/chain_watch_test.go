@@ -92,7 +92,12 @@ func (s *chainEventSink) none(t *testing.T, within time.Duration) {
 
 func startChainWatcher(t *testing.T, client *dynamicfake.FakeDynamicClient) (*chainWatcher, *chainEventSink) {
 	t.Helper()
-	cw := newChainWatcher(client, "roundtable")
+	return startChainWatcherWith(t, client, nil)
+}
+
+func startChainWatcherWith(t *testing.T, client *dynamicfake.FakeDynamicClient, reg *runningRegistry) (*chainWatcher, *chainEventSink) {
+	t.Helper()
+	cw := newChainWatcher(client, "roundtable", reg)
 	cw.backoff = 10 * time.Millisecond
 	sink := newChainEventSink()
 	unsub := cw.subscribe(sink.add)
@@ -184,4 +189,48 @@ func TestChainWatcherResumesWhenStreamCloses(t *testing.T) {
 	if _, cs := sink.next(t, 2*time.Second); cs.Phase != "Succeeded" {
 		t.Fatalf("summary = %+v", cs)
 	}
+}
+
+func TestChainWatcherJoinsInFlightOnEveryUpdate(t *testing.T) {
+	obj := &unstructured.Unstructured{Object: loadChainFixture(t, "fanout.json")}
+	obj.SetResourceVersion("1")
+	client, watchers := chainTestClient(t, obj)
+	reg, _ := newTestRegistry(100)
+	reg.handleActivity(activity(t, "task.started", "fanout-scan-1795548808-scan-8", 1,
+		map[string]any{"ts": "2026-11-24T11:58:00Z", "pod": "galahad-abc-1"}), "Galahad")
+	_, sink := startChainWatcherWith(t, client, reg)
+
+	check := func(label string, cs ChainSummary) {
+		t.Helper()
+		var step *StepSummary
+		for i := range cs.Steps {
+			if cs.Steps[i].Name == "scan" {
+				step = &cs.Steps[i]
+			}
+		}
+		if step == nil || step.FanOut == nil {
+			t.Fatalf("%s: scan step/fanOut missing", label)
+		}
+		for _, it := range step.FanOut.Items {
+			if it.Index == 8 {
+				if it.InFlight == nil || it.InFlight.Pod != "galahad-abc-1" {
+					t.Fatalf("%s: item 8 inFlight = %+v, want pod galahad-abc-1", label, it.InFlight)
+				}
+				return
+			}
+		}
+		t.Fatalf("%s: item 8 missing", label)
+	}
+
+	_, cs := sink.next(t, 2*time.Second)
+	check("initial list", cs)
+
+	w := <-watchers
+	mod := obj.DeepCopy()
+	mod.SetResourceVersion("2")
+	_ = unstructured.SetNestedField(mod.Object, "Running", "status", "phase")
+	mod.SetAnnotations(map[string]string{"touched": "1"})
+	w.Modify(mod)
+	_, cs = sink.next(t, 2*time.Second)
+	check("watch update", cs)
 }

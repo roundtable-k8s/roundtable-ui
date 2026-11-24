@@ -334,7 +334,7 @@ func main() {
 	// Live chain updates over WS (#228)
 	var chains *chainWatcher
 	if dynClient != nil {
-		chains = newChainWatcher(dynClient, namespace)
+		chains = newChainWatcher(dynClient, namespace, running)
 		go chains.run(runningCtx)
 	}
 

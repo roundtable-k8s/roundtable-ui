@@ -32,6 +32,9 @@ type chainWatcher struct {
 	namespace string
 	// domains resolves knight name → domain for ChainSummary step domains.
 	domains func(ctx context.Context) map[string]string
+	// running is the in-flight registry joined onto every pushed chain so a
+	// status change does not wipe the pod/heartbeat the UI got from REST (#227).
+	running *runningRegistry
 	// backoff is the delay before retrying after a failed list/watch.
 	backoff time.Duration
 
@@ -43,11 +46,12 @@ type chainWatcher struct {
 	seen map[string]string
 }
 
-func newChainWatcher(client dynamic.Interface, namespace string) *chainWatcher {
+func newChainWatcher(client dynamic.Interface, namespace string, running *runningRegistry) *chainWatcher {
 	return &chainWatcher{
 		client:    client,
 		namespace: namespace,
-		domains:   func(ctx context.Context) map[string]string { return knightDomainMap(ctx, client, namespace) },
+		running:   running,
+		domains:   cachedDomains(5*time.Second, func(ctx context.Context) map[string]string { return knightDomainMap(ctx, client, namespace) }),
 		backoff:   2 * time.Second,
 		subs:      map[int]func([]byte){},
 		seen:      map[string]string{},
@@ -105,7 +109,31 @@ func (c *chainWatcher) emit(ctx context.Context, op string, obj *unstructured.Un
 	if op != chainOpDelete && *domains == nil {
 		*domains = c.domains(ctx)
 	}
-	c.broadcast(chainWSEvent(op, parseChainResource(obj.Object, *domains)))
+	summary := parseChainResource(obj.Object, *domains)
+	if op != chainOpDelete {
+		joinChainInFlight(&summary, c.running)
+	}
+	c.broadcast(chainWSEvent(op, summary))
+}
+
+// cachedDomains memoises fn for ttl so a burst of chain changes costs one
+// Knight list instead of one per change.
+func cachedDomains(ttl time.Duration, fn func(ctx context.Context) map[string]string) func(ctx context.Context) map[string]string {
+	var (
+		mu   sync.Mutex
+		at   time.Time
+		last map[string]string
+	)
+	return func(ctx context.Context) map[string]string {
+		mu.Lock()
+		defer mu.Unlock()
+		if last != nil && time.Since(at) < ttl {
+			return last
+		}
+		last = fn(ctx)
+		at = time.Now()
+		return last
+	}
 }
 
 // run lists and watches until ctx is cancelled.
