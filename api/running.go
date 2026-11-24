@@ -896,7 +896,7 @@ func runningHandler(reg *runningRegistry) http.HandlerFunc {
 			StaleAfterMs:        reg.staleAfter().Milliseconds(),
 		})
 		if err != nil {
-			http.Error(w, "encode error", http.StatusInternalServerError)
+			jsonError(w, "encode error", http.StatusInternalServerError)
 			return
 		}
 		writeRedactedJSON(w, body)

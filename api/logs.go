@@ -152,17 +152,17 @@ func knightPodsHandler(namespace string, reg *runningRegistry) http.HandlerFunc 
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["knight"]
 		if !validK8sName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
 		if k8sClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
 		if err != nil {
 			slog.Error("List knight pods failed", "knight", name, "error", err)
-			http.Error(w, "Failed to list pods", http.StatusInternalServerError)
+			jsonError(w, "Failed to list pods", http.StatusInternalServerError)
 			return
 		}
 		activity := lastActivityByPod(reg, name)
@@ -213,40 +213,40 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["knight"]
 		if !validK8sName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
 
 		q := r.URL.Query()
 		podName := q.Get("pod")
 		if podName != "" && !validPodName(podName) {
-			http.Error(w, "Invalid pod name", http.StatusBadRequest)
+			jsonError(w, "Invalid pod name", http.StatusBadRequest)
 			return
 		}
 		container := q.Get("container")
 		if container != "" && !validK8sName.MatchString(container) {
-			http.Error(w, "Invalid container name", http.StatusBadRequest)
+			jsonError(w, "Invalid container name", http.StatusBadRequest)
 			return
 		}
 		previous, err := parseBoolParam(r, "previous")
 		if err != nil {
-			http.Error(w, "Invalid previous value (want true or false)", http.StatusBadRequest)
+			jsonError(w, "Invalid previous value (want true or false)", http.StatusBadRequest)
 			return
 		}
 		timestamps, err := parseBoolParam(r, "timestamps")
 		if err != nil {
-			http.Error(w, "Invalid timestamps value (want true or false)", http.StatusBadRequest)
+			jsonError(w, "Invalid timestamps value (want true or false)", http.StatusBadRequest)
 			return
 		}
 
 		if k8sClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
 		if err != nil || len(pods) == 0 {
-			http.Error(w, "Knight not found", http.StatusNotFound)
+			jsonError(w, "Knight not found", http.StatusNotFound)
 			return
 		}
 
@@ -264,12 +264,12 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 				}
 			}
 			if pod == nil {
-				http.Error(w, "Pod not found for this knight", http.StatusNotFound)
+				jsonError(w, "Pod not found for this knight", http.StatusNotFound)
 				return
 			}
 		}
 		if container != "" && !podHasContainer(pod, container) {
-			http.Error(w, "Container not found in pod", http.StatusBadRequest)
+			jsonError(w, "Container not found in pod", http.StatusBadRequest)
 			return
 		}
 
@@ -290,10 +290,10 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 			if previous && apierrors.IsBadRequest(err) {
 				// The API server answers 400 when there is no previous
 				// terminated container to read.
-				http.Error(w, "No previous container logs for this pod", http.StatusNotFound)
+				jsonError(w, "No previous container logs for this pod", http.StatusNotFound)
 				return
 			}
-			http.Error(w, "Failed to read logs", http.StatusInternalServerError)
+			jsonError(w, "Failed to read logs", http.StatusInternalServerError)
 			return
 		}
 		defer stream.Close()
