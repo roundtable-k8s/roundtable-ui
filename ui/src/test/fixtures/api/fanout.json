@@ -1,0 +1,128 @@
+{
+  "name": "fanout-scan",
+  "namespace": "roundtable",
+  "phase": "Running",
+  "currentStep": "scan",
+  "startTime": "2026-11-24T11:50:00Z",
+  "completionTime": null,
+  "steps": [
+    {
+      "name": "discover",
+      "knight": "galahad",
+      "domain": "",
+      "phase": "Succeeded",
+      "startTime": "2026-11-24T11:50:00Z",
+      "completionTime": "2026-11-24T11:51:00Z",
+      "result": "[\"a\",\"b\"]",
+      "dependsOn": null,
+      "retryCount": 0,
+      "taskId": "fanout-scan-1795548808-discover"
+    },
+    {
+      "name": "scan",
+      "knight": "galahad",
+      "domain": "",
+      "phase": "Running",
+      "startTime": "2026-11-24T11:51:00Z",
+      "completionTime": null,
+      "result": null,
+      "dependsOn": [
+        "discover"
+      ],
+      "retryCount": 0,
+      "forEach": true,
+      "maxParallel": 2,
+      "failurePolicy": "continue",
+      "fanOut": {
+        "total": 12,
+        "pending": 2,
+        "running": 2,
+        "succeeded": 7,
+        "failed": 1,
+        "skipped": 0,
+        "itemPhases": "SSSSSSFSRRPP",
+        "items": [
+          {
+            "index": 6,
+            "phase": "Failed",
+            "runId": "1795548808-6",
+            "taskId": "fanout-scan-1795548808-scan-6",
+            "error": "connection refused",
+            "outputBytes": 0,
+            "retries": 2,
+            "startTime": "2026-11-24T11:52:00Z",
+            "completionTime": "2026-11-24T11:55:00Z"
+          },
+          {
+            "index": 7,
+            "phase": "Succeeded",
+            "runId": "1795548808-7",
+            "taskId": "fanout-scan-1795548808-scan-7",
+            "outputBytes": 11,
+            "startTime": "2026-11-24T11:55:00Z",
+            "completionTime": "2026-11-24T11:57:00Z"
+          },
+          {
+            "index": 8,
+            "phase": "Running",
+            "runId": "1795548808-8",
+            "taskId": "fanout-scan-1795548808-scan-8",
+            "outputBytes": 0,
+            "startTime": "2026-11-24T11:58:00Z",
+            "inFlight": {
+              "knight": "Galahad",
+              "pod": "galahad-abc-1",
+              "node": "node-1",
+              "status": "running",
+              "startedAt": "2026-11-24T11:58:00Z",
+              "elapsedMs": 120000,
+              "lastHeartbeat": "2026-11-24T11:59:50Z",
+              "heartbeatAgeMs": 10000
+            }
+          },
+          {
+            "index": 9,
+            "phase": "Running",
+            "runId": "1795548808-9",
+            "taskId": "fanout-scan-1795548808-scan-9",
+            "outputBytes": 0,
+            "startTime": "2026-11-24T11:58:30Z"
+          }
+        ],
+        "omittedItems": 6
+      }
+    },
+    {
+      "name": "notify",
+      "knight": "gawain",
+      "domain": "",
+      "phase": "Skipped",
+      "startTime": null,
+      "completionTime": "2026-11-24T11:51:00Z",
+      "result": null,
+      "dependsOn": [
+        "discover"
+      ],
+      "retryCount": 0,
+      "reason": "WhenFalse",
+      "when": "steps.discover.output.contains(\"urgent\")",
+      "skipped": true,
+      "skipReason": "WhenFalse",
+      "skipMessage": "when evaluated to false: steps.discover.output.contains(\"urgent\")"
+    },
+    {
+      "name": "cleanup",
+      "knight": "gawain",
+      "domain": "",
+      "phase": "Pending",
+      "startTime": null,
+      "completionTime": null,
+      "result": null,
+      "dependsOn": [
+        "scan"
+      ],
+      "retryCount": 0
+    }
+  ],
+  "runId": "1795548808"
+}

@@ -1,13 +1,20 @@
 import { apiGet } from '../lib/api'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { RefreshCw, ChevronDown, ChevronRight, Clock, Link, Pause, Play } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, ExternalLink } from 'lucide-react'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
 import { formatDuration } from '../lib/format'
-import type { Chain, ChainStep } from '../lib/types'
+import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
+import { useWebSocket } from '../hooks/useWebSocket'
+import {
+  applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
+  parseChainUpdate, runningHref, skipReasonText, sortedItems, type ChainUpdate,
+} from '../lib/chains'
 
+/** Slow fallback poll, only while the live feed is disconnected. */
+export const FALLBACK_POLL_MS = 30_000
 
 /** Assign each step a column (x) based on topological order of dependencies */
 function layoutSteps(steps: ChainStep[]): Map<string, { col: number; row: number }> {
@@ -119,11 +126,213 @@ function StepDAG({ steps, currentStep }: { steps: ChainStep[]; currentStep: stri
               </text>
               <text x={x + 10} y={y + 54} fill={borderColor} fontSize={10}>
                 {step.phase}{step.retryCount > 0 ? ` (retry ${step.retryCount})` : ''}
+                {step.loop ? ` · ${loopLabel(step.loop)}` : ''}
+                {step.fanOut ? ` · ${fanOutDoneLabel(step.fanOut)}` : ''}
               </text>
+              {step.fanOut && <NodeFanOutBar fanOut={step.fanOut} x={x + 10} y={y + nodeH - 6} width={nodeW - 20} />}
+              {isSkipped && <title>{`Skipped: ${skipReasonText(step)}`}</title>}
             </g>
           )
         })}
       </svg>
+    </div>
+  )
+}
+
+function fanOutDoneLabel(f: ChainFanOut): string {
+  const c = fanOutCounts(f)
+  return `${c.done}/${c.total} done`
+}
+
+/** Thin done/running/failed bar along the bottom of a DAG node. */
+function NodeFanOutBar({ fanOut, x, y, width }: { fanOut: ChainFanOut; x: number; y: number; width: number }) {
+  const c = fanOutCounts(fanOut)
+  if (c.total === 0) return null
+  const segs: Array<[number, string]> = [[c.done, '#22c55e'], [c.running, '#3b82f6'], [c.failed, '#ef4444'], [c.skipped, '#6b7280']]
+  let off = 0
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={3} rx={1.5} fill="#334155" />
+      {segs.map(([n, color], i) => {
+        const w = (n / c.total) * width
+        const r = <rect key={i} x={x + off} y={y} width={w} height={3} fill={color} />
+        off += w
+        return n > 0 ? r : null
+      })}
+    </g>
+  )
+}
+
+const SEGMENTS: Array<{ key: 'done' | 'running' | 'failed' | 'skipped'; label: string; cls: string }> = [
+  { key: 'done', label: 'done', cls: 'bg-green-500' },
+  { key: 'running', label: 'running', cls: 'bg-blue-500' },
+  { key: 'failed', label: 'failed', cls: 'bg-red-500' },
+  { key: 'skipped', label: 'skipped', cls: 'bg-gray-500' },
+]
+
+/** Pod / elapsed / heartbeat / activity link for a running task. */
+function LiveTaskCells({ t }: { t: ChainItem | ChainLoopStep }) {
+  return (
+    <>
+      <td className="px-2 py-1 font-mono text-gray-300">{t.inFlight?.pod || '—'}</td>
+      <td className="px-2 py-1 text-gray-400">{elapsedLabel(t)}</td>
+      <td className="px-2 py-1 text-gray-400">{t.phase === 'Running' ? heartbeatLabel(t) : '—'}</td>
+      <td className="px-2 py-1">
+        {t.phase === 'Running' && t.taskId ? (
+          <RouterLink to={runningHref(t.taskId)} className="inline-flex items-center gap-1 text-roundtable-gold hover:underline">
+            activity <ExternalLink className="w-3 h-3" />
+          </RouterLink>
+        ) : null}
+      </td>
+    </>
+  )
+}
+
+/** forEach progress bar that expands into the item list. */
+export function FanOutProgress({ step }: { step: ChainStep & { fanOut: ChainFanOut } }) {
+  const c = fanOutCounts(step.fanOut)
+  const items = sortedItems(step.fanOut)
+  const [open, setOpen] = useState(step.phase === 'Running')
+  const summary = [
+    `${c.done} done`, `${c.running} running`, `${c.failed} failed`,
+    ...(c.skipped ? [`${c.skipped} skipped`] : []),
+    ...(c.pending ? [`${c.pending} pending`] : []),
+  ].join(' · ')
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-label={`${step.name} items`}
+        className="w-full text-left"
+      >
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
+          {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          <span>{summary} of {c.total}</span>
+          {c.omitted > 0 && <span className="text-gray-500">({c.omitted} finished not listed)</span>}
+          {step.maxParallel ? <span className="ml-auto text-gray-500">max {step.maxParallel} parallel</span> : null}
+        </div>
+        <div
+          role="progressbar"
+          aria-label={`${step.name} progress`}
+          aria-valuemin={0}
+          aria-valuemax={c.total}
+          aria-valuenow={c.done + c.failed + c.skipped}
+          className="flex h-2 bg-roundtable-navy rounded-full overflow-hidden"
+        >
+          {c.total > 0 && SEGMENTS.map(seg => c[seg.key] > 0 && (
+            <div key={seg.key} className={seg.cls} style={{ width: `${(c[seg.key] / c.total) * 100}%` }} title={`${c[seg.key]} ${seg.label}`} />
+          ))}
+        </div>
+      </button>
+      {open && (
+        <table className="w-full text-xs mt-2">
+          <thead>
+            <tr className="text-gray-500 text-left">
+              <th className="px-2 py-1 font-normal">#</th>
+              <th className="px-2 py-1 font-normal">Phase</th>
+              <th className="px-2 py-1 font-normal">Pod</th>
+              <th className="px-2 py-1 font-normal">Elapsed</th>
+              <th className="px-2 py-1 font-normal">Heartbeat</th>
+              <th className="px-2 py-1 font-normal"><span className="sr-only">Activity</span></th>
+              <th className="px-2 py-1 font-normal">Output</th>
+              <th className="px-2 py-1 font-normal">Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => (
+              <tr key={item.index} className="border-t border-roundtable-steel/30">
+                <td className="px-2 py-1 text-gray-300">{item.index}</td>
+                <td className="px-2 py-1"><PhaseBadge phase={item.phase} />{item.retries ? <span className="text-yellow-400 ml-1">retry {item.retries}</span> : null}</td>
+                <LiveTaskCells t={item} />
+                <td className="px-2 py-1 text-gray-400">{item.outputBytes ? formatBytes(item.outputBytes) : '—'}</td>
+                <td className="px-2 py-1 text-red-400 max-w-xs truncate" title={item.error ? sanitizeText(item.error) : undefined}>
+                  {item.error ? sanitizeText(item.error) : ''}
+                </td>
+              </tr>
+            ))}
+            {c.omitted > 0 && (
+              <tr className="border-t border-roundtable-steel/30">
+                <td colSpan={8} className="px-2 py-1 text-gray-500 italic">
+                  {c.omitted} more finished item{c.omitted === 1 ? '' : 's'} not listed
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function LoopBodySteps({ steps }: { steps: ChainLoopStep[] }) {
+  return (
+    <table className="w-full text-xs">
+      <tbody>
+        {steps.map(s => (
+          <tr key={s.name} className="border-t border-roundtable-steel/30">
+            <td className="px-2 py-1 text-gray-300">{s.name}</td>
+            <td className="px-2 py-1"><PhaseBadge phase={s.phase} /></td>
+            <LiveTaskCells t={s} />
+            <td className="px-2 py-1 text-red-400 max-w-xs truncate">{s.error ? sanitizeText(s.error) : ''}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+/** Loop step: "round N/M", the current round's body steps and past rounds. */
+export function LoopRounds({ loop }: { loop: ChainLoop }) {
+  const rounds = loopRounds(loop)
+  const current = rounds.find(r => r.iteration === loop.iteration)
+  const past = rounds.filter(r => r !== current)
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-xs mb-1">
+        <Repeat className="w-3 h-3 text-roundtable-gold" />
+        <span className="text-roundtable-gold font-semibold">{loopLabel(loop)}</span>
+        {loop.outcome && <span className="text-gray-400">· {loop.outcome}</span>}
+        {loop.onExhausted && <span className="text-gray-500 ml-auto">on exhausted: {loop.onExhausted}</span>}
+      </div>
+      {current && current.steps.length > 0 && <LoopBodySteps steps={current.steps} />}
+      {past.length > 0 && (
+        <details className="mt-1">
+          <summary className="text-xs text-gray-500 cursor-pointer">Past rounds ({past.length})</summary>
+          <ol className="mt-1 space-y-1">
+            {past.map(r => (
+              <li key={r.iteration} aria-label={`round ${r.iteration}`}>
+                <span className="text-xs text-gray-400">Round {r.iteration}</span>
+                <LoopBodySteps steps={r.steps} />
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
+  )
+}
+
+/** Fan-out, loop and skip details for every step that has them. */
+function StepProgress({ steps }: { steps: ChainStep[] }) {
+  const shown = steps.filter(s => s.fanOut || s.loop || s.phase === 'Skipped')
+  if (shown.length === 0) return null
+  return (
+    <div className="mt-3 space-y-2">
+      {shown.map(step => (
+        <section key={step.name} aria-label={`step ${step.name}`} className="bg-roundtable-navy border border-roundtable-steel/60 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-semibold text-white">{getKnightConfig(step.knight).emoji} {step.name}</span>
+            <PhaseBadge phase={step.phase} />
+          </div>
+          {step.phase === 'Skipped' && (
+            <p className="text-xs text-gray-400">Skipped: {skipReasonText(step)}</p>
+          )}
+          {step.loop && <LoopRounds loop={step.loop} />}
+          {step.fanOut && <FanOutProgress step={step as ChainStep & { fanOut: ChainFanOut }} />}
+        </section>
+      ))}
     </div>
   )
 }
@@ -191,6 +400,9 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
               {step.maxRetries ? `/${step.maxRetries}` : ''}
             </span>
           </div>
+        )}
+        {step.phase === 'Skipped' && (
+          <div className="col-span-2"><span className="text-gray-500">Skipped:</span> <span className="text-gray-300">{skipReasonText(step)}</span></div>
         )}
         {step.outputPath && (
           <div className="col-span-2">
@@ -299,6 +511,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
             )}
           </div>
           <StepDAG steps={chain.steps || []} currentStep={chain.currentStep} />
+          <StepProgress steps={chain.steps || []} />
           {/* Step list for drill-down (#49) */}
           <div className="mt-3 flex flex-wrap gap-2">
             {(chain.steps || []).map(step => {
@@ -327,63 +540,70 @@ export function ChainsPage() {
   // ?chain=<name> deep link (e.g. from the Running page) expands that chain
   const [searchParams] = useSearchParams()
   const focusChain = searchParams.get('chain') || ''
+  const { connected, subscribeTopic } = useWebSocket()
   const [chains, setChains] = useState<Chain[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [autoRefresh, setAutoRefresh] = useState(false)
-  const autoRefreshInitialized = useRef(false)
 
   const abortRef = useRef<AbortController | null>(null)
+  // Live updates that arrive while a list fetch is in flight; replayed on
+  // top of the (possibly older) snapshot so they aren't lost.
+  const pending = useRef<ChainUpdate[] | null>(null)
 
   const fetchChains = useCallback(() => {
     // Abort any in-flight request (#39)
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const replay: ChainUpdate[] = []
+    pending.current = replay
 
     setLoading(true)
     apiGet<Chain[]>('/api/chains', { signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return
-        setChains(data)
+        setChains(replay.reduce(applyChainUpdate, data || []))
         setError('')
       })
       .catch((e) => {
         // Keep the last good list on transient failures — surface the error instead
         if (e.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load chains')
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      .finally(() => {
+        if (controller.signal.aborted) return
+        if (pending.current === replay) pending.current = null
+        setLoading(false)
+      })
   }, [])
 
-  useEffect(() => { fetchChains() }, [fetchChains])
+  // Live `chain` WS messages (add/update/delete of a Chain)
+  useEffect(() => subscribeTopic('chain', (data, msg) => {
+    const u = parseChainUpdate(data, msg)
+    if (!u) return
+    pending.current?.push(u)
+    setChains(prev => applyChainUpdate(prev, u))
+  }), [subscribeTopic])
 
-  // Auto-enable when any chain is Running, auto-disable when all done (#Bug #2: re-enable when chains start)
+  // Fetch on mount and re-sync on every (re)connect, so changes missed
+  // while the feed was down are picked up.
+  const mounted = useRef(false)
   useEffect(() => {
-    if (chains.length === 0) return
-    const hasRunning = chains.some(c => c.phase === 'Running' || c.phase === 'StepRunning')
-    if (!autoRefreshInitialized.current) {
-      setAutoRefresh(hasRunning)
-      autoRefreshInitialized.current = true
-    } else if (!hasRunning && autoRefresh) {
-      setAutoRefresh(false)
-    } else if (hasRunning && !autoRefresh) {
-      setAutoRefresh(true)
-    }
-  }, [chains, autoRefresh])
+    if (!mounted.current || connected) fetchChains()
+    mounted.current = true
+  }, [connected, fetchChains])
 
-  // Poll interval — debounced (#38), pause when hidden (#22)
+  // Slow fallback poll only while the live feed is down; paused when hidden (#22)
   useEffect(() => {
-    if (!autoRefresh) return
+    if (connected) return
     let interval: ReturnType<typeof setInterval> | null = null
-
-    const start = () => { if (!interval) interval = setInterval(fetchChains, 8000) }
+    const start = () => { if (!interval) interval = setInterval(fetchChains, FALLBACK_POLL_MS) }
     const stop = () => { if (interval) { clearInterval(interval); interval = null } }
     const onVis = () => { document.hidden ? stop() : start() }
 
     start()
     document.addEventListener('visibilitychange', onVis)
     return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
-  }, [autoRefresh, fetchChains])
+  }, [connected, fetchChains])
 
   // Cleanup abort on unmount
   useEffect(() => () => { abortRef.current?.abort() }, [])
@@ -391,23 +611,17 @@ export function ChainsPage() {
   return (
     <div>
       <PageHeader icon={Link} title="Chain Executions">
-        {autoRefresh && (
-          <span className="flex items-center gap-1.5 text-xs text-blue-400">
-            <RefreshCw className="w-3 h-3 animate-spin" />
-            Auto-refreshing every 8s
+        {connected ? (
+          <span className="flex items-center gap-1.5 text-xs text-green-400">
+            <Radio className="w-3 h-3" />
+            Live
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs text-yellow-400">
+            <WifiOff className="w-3 h-3" />
+            Live feed disconnected — polling every {FALLBACK_POLL_MS / 1000}s
           </span>
         )}
-        <button
-          onClick={() => setAutoRefresh(a => !a)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-            autoRefresh
-              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-              : 'bg-roundtable-steel/50 text-gray-400 hover:text-gray-300'
-          }`}
-        >
-          {autoRefresh ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-          Auto
-        </button>
         <RefreshButton onClick={fetchChains} loading={loading} />
       </PageHeader>
 

@@ -42,6 +42,17 @@ describe('useWebSocket topics', () => {
   })
 })
 
+describe('useWebSocket chain topic', () => {
+  it('routes chain messages to listeners with the envelope (op), not the feed', () => {
+    const { result } = renderHook(() => useWebSocket(), { wrapper })
+    const seen: Array<[unknown, unknown]> = []
+    act(() => { result.current.subscribeTopic('chain', (d, msg) => seen.push([d, msg.op])) })
+    act(() => FakeWS.last.onmessage!({ data: JSON.stringify({ type: 'chain', subject: 'chains.pr', op: 'delete', data: { name: 'pr' }, timestamp: '2026-11-24T10:00:00Z' }) }))
+    expect(seen).toEqual([[{ name: 'pr' }, 'delete']])
+    expect(result.current.events).toHaveLength(0)
+  })
+})
+
 describe('useWebSocket activity', () => {
   it('routes activity messages to listeners and sends commands only when open', () => {
     const { result } = renderHook(() => useWebSocket(), { wrapper })
