@@ -11,8 +11,8 @@ export interface NatsEvent {
 }
 
 /** Message types delivered to topic listeners instead of the event feed. */
-export type WsTopic = 'running'
-const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running'])
+export type WsTopic = 'running' | 'activity'
+const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running', 'activity'])
 export type TopicListener = (data: unknown) => void
 
 const MAX_EVENTS = 200
@@ -176,7 +176,15 @@ function useWebSocketConnection() {
     return () => { set.delete(fn) }
   }, [])
 
-  return { events, connected, error, clearEvents, subscribeTopic }
+  /** Send a JSON command (e.g. an activity subscribe); false when not connected. */
+  const send = useCallback((msg: unknown): boolean => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== 1 /* OPEN */) return false
+    ws.send(JSON.stringify(msg))
+    return true
+  }, [])
+
+  return { events, connected, error, clearEvents, subscribeTopic, send }
 }
 
 type WebSocketState = ReturnType<typeof useWebSocketConnection>
