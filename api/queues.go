@@ -257,21 +257,21 @@ func knightQueueHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["knight"]
 		if !validK8sName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 		b := queues
 		if b == nil {
-			http.Error(w, "JetStream not available", http.StatusServiceUnavailable)
+			jsonError(w, "JetStream not available", http.StatusServiceUnavailable)
 			return
 		}
 		cr, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, "Knight not found", http.StatusNotFound)
+			jsonError(w, "Knight not found", http.StatusNotFound)
 			return
 		}
 
@@ -289,18 +289,18 @@ func knightQueueHandler(namespace string) http.HandlerFunc {
 func queuesHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 		b := queues
 		if b == nil {
-			http.Error(w, "JetStream not available", http.StatusServiceUnavailable)
+			jsonError(w, "JetStream not available", http.StatusServiceUnavailable)
 			return
 		}
 		crList, err := dynClient.Resource(knightGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 		if err != nil {
 			slog.Error("K8s knight CR list error", "error", err)
-			http.Error(w, "Failed to list knights", http.StatusInternalServerError)
+			jsonError(w, "Failed to list knights", http.StatusInternalServerError)
 			return
 		}
 

@@ -527,17 +527,17 @@ func parseSince(r *http.Request) (time.Duration, error) {
 func knightQueueHistoryHandler(s *queueSampler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s == nil {
-			http.Error(w, "Queue history not available", http.StatusServiceUnavailable)
+			jsonError(w, "Queue history not available", http.StatusServiceUnavailable)
 			return
 		}
 		name := mux.Vars(r)["knight"]
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
 		since, err := parseSince(r)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -549,12 +549,12 @@ func knightQueueHistoryHandler(s *queueSampler) http.HandlerFunc {
 func queuesHistoryHandler(s *queueSampler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s == nil {
-			http.Error(w, "Queue history not available", http.StatusServiceUnavailable)
+			jsonError(w, "Queue history not available", http.StatusServiceUnavailable)
 			return
 		}
 		since, err := parseSince(r)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		out := []knightQueueHistory{}

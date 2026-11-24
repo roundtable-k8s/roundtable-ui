@@ -169,13 +169,11 @@ func authMiddleware(next http.Handler) http.Handler {
 				ApiKey string `json:"apiKey"`
 			}
 			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
-				http.Error(w, "Invalid request", http.StatusBadRequest)
+				jsonError(w, "Invalid request", http.StatusBadRequest)
 				return
 			}
 			if body.ApiKey != apiKey {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Invalid API key"})
+				jsonError(w, "Invalid API key", http.StatusUnauthorized)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -196,9 +194,7 @@ func authMiddleware(next http.Handler) http.Handler {
 		}
 
 		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != apiKey {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			jsonError(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -239,7 +235,7 @@ func (rl *rateLimiterT) allow() bool {
 func (rl *rateLimiterT) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !rl.allow() {
-			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			jsonError(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -536,14 +532,14 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 func fleetHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		crList, err := dynClient.Resource(knightGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 		if err != nil {
 			slog.Error("K8s knight CR list error", "error", err)
-			http.Error(w, "Failed to list fleet", http.StatusInternalServerError)
+			jsonError(w, "Failed to list fleet", http.StatusInternalServerError)
 			return
 		}
 
@@ -610,19 +606,19 @@ func knightHandler(namespace string) http.HandlerFunc {
 		name := vars["knight"]
 
 		if !validK8sName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
 
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		// Fetch Knight CR first — it is the authoritative source
 		crObj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, "Knight not found", http.StatusNotFound)
+			jsonError(w, "Knight not found", http.StatusNotFound)
 			return
 		}
 
@@ -772,7 +768,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			reqType = "stats"
 		}
 		if !validSessionTypes[reqType] {
-			http.Error(w, "Invalid session type (allowed: stats, recent, tree, history, session)", http.StatusBadRequest)
+			jsonError(w, "Invalid session type (allowed: stats, recent, tree, history, session)", http.StatusBadRequest)
 			return
 		}
 
@@ -780,13 +776,13 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 		// front so a bad id fails fast regardless of knight readiness.
 		sessionID := r.URL.Query().Get("id")
 		if reqType == "session" && !validSessionID.MatchString(sessionID) {
-			http.Error(w, "Invalid or missing session id", http.StatusBadRequest)
+			jsonError(w, "Invalid or missing session id", http.StatusBadRequest)
 			return
 		}
 
 		// Validate knight name (prevents NATS subject injection)
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
 
@@ -794,12 +790,12 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 		// session on that pod (#219). Both end up in NATS subjects/payloads.
 		podParam := r.URL.Query().Get("pod")
 		if podParam != "" && !validPodName(podParam) {
-			http.Error(w, "Invalid pod name", http.StatusBadRequest)
+			jsonError(w, "Invalid pod name", http.StatusBadRequest)
 			return
 		}
 		runID := r.URL.Query().Get("runId")
 		if runID != "" && !validRunID.MatchString(runID) {
-			http.Error(w, "Invalid runId", http.StatusBadRequest)
+			jsonError(w, "Invalid runId", http.StatusBadRequest)
 			return
 		}
 
@@ -837,7 +833,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 
 		req := sessionRequester()
 		if req == nil {
-			http.Error(w, "NATS not available", http.StatusServiceUnavailable)
+			jsonError(w, "NATS not available", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -887,7 +883,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 		data, err := req(subject, payload, timeout)
 		if err != nil {
 			slog.Warn("Knight introspect timeout", "knight", name, "subject", subject, "error", err)
-			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
 		w.Header().Set(introspectScopeHeader, "knight")
@@ -897,7 +893,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 	// Explicit pod: only that pod may answer.
 	if podParam != "" {
 		if podErr != nil {
-			http.Error(w, "Cannot verify pod: pod list unavailable", http.StatusServiceUnavailable)
+			jsonError(w, "Cannot verify pod: pod list unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		known := false
@@ -915,7 +911,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 				writePodGone(w, podParam)
 				return
 			}
-			http.Error(w, "Unknown pod for this knight", http.StatusNotFound)
+			jsonError(w, "Unknown pod for this knight", http.StatusNotFound)
 			return
 		}
 		subject := podIntrospectSubject(prefix, name, podParam)
@@ -928,11 +924,11 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 				return
 			}
 			if isNoResponders(err) {
-				http.Error(w, "Pod does not support per-pod introspection", http.StatusBadGateway)
+				jsonError(w, "Pod does not support per-pod introspection", http.StatusBadGateway)
 				return
 			}
 			slog.Warn("Knight introspect timeout", "knight", name, "subject", subject, "error", err)
-			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
 		w.Header().Set(introspectScopeHeader, "pod")
@@ -963,14 +959,14 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 			agg, ok = mergeHistory(replies)
 		}
 		if !ok {
-			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
 		out, _ = json.Marshal(agg)
 	default: // session, recent, tree: the pod that has the data answers
 		pick, ok := pickFirstFound(replies)
 		if !ok {
-			http.Error(w, "Knight introspection timeout", http.StatusGatewayTimeout)
+			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
 		out = withPod(pick.Data, pick.Pod)
@@ -986,14 +982,14 @@ func taskHistoryHandler(fleetPrefix, streamName string) http.HandlerFunc {
 		stream, err := js.Stream(ctx, streamName)
 		if err != nil {
 			slog.Error("JetStream error", "error", err)
-			http.Error(w, "Task history unavailable", http.StatusInternalServerError)
+			jsonError(w, "Task history unavailable", http.StatusInternalServerError)
 			return
 		}
 
 		info, err := stream.Info(ctx)
 		if err != nil {
 			slog.Error("JetStream stream info error", "error", err)
-			http.Error(w, "Task history unavailable", http.StatusInternalServerError)
+			jsonError(w, "Task history unavailable", http.StatusInternalServerError)
 			return
 		}
 		results := []TaskEvent{}
@@ -1052,22 +1048,22 @@ func taskDispatchHandler(fleetPrefix string) http.HandlerFunc {
 			Timeout int    `json:"timeout_ms,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
+			jsonError(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
 
 		// Validate inputs to prevent NATS subject injection
 		if !validKnightName.MatchString(req.Knight) || !validKnightName.MatchString(req.Domain) {
-			http.Error(w, "Invalid knight or domain name", http.StatusBadRequest)
+			jsonError(w, "Invalid knight or domain name", http.StatusBadRequest)
 			return
 		}
 		if len(req.Task) == 0 || len(req.Task) > 10000 {
-			http.Error(w, "Task must be 1-10000 characters", http.StatusBadRequest)
+			jsonError(w, "Task must be 1-10000 characters", http.StatusBadRequest)
 			return
 		}
 
 		if nc == nil {
-			http.Error(w, "NATS not available", http.StatusServiceUnavailable)
+			jsonError(w, "NATS not available", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -1088,7 +1084,7 @@ func taskDispatchHandler(fleetPrefix string) http.HandlerFunc {
 
 		if err := nc.Publish(subject, payload); err != nil {
 			slog.Error("NATS publish error", "error", err)
-			http.Error(w, "Failed to dispatch task", http.StatusInternalServerError)
+			jsonError(w, "Failed to dispatch task", http.StatusInternalServerError)
 			return
 		}
 
@@ -1106,7 +1102,7 @@ func briefingListHandler(vaultPath string) http.HandlerFunc {
 		dir := fmt.Sprintf("%s/Briefings/Daily", vaultPath)
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			http.Error(w, "Briefings directory not found", http.StatusNotFound)
+			jsonError(w, "Briefings directory not found", http.StatusNotFound)
 			return
 		}
 
@@ -1130,19 +1126,19 @@ func briefingHandler(vaultPath string) http.HandlerFunc {
 
 		// Sanitize: only allow YYYY-MM-DD format to prevent path traversal
 		if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(date) {
-			http.Error(w, "Invalid date format", http.StatusBadRequest)
+			jsonError(w, "Invalid date format", http.StatusBadRequest)
 			return
 		}
 
 		path := filepath.Clean(fmt.Sprintf("%s/%s.md", allowedDir, date))
 		if !strings.HasPrefix(path, allowedDir) {
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			jsonError(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			http.Error(w, "Briefing not found", http.StatusNotFound)
+			jsonError(w, "Briefing not found", http.StatusNotFound)
 			return
 		}
 
@@ -1160,7 +1156,7 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 		// cleanly "Disconnected" while the backend is degraded.
 		if !nc.IsConnected() {
 			slog.Warn("NATS not connected, rejecting WS")
-			http.Error(w, "NATS unavailable", http.StatusServiceUnavailable)
+			jsonError(w, "NATS unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -1456,14 +1452,14 @@ type StepSummary struct {
 func chainsHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		list, err := dynClient.Resource(chainGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 		if err != nil {
 			slog.Error("Chain list error", "error", err)
-			http.Error(w, "Failed to list chains", http.StatusInternalServerError)
+			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
 			return
 		}
 
@@ -1481,20 +1477,20 @@ func chainsHandler(namespace string) http.HandlerFunc {
 func chainDetailHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		vars := mux.Vars(r)
 		name := vars["name"]
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid chain name", http.StatusBadRequest)
+			jsonError(w, "Invalid chain name", http.StatusBadRequest)
 			return
 		}
 
 		obj, err := dynClient.Resource(chainGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, "Chain not found", http.StatusNotFound)
+			jsonError(w, "Chain not found", http.StatusNotFound)
 			return
 		}
 
@@ -1693,14 +1689,14 @@ type MissionSummary struct {
 func missionsHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		list, err := dynClient.Resource(missionGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 		if err != nil {
 			slog.Error("Mission list error", "error", err)
-			http.Error(w, "Failed to list missions", http.StatusInternalServerError)
+			jsonError(w, "Failed to list missions", http.StatusInternalServerError)
 			return
 		}
 
@@ -1717,20 +1713,20 @@ func missionsHandler(namespace string) http.HandlerFunc {
 func missionDetailHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		vars := mux.Vars(r)
 		name := vars["name"]
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid mission name", http.StatusBadRequest)
+			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
 
 		obj, err := dynClient.Resource(missionGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, "Mission not found", http.StatusNotFound)
+			jsonError(w, "Mission not found", http.StatusNotFound)
 			return
 		}
 
@@ -1743,35 +1739,35 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 func missionCreateHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		// Parse request body
 		var reqBody map[string]interface{}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&reqBody); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			jsonError(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		// Validate required fields
 		name, ok := reqBody["name"].(string)
 		if !ok || !validK8sName.MatchString(name) {
-			http.Error(w, "Invalid mission name", http.StatusBadRequest)
+			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
 
 		// Validate objective
 		objective, _ := reqBody["objective"].(string)
 		if len(objective) == 0 || len(objective) > 1000 {
-			http.Error(w, "Objective required (1-1000 chars)", http.StatusBadRequest)
+			jsonError(w, "Objective required (1-1000 chars)", http.StatusBadRequest)
 			return
 		}
 
 		// Validate TTL if provided (60-604800 seconds)
 		if ttl, ok := reqBody["ttlSeconds"].(float64); ok {
 			if ttl < 60 || ttl > 604800 {
-				http.Error(w, "TTL must be 60-604800 seconds", http.StatusBadRequest)
+				jsonError(w, "TTL must be 60-604800 seconds", http.StatusBadRequest)
 				return
 			}
 		}
@@ -1779,7 +1775,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 		// Validate timeout if provided (60-86400 seconds)
 		if timeout, ok := reqBody["timeoutSeconds"].(float64); ok {
 			if timeout < 60 || timeout > 86400 {
-				http.Error(w, "Timeout must be 60-86400 seconds", http.StatusBadRequest)
+				jsonError(w, "Timeout must be 60-86400 seconds", http.StatusBadRequest)
 				return
 			}
 		}
@@ -1787,7 +1783,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 		// Validate cleanupPolicy if provided
 		if policy, ok := reqBody["cleanupPolicy"].(string); ok {
 			if policy != "Delete" && policy != "Retain" {
-				http.Error(w, "cleanupPolicy must be Delete or Retain", http.StatusBadRequest)
+				jsonError(w, "cleanupPolicy must be Delete or Retain", http.StatusBadRequest)
 				return
 			}
 		}
@@ -1799,7 +1795,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 			planner, _ := reqBody["planner"].(map[string]interface{})
 			knightName := getRefName(planner, "knightRef")
 			if !validK8sName.MatchString(knightName) {
-				http.Error(w, "Meta-missions require planner.knightRef.name (a valid knight name)", http.StatusBadRequest)
+				jsonError(w, "Meta-missions require planner.knightRef.name (a valid knight name)", http.StatusBadRequest)
 				return
 			}
 		}
@@ -1830,7 +1826,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 		)
 		if err != nil {
 			slog.Error("Mission create error", "error", err)
-			http.Error(w, fmt.Sprintf("Failed to create mission: %v", err), http.StatusInternalServerError)
+			jsonError(w, fmt.Sprintf("Failed to create mission: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -1848,21 +1844,21 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 func missionDeleteHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		vars := mux.Vars(r)
 		name := vars["name"]
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid mission name", http.StatusBadRequest)
+			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
 
 		err := dynClient.Resource(missionGVR).Namespace(namespace).Delete(r.Context(), name, metav1.DeleteOptions{})
 		if err != nil {
 			slog.Error("Mission delete error", "error", err)
-			http.Error(w, "Failed to delete mission", http.StatusInternalServerError)
+			jsonError(w, "Failed to delete mission", http.StatusInternalServerError)
 			return
 		}
 
@@ -2020,14 +2016,14 @@ type RoundTableSummary struct {
 func roundTablesHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 		if err != nil {
 			slog.Error("RoundTable list error", "error", err)
-			http.Error(w, "Failed to list roundtables", http.StatusInternalServerError)
+			jsonError(w, "Failed to list roundtables", http.StatusInternalServerError)
 			return
 		}
 
@@ -2044,20 +2040,20 @@ func roundTablesHandler(namespace string) http.HandlerFunc {
 func roundTableDetailHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
+			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
 
 		vars := mux.Vars(r)
 		name := vars["name"]
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid roundtable name", http.StatusBadRequest)
+			jsonError(w, "Invalid roundtable name", http.StatusBadRequest)
 			return
 		}
 
 		obj, err := dynClient.Resource(roundTableGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			http.Error(w, "RoundTable not found", http.StatusNotFound)
+			jsonError(w, "RoundTable not found", http.StatusNotFound)
 			return
 		}
 
@@ -2152,17 +2148,17 @@ func missionResultsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["name"]
 		if !validKnightName.MatchString(name) {
-			http.Error(w, "Invalid mission name", http.StatusBadRequest)
+			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
 		kv, err := getOrCreateKVBucket(r.Context(), "mission-results")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		entry, err := kv.Get(r.Context(), name)
 		if err != nil {
-			http.Error(w, "Results not found", http.StatusNotFound)
+			jsonError(w, "Results not found", http.StatusNotFound)
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
@@ -2175,18 +2171,18 @@ func chainStepOutputHandler() http.HandlerFunc {
 		name := vars["name"]
 		step := vars["step"]
 		if !validKnightName.MatchString(name) || !validKnightName.MatchString(step) {
-			http.Error(w, "Invalid name", http.StatusBadRequest)
+			jsonError(w, "Invalid name", http.StatusBadRequest)
 			return
 		}
 		kv, err := getOrCreateKVBucket(r.Context(), "chain-outputs")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		key := name + "." + step
 		entry, err := kv.Get(r.Context(), key)
 		if err != nil {
-			http.Error(w, "Output not found", http.StatusNotFound)
+			jsonError(w, "Output not found", http.StatusNotFound)
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
@@ -2197,12 +2193,12 @@ func kvKeysHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucket := mux.Vars(r)["bucket"]
 		if !validBucketName.MatchString(bucket) {
-			http.Error(w, "Invalid bucket name", http.StatusBadRequest)
+			jsonError(w, "Invalid bucket name", http.StatusBadRequest)
 			return
 		}
 		kv, err := getOrCreateKVBucket(r.Context(), bucket)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		keys, err := kv.Keys(r.Context())
@@ -2223,17 +2219,17 @@ func kvGetHandler() http.HandlerFunc {
 		bucket := vars["bucket"]
 		key := vars["key"]
 		if !validBucketName.MatchString(bucket) {
-			http.Error(w, "Invalid bucket name", http.StatusBadRequest)
+			jsonError(w, "Invalid bucket name", http.StatusBadRequest)
 			return
 		}
 		kv, err := getOrCreateKVBucket(r.Context(), bucket)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		entry, err := kv.Get(r.Context(), key)
 		if err != nil {
-			http.Error(w, "Key not found", http.StatusNotFound)
+			jsonError(w, "Key not found", http.StatusNotFound)
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
