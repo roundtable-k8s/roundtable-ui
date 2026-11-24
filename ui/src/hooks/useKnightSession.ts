@@ -19,6 +19,19 @@ export interface KnightSessionStats {
     activeTasks: number
     model: string
   }
+  // Per-pod fan-out (#219): the API sums every ready pod's stats into the
+  // fields above and keeps each pod's own reply here.
+  pods?: PodStatsBreakdown[]
+  podCount?: number
+  respondedPods?: number
+}
+
+// One pod's entry in an aggregated stats/history reply.
+export interface PodStatsBreakdown {
+  pod: string
+  ok: boolean
+  error?: string
+  stats?: Partial<Omit<KnightSessionStats, 'pods'>>
 }
 
 export interface SessionEntry {
@@ -43,6 +56,7 @@ export interface SessionHistoryItem {
   messageCount: number
   firstPrompt: string
   sizeBytes: number | null
+  pod?: string  // pod the session lives on (set by the API's per-pod fan-out)
 }
 
 export interface SessionTreeNode {
