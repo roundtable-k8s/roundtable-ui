@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
-import { apiGet, apiGetText } from '../lib/api'
+import { apiGet } from '../lib/api'
 import { formatCost, formatUptime, formatTimestamp } from '../lib/format'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition } from '../hooks/useFleet'
 import { sanitizeText } from '../lib/untrusted'
+import { PodLogsViewer } from './PodLogsViewer'
 
 interface Props {
   knight: Knight | null
@@ -25,8 +26,6 @@ const entryTypeColors: Record<string, string> = {
 export function KnightDetailDrawer({ knight, onClose }: Props) {
   const { stats, recent, loading, error, fetchStats, fetchRecent } = useKnightSession()
   const [recentLoading, setRecentLoading] = useState(false)
-  const [logs, setLogs] = useState<string>('')
-  const [logsLoading, setLogsLoading] = useState(false)
   const [logsExpanded, setLogsExpanded] = useState(false)
   const [knightDetail, setKnightDetail] = useState<Knight | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -50,17 +49,6 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
     setRecentLoading(false)
   }
 
-  const fetchLogs = async (knightName: string) => {
-    setLogsLoading(true)
-    try {
-      setLogs(await apiGetText(`/api/fleet/${knightName}/logs`))
-    } catch (e) {
-      setLogs(`Error: ${e instanceof Error ? e.message : 'Unknown error'}`)
-    } finally {
-      setLogsLoading(false)
-    }
-  }
-
   useEffect(() => {
     if (knight) {
       // Clear the previous knight's detail so a slow/failed fetch can't show
@@ -68,7 +56,6 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
       setKnightDetail(null)
       refreshAll(knight.name)
       setLogsExpanded(false)
-      setLogs('')
     }
   }, [knight])
 
@@ -365,12 +352,7 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
           {/* Pod Logs Viewer */}
           <div>
             <button
-              onClick={() => {
-                if (!logsExpanded && logs === '') {
-                  fetchLogs(knight.name)
-                }
-                setLogsExpanded(!logsExpanded)
-              }}
+              onClick={() => setLogsExpanded(!logsExpanded)}
               className="w-full flex items-center justify-between text-sm font-medium text-gray-400 mb-3 hover:text-roundtable-gold transition-colors"
             >
               <div className="flex items-center gap-2">
@@ -381,27 +363,7 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
             </button>
             {logsExpanded && (
               <div className="bg-black/50 border border-roundtable-steel rounded-lg p-3">
-                {logsLoading ? (
-                  <div className="text-center py-4">
-                    <div className="flex justify-center mb-2"><Spinner size="sm" /></div>
-                    <p className="text-gray-500 text-xs">Loading logs...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-500">Last 100 lines</span>
-                      <button
-                        onClick={() => fetchLogs(knight.name)}
-                        className="text-xs text-roundtable-gold hover:text-roundtable-gold/80"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                    <pre className="text-xs text-gray-300 font-mono overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words">
-                      {sanitizeText(logs) || 'No logs available'}
-                    </pre>
-                  </>
-                )}
+                <PodLogsViewer knightName={knight.name} />
               </div>
             )}
           </div>

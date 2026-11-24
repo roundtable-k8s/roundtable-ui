@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+
 	"log/slog"
 	"net/http"
 	"os"
@@ -367,6 +367,7 @@ func main() {
 	api.HandleFunc("/fleet", fleetHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}", knightHandler(namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/logs", knightLogsHandler(namespace)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/pods", knightPodsHandler(namespace, running)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
 	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
@@ -703,52 +704,6 @@ func knightHandler(namespace string) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(detail)
-	}
-}
-
-func knightLogsHandler(namespace string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		name := vars["knight"]
-		lines := int64(100)
-
-		if !validK8sName.MatchString(name) {
-			http.Error(w, "Invalid knight name", http.StatusBadRequest)
-			return
-		}
-
-		if k8sClient == nil {
-			http.Error(w, "Kubernetes not available", http.StatusServiceUnavailable)
-			return
-		}
-
-		pods, err := k8sClient.CoreV1().Pods(namespace).List(r.Context(), metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("app.kubernetes.io/name=knight,app.kubernetes.io/instance=%s", name),
-		})
-		if err != nil || len(pods.Items) == 0 {
-			http.Error(w, "Knight not found", http.StatusNotFound)
-			return
-		}
-
-		// Timeout prevents indefinite streaming (#55)
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		defer cancel()
-
-		req := k8sClient.CoreV1().Pods(namespace).GetLogs(pods.Items[0].Name, &corev1.PodLogOptions{
-			TailLines: &lines,
-		})
-		stream, err := req.Stream(ctx)
-		if err != nil {
-			slog.Error("Log stream error", "knight", name, "error", err)
-			http.Error(w, "Failed to read logs", http.StatusInternalServerError)
-			return
-		}
-		defer stream.Close()
-
-		// Redact the (size-capped) log tail before it leaves the API (#188).
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		raw, _ := io.ReadAll(io.LimitReader(stream, 1<<20))
-		w.Write([]byte(redactSecrets(string(raw))))
 	}
 }
 
