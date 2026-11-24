@@ -65,6 +65,7 @@ export interface Knight {
   totalCost?: string
   concurrency?: number
   taskTimeoutSeconds?: number
+  natsPrefix?: string      // NATS prefix of the knight's RoundTable (#239)
   conditions?: KnightCondition[]
   pods?: KnightPod[]
   scaling?: KnightScaling

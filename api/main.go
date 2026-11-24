@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -90,6 +92,9 @@ type KnightStatus struct {
 	TotalCost          string   `json:"totalCost,omitempty"`
 	Concurrency        int32    `json:"concurrency,omitempty"`
 	TaskTimeoutSeconds int32    `json:"taskTimeoutSeconds,omitempty"`
+	// NATSPrefix is the subject prefix the knight listens on, i.e. its
+	// RoundTable's prefix (#239). Empty when it cannot be derived.
+	NATSPrefix string `json:"natsPrefix,omitempty"`
 
 	// Pods lists every replica of the knight (#182). Empty when scaled to
 	// zero or not yet scheduled.
@@ -120,6 +125,7 @@ type TaskEvent struct {
 	Type      string          `json:"type"`         // task, result, chain
 	Op        string          `json:"op,omitempty"` // chain: upsert | delete
 	Subject   string          `json:"subject"`
+	Table     string          `json:"table,omitempty"` // RoundTable the subject belongs to (#239)
 	Data      json.RawMessage `json:"data"`
 	Timestamp time.Time       `json:"timestamp"`
 }
@@ -256,8 +262,6 @@ func main() {
 	namespace := envOr("NAMESPACE", "roundtable")
 	port := envOr("PORT", "8080")
 	vaultPath := envOr("VAULT_PATH", "/vault")
-	fleetPrefix := envOr("FLEET_PREFIX", "fleet-a")         // NATS subject prefix (#23)
-	fleetStream := envOr("FLEET_STREAM", "fleet_a_results") // JetStream stream name
 
 	// Connect to NATS. Reconnect forever: NATS can restart underneath a
 	// long-lived dashboard pod, and the nats.go defaults (MaxReconnects=60)
@@ -330,7 +334,11 @@ func main() {
 	defer stopRunning()
 	running := newRunningRegistry(defaultRunningMaxEntries, runningHeartbeatInterval())
 	activity := newActivityStore()
-	startRunningRegistry(runningCtx, running, activity, fleetPrefix, namespace)
+	// Tables come from RoundTable resources; FLEET_PREFIX/FLEET_STREAM
+	// optionally narrow them to one table (#239).
+	tables := newTableSourceFromEnv(namespace)
+	fleetPrefix := tables.defaultPrefix()
+	startRunningRegistry(runningCtx, running, activity, tables.prefixes(runningCtx), namespace)
 
 	// Live chain updates over WS (#228)
 	var chains *chainWatcher
@@ -380,8 +388,8 @@ func main() {
 	api.HandleFunc("/queues/history", queuesHistoryHandler(sampler)).Methods("GET")
 
 	// Task endpoints
-	api.HandleFunc("/tasks", taskHistoryHandler(fleetPrefix, fleetStream)).Methods("GET")
-	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(fleetPrefix)).Methods("POST")
+	api.HandleFunc("/tasks", taskHistoryHandler(tables)).Methods("GET")
+	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(tables)).Methods("POST")
 
 	// Chain endpoints
 	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
@@ -411,7 +419,7 @@ func main() {
 	api.HandleFunc("/running", runningHandler(running)).Methods("GET")
 
 	// WebSocket for real-time NATS events
-	api.HandleFunc("/ws", wsHandler(fleetPrefix, running, activity, chains))
+	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains))
 
 	// Config endpoint to expose fleet prefix to frontend (#60)
 	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
@@ -516,7 +524,10 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 		}
 	}
 
+	natsPrefix, _ := deriveIntrospectPrefix(cr)
+
 	return KnightStatus{
+		NATSPrefix:         natsPrefix,
 		Name:               cr.GetName(),
 		Domain:             getStr(spec, "domain"),
 		Status:             podStatus,
@@ -984,78 +995,81 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 	writeRedactedJSON(w, out)
 }
 
-func taskHistoryHandler(fleetPrefix, streamName string) http.HandlerFunc {
+// taskHistoryHandler returns recent results from every table's results
+// stream (#239), oldest first, each tagged with its table. ?table=<name>
+// narrows to one table. The covered tables are returned too so the UI can
+// offer a filter even before any task ran.
+func taskHistoryHandler(src *tableSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Read recent results from NATS JetStream
 		ctx := r.Context()
-		stream, err := js.Stream(ctx, streamName)
-		if err != nil {
-			slog.Error("JetStream error", "error", err)
-			jsonError(w, "Task history unavailable", http.StatusInternalServerError)
-			return
-		}
-
-		info, err := stream.Info(ctx)
-		if err != nil {
-			slog.Error("JetStream stream info error", "error", err)
-			jsonError(w, "Task history unavailable", http.StatusInternalServerError)
-			return
-		}
-		results := []TaskEvent{}
-
-		// Get the newest N messages: result subjects are unique per task, so
-		// start limit messages back from the stream tail and read forward
-		const limit = 50
-		startSeq := uint64(1)
-		if info.State.LastSeq > limit {
-			startSeq = info.State.LastSeq - limit + 1
-		}
-		// Ephemeral consumer with InactiveThreshold for auto-cleanup (#54)
-		cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-			DeliverPolicy:     jetstream.DeliverByStartSequencePolicy,
-			OptStartSeq:       startSeq,
-			FilterSubject:     fleetPrefix + ".results.>",
-			AckPolicy:         jetstream.AckNonePolicy,
-			InactiveThreshold: 30 * time.Second,
-		})
-		if err != nil {
-			// Fall back to stream info
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"results":  results,
-				"messages": info.State.Msgs,
-			})
-			return
-		}
-
-		msgs, _ := cons.FetchNoWait(limit)
-		if msgs != nil {
-			for msg := range msgs.Messages() {
-				results = append(results, TaskEvent{
-					Type:      "result",
-					Subject:   msg.Subject(),
-					Data:      msg.Data(),
-					Timestamp: eventTimestamp(msg.Data()),
-				})
+		tables := src.tables(ctx)
+		selected := tables
+		if name := r.URL.Query().Get("table"); name != "" {
+			t, ok := findTableByName(tables, name)
+			if !ok {
+				jsonError(w, "Unknown table", http.StatusBadRequest)
+				return
 			}
+			selected = []TableInfo{t}
+		}
+
+		results := []TaskEvent{}
+		var total uint64
+		unavailable := []string{}
+		for _, t := range selected {
+			if t.ResultsStream == "" {
+				unavailable = append(unavailable, t.Name)
+				continue
+			}
+			events, msgs, err := readResults(ctx, t.ResultsStream, t.Prefix+".results.>", taskHistoryPerTable)
+			if err != nil {
+				slog.Error("JetStream task history error", "table", t.Name, "stream", t.ResultsStream, "error", err)
+				unavailable = append(unavailable, t.Name)
+				continue
+			}
+			total += msgs
+			for _, e := range events {
+				e.Table = t.Name
+				results = append(results, e)
+			}
+		}
+		if len(unavailable) == len(selected) {
+			jsonError(w, "Task history unavailable", http.StatusInternalServerError)
+			return
+		}
+
+		sort.SliceStable(results, func(i, j int) bool { return results[i].Timestamp.Before(results[j].Timestamp) })
+		if len(results) > taskHistoryMax {
+			results = results[len(results)-taskHistoryMax:]
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"results":  results,
-			"messages": info.State.Msgs,
+			"results":     results,
+			"messages":    total,
+			"tables":      tables,
+			"unavailable": unavailable,
 		})
 	}
 }
 
-func taskDispatchHandler(fleetPrefix string) http.HandlerFunc {
+const (
+	taskHistoryPerTable = 50  // newest results read per table
+	taskHistoryMax      = 200 // cap on the merged list (the UI keeps 200 events)
+)
+
+// dispatchRequest is the body of POST /tasks/dispatch.
+type dispatchRequest struct {
+	Knight  string `json:"knight"`
+	Domain  string `json:"domain"`
+	Task    string `json:"task"`
+	Table   string `json:"table,omitempty"` // RoundTable name; default: the knight's own table (#239)
+	Timeout int    `json:"timeout_ms,omitempty"`
+}
+
+func taskDispatchHandler(src *tableSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Knight  string `json:"knight"`
-			Domain  string `json:"domain"`
-			Task    string `json:"task"`
-			Timeout int    `json:"timeout_ms,omitempty"`
-		}
+		var req dispatchRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
 			return
@@ -1066,18 +1080,23 @@ func taskDispatchHandler(fleetPrefix string) http.HandlerFunc {
 			jsonError(w, "Invalid knight or domain name", http.StatusBadRequest)
 			return
 		}
+		if req.Table != "" && !validKnightName.MatchString(req.Table) {
+			jsonError(w, "Invalid table name", http.StatusBadRequest)
+			return
+		}
 		if len(req.Task) == 0 || len(req.Task) > 10000 {
 			jsonError(w, "Task must be 1-10000 characters", http.StatusBadRequest)
 			return
 		}
 
-		if nc == nil {
-			jsonError(w, "NATS not available", http.StatusServiceUnavailable)
+		table, err := src.dispatchTable(r.Context(), req.Table, req.Knight)
+		if err != nil {
+			jsonError(w, "Unknown table", http.StatusBadRequest)
 			return
 		}
 
 		taskID := fmt.Sprintf("%s-ui-%d", req.Knight, time.Now().UnixMilli())
-		subject := fmt.Sprintf("%s.tasks.%s.%s", fleetPrefix, req.Domain, taskID)
+		subject := taskSubject(table.Prefix, req.Domain, taskID)
 
 		payload, _ := json.Marshal(map[string]interface{}{
 			"from":    "ui",
@@ -1091,7 +1110,11 @@ func taskDispatchHandler(fleetPrefix string) http.HandlerFunc {
 			},
 		})
 
-		if err := nc.Publish(subject, payload); err != nil {
+		if err := publishTask(subject, payload); err != nil {
+			if errors.Is(err, errNATSUnavailable) {
+				jsonError(w, "NATS not available", http.StatusServiceUnavailable)
+				return
+			}
 			slog.Error("NATS publish error", "error", err)
 			jsonError(w, "Failed to dispatch task", http.StatusInternalServerError)
 			return
@@ -1101,6 +1124,7 @@ func taskDispatchHandler(fleetPrefix string) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]string{
 			"task_id": taskID,
 			"subject": subject,
+			"table":   table.Name,
 			"status":  "dispatched",
 		})
 	}
@@ -1156,7 +1180,7 @@ func briefingHandler(vaultPath string) http.HandlerFunc {
 	}
 }
 
-func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityStore, chains *chainWatcher) http.HandlerFunc {
+func wsHandler(src *tableSource, running *runningRegistry, activity *activityStore, chains *chainWatcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check NATS health BEFORE upgrading (#19). Upgrading first and then
 		// closing makes the client fire onopen (UI shows "Connected") before
@@ -1190,48 +1214,45 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 		// Done channel to clean up NATS subscriptions when WS closes
 		done := make(chan struct{})
 
-		// Subscribe to all task and result events
-		taskSub, err := nc.Subscribe(fleetPrefix+".tasks.>", func(msg *nats.Msg) {
-			select {
-			case <-done:
-				return
-			default:
+		// Subscribe to task and result events of every table (#239). Tables
+		// are resolved per connection; a table added later shows up on the
+		// next (re)connect.
+		tables := src.tables(r.Context())
+		forward := func(eventType string, critical bool) nats.MsgHandler {
+			return func(msg *nats.Msg) {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				event := TaskEvent{
+					Type:      eventType,
+					Subject:   msg.Subject,
+					Data:      msg.Data,
+					Timestamp: eventTimestamp(msg.Data),
+				}
+				if t, ok := tableForSubject(tables, msg.Subject); ok {
+					event.Table = t.Name
+				}
+				data, _ := json.Marshal(event)
+				safeWrite(critical, data)
 			}
-			event := TaskEvent{
-				Type:      "task",
-				Subject:   msg.Subject,
-				Data:      msg.Data,
-				Timestamp: eventTimestamp(msg.Data),
-			}
-			data, _ := json.Marshal(event)
-			safeWrite(false, data)
-		})
-		if err != nil {
-			slog.Error("NATS task sub error", "error", err)
-			conn.Close()
-			return
 		}
-
-		resultSub, err := nc.Subscribe(fleetPrefix+".results.>", func(msg *nats.Msg) {
-			select {
-			case <-done:
+		var subs []*nats.Subscription
+		unsubscribeAll := func() {
+			for _, sub := range subs {
+				sub.Unsubscribe()
+			}
+		}
+		for _, sub := range wsSubscriptions(tables) {
+			ns, err := nc.Subscribe(sub.subject, forward(sub.eventType, sub.critical))
+			if err != nil {
+				slog.Error("NATS subscribe error", "subject", sub.subject, "error", err)
+				unsubscribeAll()
+				conn.Close()
 				return
-			default:
 			}
-			event := TaskEvent{
-				Type:      "result",
-				Subject:   msg.Subject,
-				Data:      msg.Data,
-				Timestamp: eventTimestamp(msg.Data),
-			}
-			data, _ := json.Marshal(event)
-			safeWrite(true, data)
-		})
-		if err != nil {
-			slog.Error("NATS result sub error", "error", err)
-			taskSub.Unsubscribe()
-			conn.Close()
-			return
+			subs = append(subs, ns)
 		}
 
 		// Chain changes (#228) come from a Kubernetes watch on Chain
@@ -1270,8 +1291,7 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 				unsubChains()
 			}
 			close(done)
-			taskSub.Unsubscribe()
-			resultSub.Unsubscribe()
+			unsubscribeAll()
 			ws.close()
 			conn.Close()
 		}()
@@ -1316,6 +1336,7 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 				Knight string `json:"knight"`
 				Domain string `json:"domain"`
 				Task   string `json:"task"`
+				Table  string `json:"table"`
 			}
 			if json.Unmarshal(msg, &cmd) == nil && cmd.Action == "dispatch" {
 				if !checkDispatchLimit(dispatchLimiter, ws) {
@@ -1328,18 +1349,50 @@ func wsHandler(fleetPrefix string, running *runningRegistry, activity *activityS
 				if len(cmd.Task) == 0 || len(cmd.Task) > 10000 {
 					continue
 				}
+				if cmd.Table != "" && !validKnightName.MatchString(cmd.Table) {
+					continue
+				}
+				table, err := src.dispatchTable(r.Context(), cmd.Table, cmd.Knight)
+				if err != nil {
+					continue
+				}
 				taskID := fmt.Sprintf("%s-ws-%d", cmd.Knight, time.Now().UnixMilli())
-				subject := fmt.Sprintf("%s.tasks.%s.%s", fleetPrefix, cmd.Domain, taskID)
+				subject := taskSubject(table.Prefix, cmd.Domain, taskID)
 				payload, _ := json.Marshal(map[string]interface{}{
 					"from":    "dashboard-ws",
 					"task_id": taskID,
 					"domain":  cmd.Domain,
 					"task":    cmd.Task,
 				})
-				nc.Publish(subject, payload)
+				publishTask(subject, payload)
 			}
 		}
 	}
+}
+
+// wsSubscription is one NATS subscription a WS client gets.
+type wsSubscription struct {
+	subject   string
+	eventType string // task | result
+	critical  bool   // results must not be dropped under backpressure
+}
+
+// wsSubscriptions lists the task and result subscriptions for the tables,
+// one pair per distinct prefix.
+func wsSubscriptions(tables []TableInfo) []wsSubscription {
+	var out []wsSubscription
+	seen := map[string]bool{}
+	for _, t := range tables {
+		if seen[t.Prefix] {
+			continue
+		}
+		seen[t.Prefix] = true
+		out = append(out,
+			wsSubscription{subject: t.Prefix + ".tasks.>", eventType: "task"},
+			wsSubscription{subject: t.Prefix + ".results.>", eventType: "result", critical: true},
+		)
+	}
+	return out
 }
 
 var (

@@ -531,7 +531,12 @@ func TestRunningHeartbeatIntervalEnv(t *testing.T) {
 		t.Fatalf("interval = %s", d)
 	}
 	t.Setenv("ACTIVITY_PREFIXES", " fleet-a , chelonian,")
-	if p := activityPrefixes("x"); fmt.Sprint(p) != "[fleet-a chelonian]" {
+	if p := activityPrefixes([]string{"x"}); fmt.Sprint(p) != "[fleet-a chelonian]" {
+		t.Fatalf("prefixes = %v", p)
+	}
+	// Without the override every table's prefix is tracked (#239).
+	t.Setenv("ACTIVITY_PREFIXES", "")
+	if p := activityPrefixes([]string{"fleet-a", "rt-dev"}); fmt.Sprint(p) != "[fleet-a rt-dev]" {
 		t.Fatalf("prefixes = %v", p)
 	}
 }
