@@ -1,0 +1,163 @@
+import { useMemo } from 'react'
+import { Inbox, AlertTriangle, Clock, ExternalLink } from 'lucide-react'
+import { usePolledFetch } from '../hooks/usePolledFetch'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState } from '../components/ui'
+import { QueueSparkline } from '../components/QueueSparkline'
+import {
+  OLDEST_WAIT_WARN_SECONDS,
+  formatWait,
+  latestMaxReplicas,
+  queueWarnings,
+  safeExternalUrl,
+  type KnightQueue,
+  type KnightQueueHistory,
+  type QueueWarning,
+} from '../lib/queues'
+
+const QUEUES_URL = '/api/queues'
+const HISTORY_URL = '/api/queues/history?since=1h'
+
+function WarningBadge({ w }: { w: QueueWarning }) {
+  const Icon = w.kind === 'oldest-wait' ? Clock : AlertTriangle
+  const cls = w.kind === 'saturated'
+    ? 'bg-red-500/10 text-red-300 border-red-500/30'
+    : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs whitespace-nowrap ${cls}`}
+      title={w.detail}
+      data-testid={`warning-${w.kind}`}
+    >
+      <Icon className="w-3 h-3" aria-hidden />
+      {w.label}
+    </span>
+  )
+}
+
+export function QueuesTable({ queues, history }: {
+  queues: KnightQueue[]
+  history: KnightQueueHistory[]
+}) {
+  const byKnight = useMemo(() => new Map(history.map(h => [h.knight, h])), [history])
+
+  return (
+    <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
+            <th className="px-4 py-3 font-medium">Knight</th>
+            <th className="px-4 py-3 font-medium text-right">Pending</th>
+            <th className="px-4 py-3 font-medium text-right">Ack pending</th>
+            <th className="px-4 py-3 font-medium text-right">Redelivered</th>
+            <th className="px-4 py-3 font-medium text-right">Oldest wait</th>
+            <th className="px-4 py-3 font-medium text-right">Free slots</th>
+            <th className="px-4 py-3 font-medium text-right">Replicas</th>
+            <th className="px-4 py-3 font-medium">Last hour</th>
+          </tr>
+        </thead>
+        <tbody>
+          {queues.map(q => {
+            const h = byKnight.get(q.knight)
+            const max = latestMaxReplicas(h)
+            const warnings = queueWarnings(q, max)
+            const grafana = safeExternalUrl(h?.grafanaUrl)
+            const unavailable = !q.consumerFound || !!q.error
+            return (
+              <tr key={q.knight} className="border-b border-roundtable-steel/50 last:border-0 align-top" data-testid={`queue-row-${q.knight}`}>
+                <td className="px-4 py-3">
+                  <div className="font-medium text-white">{q.knight}</div>
+                  <div className="text-xs text-gray-500 font-mono">{q.consumer}</div>
+                  {q.error && <div className="text-xs text-red-400 mt-1">{q.error}</div>}
+                  {!q.error && !q.consumerFound && <div className="text-xs text-gray-500 mt-1">No consumer yet</div>}
+                  {warnings.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {warnings.map(w => <WarningBadge key={w.kind} w={w} />)}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-gray-200">{unavailable ? '—' : q.pending}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-gray-200">{unavailable ? '—' : q.ackPending}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-gray-200">{unavailable ? '—' : q.redelivered}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-gray-200" title={q.oldestPendingAt}>
+                  {unavailable ? '—' : formatWait(q.oldestWaitSeconds)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-gray-200">
+                  {q.freeSlots}
+                  <span className="text-gray-500"> / {q.concurrency * q.readyReplicas}</span>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-gray-200" title={`${q.readyReplicas} ready of ${q.replicas}`}>
+                  {q.replicas}
+                  <span className="text-gray-500"> / {max ?? '—'}</span>
+                </td>
+                <td className="px-4 py-3">
+                  {h ? (
+                    <QueueSparkline knight={q.knight} samples={h.samples} events={h.events} />
+                  ) : (
+                    <span className="text-xs text-gray-500">No history</span>
+                  )}
+                  {grafana && (
+                    <a
+                      href={grafana}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-roundtable-gold hover:underline"
+                    >
+                      Grafana <ExternalLink className="w-3 h-3" aria-hidden />
+                    </a>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function QueuesPage() {
+  const { data: queues, loading, error, refresh } = usePolledFetch<KnightQueue[]>(QUEUES_URL, 5000, [])
+  const { data: history, error: historyError, refresh: refreshHistory } = usePolledFetch<KnightQueueHistory[]>(HISTORY_URL, 15000, [])
+
+  const totals = useMemo(() => ({
+    pending: queues.reduce((n, q) => n + (q.consumerFound ? q.pending : 0), 0),
+    ackPending: queues.reduce((n, q) => n + (q.consumerFound ? q.ackPending : 0), 0),
+    oldest: Math.max(0, ...queues.map(q => q.oldestWaitSeconds || 0)),
+  }), [queues])
+
+  return (
+    <div>
+      <PageHeader
+        icon={Inbox}
+        title="Queues"
+        subtitle={`Tasks waiting per knight · ${totals.pending} pending · ${totals.ackPending} in flight · oldest ${formatWait(totals.oldest)}`}
+      >
+        <RefreshButton onClick={() => { refresh(); refreshHistory() }} loading={loading} />
+      </PageHeader>
+
+      {error && (
+        <div className="mb-4">
+          <ErrorBanner>Failed to load queues: {error}</ErrorBanner>
+        </div>
+      )}
+      {historyError && !error && (
+        <p className="mb-4 text-xs text-gray-500">Scaling history unavailable: {historyError}</p>
+      )}
+
+      {loading && queues.length === 0 && (
+        <div className="flex justify-center py-12"><Spinner /></div>
+      )}
+
+      {!loading && queues.length === 0 && !error && (
+        <EmptyState icon={Inbox} title="No knight queues found." />
+      )}
+
+      {queues.length > 0 && <QueuesTable queues={queues} history={history} />}
+
+      <p className="mt-3 text-xs text-gray-500">
+        Warnings: oldest wait over {formatWait(OLDEST_WAIT_WARN_SECONDS)}, or tasks pending with no free slots while replicas are at max.
+        History is sampled every 15 s and kept in memory for 6 h.
+      </p>
+    </div>
+  )
+}
