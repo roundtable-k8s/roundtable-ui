@@ -280,7 +280,8 @@ func TestIntrospectPodParamRejected(t *testing.T) {
 		want  int
 	}{
 		{"type=stats&pod=lancelot-a", http.StatusNotFound}, // another knight's pod
-		{"type=stats&pod=galahad-zzz", http.StatusNotFound},
+		{"type=stats&pod=galahad-zzz", http.StatusGone},    // galahad's naming, not ready: scaled away
+		{"type=stats&pod=percival-a", http.StatusNotFound},
 		{"type=stats&pod=galahad-a.>", http.StatusBadRequest},
 		{"type=stats&pod=Galahad*", http.StatusBadRequest},
 		{"type=history&runId=run%20x", http.StatusBadRequest},
@@ -358,5 +359,52 @@ func TestIntrospectHistoryMergedWithPods(t *testing.T) {
 func TestAggregateStatsNoAnswers(t *testing.T) {
 	if _, ok := aggregateStats("galahad", []podReply{{Pod: "a", Err: nats.ErrTimeout}}); ok {
 		t.Error("expected ok=false when no pod answered")
+	}
+}
+
+func TestIntrospectPodGone(t *testing.T) {
+	f := &fakeIntrospect{answer: func(s string) ([]byte, error) {
+		t.Errorf("no NATS request expected for a gone pod, got %s", s)
+		return nil, nats.ErrTimeout
+	}}
+	// galahad-b still exists but is terminating/not ready; galahad-c was scaled away.
+	h := setupIntrospectTest(t, f, makeKnightPod("galahad-a", "galahad", true), makeKnightPod("galahad-b", "galahad", false))
+	for _, pod := range []string{"galahad-b", "galahad-c"} {
+		w, _ := doSession(t, h, "type=session&id=abc&pod="+pod)
+		if w.Code != http.StatusGone {
+			t.Fatalf("%s: status = %d, want 410", pod, w.Code)
+		}
+		var body map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s: invalid JSON %q: %v", pod, w.Body.String(), err)
+		}
+		if body["podGone"] != true || body["pod"] != pod {
+			t.Errorf("%s: body = %v", pod, body)
+		}
+	}
+}
+
+func TestIntrospectPodGoneScaledToZero(t *testing.T) {
+	f := &fakeIntrospect{answer: func(s string) ([]byte, error) {
+		t.Errorf("no NATS request expected, got %s", s)
+		return nil, nats.ErrTimeout
+	}}
+	router := setupTestRouter()
+	t.Setenv("NAMESPACE", "test-namespace")
+	cr := makeTestKnightCR("galahad", "test-namespace", "security")
+	cr.Object["status"] = map[string]interface{}{"phase": "Scaled", "ready": false}
+	if _, err := dynClient.Resource(knightGVR).Namespace("test-namespace").Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create CR: %v", err)
+	}
+	orig := sessionRequester
+	sessionRequester = func() introspectRequester { return f.requester() }
+	t.Cleanup(func() { sessionRequester = orig })
+
+	if w, _ := doSession(t, router, "type=session&id=abc&pod=galahad-7d9f-x1"); w.Code != http.StatusGone {
+		t.Errorf("named pod on a scaled-to-zero knight: status = %d, want 410", w.Code)
+	}
+	// Without a pod the old "no data" shape stays.
+	if w, body := doSession(t, router, "type=stats"); w.Code != http.StatusOK || len(body) != 0 {
+		t.Errorf("no pod: status %d body %v, want 200 {}", w.Code, body)
 	}
 }

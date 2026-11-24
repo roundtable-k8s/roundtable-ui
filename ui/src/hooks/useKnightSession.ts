@@ -57,6 +57,7 @@ export interface SessionHistoryItem {
   firstPrompt: string
   sizeBytes: number | null
   pod?: string  // pod the session lives on (set by the API's per-pod fan-out)
+  runId?: string  // run (chain/mission run) the session belongs to, when the runtime reports it
 }
 
 export interface SessionTreeNode {

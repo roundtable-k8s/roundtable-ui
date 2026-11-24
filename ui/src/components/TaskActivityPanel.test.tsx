@@ -126,7 +126,7 @@ describe('TaskActivityPanel', () => {
     push({ op: 'backlog', taskId: T, finished: true, events: [ev(1, 'task.started'), ev(2, 'task.finished', { success: true, durationMs: 60000 })] })
     expect(screen.getByText('All done')).toBeInTheDocument()
     const link = await screen.findByRole('link', { name: 'Open full session transcript' })
-    expect(link).toHaveAttribute('href', '/sessions?knight=galahad')
+    expect(link).toHaveAttribute('href', '/sessions?knight=galahad&pod=galahad-abc&runId=run-9')
     expect(apiGet).toHaveBeenCalledWith('/api/fleet/galahad')
   })
 

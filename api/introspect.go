@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -404,4 +406,24 @@ func withPod(data []byte, pod string) []byte {
 		return data
 	}
 	return out
+}
+
+// looksLikeKnightPod reports whether pod is named like one of knight's
+// Deployment pods (<knight>-<hash>-<suffix>). It only picks the error shape
+// for a pod that is not currently ready; it never grants access.
+func looksLikeKnightPod(knight, pod string) bool {
+	return strings.HasPrefix(pod, strings.ToLower(knight)+"-")
+}
+
+// writePodGone answers a request for a pod that no longer serves
+// introspection with 410 and a machine-readable body, so the dashboard can
+// show "pod gone" instead of a spinner.
+func writePodGone(w http.ResponseWriter, pod string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"error":   "pod gone",
+		"podGone": true,
+		"pod":     pod,
+	})
 }

@@ -9,6 +9,7 @@ import { apiGet } from '../lib/api'
 import { parseEvent } from '../lib/events'
 import { formatCost, formatTimestamp } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
+import { sessionsLink } from '../lib/sessions'
 import {
   buildTimeline,
   elapsedMs,
@@ -240,7 +241,7 @@ function AfterFinish({ taskId, s }: { taskId: string; s: ActivitySummary }) {
         <div className="text-xs">
           {podAlive ? (
             <Link
-              to={`/sessions?knight=${encodeURIComponent(s.knight.toLowerCase())}`}
+              to={sessionsLink(s.knight, s.pod, s.runId)}
               className="text-roundtable-gold hover:underline"
             >
               Open full session transcript

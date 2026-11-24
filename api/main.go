@@ -852,6 +852,11 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			// .session / .runtime / .entries / .nodes being present.
 			if !knightIsReady(knightCR) {
 				slog.Debug("Knight not ready, skipping introspect", "knight", name)
+				// Scaled to zero: a named pod is certainly gone (#220).
+				if podParam != "" && looksLikeKnightPod(name, podParam) {
+					writePodGone(w, podParam)
+					return
+				}
 				w.Header().Set("Content-Type", "application/json")
 				w.Write([]byte("{}"))
 				return
@@ -936,6 +941,13 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 			}
 		}
 		if !known {
+			// A name shaped like this knight's pods that is no longer
+			// Running+Ready was scaled away (or crashed): say so at once
+			// instead of letting the dashboard wait for a NATS timeout (#220).
+			if looksLikeKnightPod(name, podParam) {
+				writePodGone(w, podParam)
+				return
+			}
 			http.Error(w, "Unknown pod for this knight", http.StatusNotFound)
 			return
 		}
