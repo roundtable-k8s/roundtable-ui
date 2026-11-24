@@ -290,6 +290,8 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/fleet/{knight}` — Get knight details
 - `GET /api/fleet/{knight}/logs` — Stream knight pod logs
 - `GET /api/fleet/{knight}/session?type={stats|recent|tree}` — Knight session introspection
+- `GET /api/fleet/{knight}/queue` — Knight's JetStream task queue (pending, ack-pending, redelivered, oldest wait, free slots)
+- `GET /api/queues` — Task queues of all knights
 
 ### Task Dispatch
 - `GET /api/tasks` — List recent tasks from JetStream
