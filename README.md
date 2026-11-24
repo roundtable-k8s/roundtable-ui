@@ -60,6 +60,13 @@ Fleet-level configuration and warm pool management:
 - **Suspension controls** — fleet-wide suspend/resume capabilities
 - **Ephemeral mode** — temporary round table lifecycle management
 
+### 📥 Queues
+Work that is waiting, per knight (`/queues`):
+- **Queues table** — pending, ack-pending, redelivered, oldest wait, free slots and replicas (current/max) from each knight's JetStream consumer (`GET /api/queues`)
+- **Scaling sparkline** — the last hour of pending tasks and replicas on a shared time axis, with KEDA/HPA scale events marked ▲/▼ (`GET /api/queues/history`)
+- **Warning badges** — oldest wait over 5 minutes, or tasks pending with no free slots while replicas are at max
+- **Grafana link** for long-term history when the API sets `GRAFANA_QUEUE_URL`
+
 ### 📜 Dispatch (Tasks)
 Direct task execution and history:
 - **Quick dispatch interface** — send tasks to any knight instantly
