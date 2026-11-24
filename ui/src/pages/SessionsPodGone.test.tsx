@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Link } from 'react-router-dom'
 import { SessionsPage } from './Sessions'
 
 vi.mock('../hooks/useFleet', () => ({
@@ -88,5 +88,36 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     renderPage('/sessions?knight=galahad&pod=galahad-z&runId=run-9')
     const notice = await screen.findByRole('status')
     expect(notice).toHaveTextContent('galahad-z')
+  })
+
+  it('does not show "pod gone" for a 410 without podGone: true', async () => {
+    routes['type=history'] = json({ sessions: [] })
+    routes['pod=galahad-z'] = () => new Response('gone', { status: 410 })
+    renderPage('/sessions?knight=galahad&pod=galahad-z&runId=run-9')
+    const notice = await screen.findByRole('status')
+    expect(notice).toHaveTextContent('No session found for pod galahad-z')
+    expect(screen.queryByText(/Pod gone/i)).toBeNull()
+  })
+
+  it('tells the user when a deep link finds no session on a live pod', async () => {
+    routes['type=history'] = json({ sessions: [] })
+    routes['pod=galahad-live'] = json({ session: null })
+    renderPage('/sessions?knight=galahad&pod=galahad-live')
+    expect(await screen.findByRole('status')).toHaveTextContent('No session found for pod galahad-live')
+  })
+
+  it('re-applies the deep link when the URL changes without a remount', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/sessions?knight=galahad&pod=galahad-a&runId=run-1']}>
+        <Link to="/sessions?knight=galahad&pod=galahad-c&runId=run-2">next</Link>
+        <SessionsPage />
+      </MemoryRouter>,
+    )
+    const picker = await screen.findByLabelText('Session')
+    await within(picker).findByRole('group', { name: 'Run run-2 · pod galahad-c' })
+    await vi.waitFor(() => expect(calls.some(u => u.includes('type=session&id=s-new&pod=galahad-a'))).toBe(true))
+    await user.click(screen.getByText('next'))
+    expect(await screen.findByRole('status')).toHaveTextContent('galahad-c')
   })
 })

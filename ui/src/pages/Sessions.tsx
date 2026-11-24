@@ -203,10 +203,11 @@ export function SessionsPage() {
   const { knights, loading: fleetLoading } = useFleet()
   // ?knight= preselects a knight (e.g. the transcript link from Task activity, #214).
   const [searchParams] = useSearchParams()
-  const [selectedKnight, setSelectedKnight] = useState(() => {
+  const linkKnight = (() => {
     const k = searchParams.get('knight')?.toLowerCase() || ''
     return /^[a-z0-9][a-z0-9-]{0,62}$/.test(k) ? k : ''
-  })
+  })()
+  const [selectedKnight, setSelectedKnight] = useState(linkKnight)
   const [view, setView] = useState<'timeline' | 'tree' | 'tools'>('timeline')
   const [entries, setEntries] = useState<SessionEntry[]>([])
   const [treeNodes, setTreeNodes] = useState<SessionTreeNode[]>([])
@@ -226,9 +227,13 @@ export function SessionsPage() {
   // Set when the selected session's pod has been scaled away (#220): its
   // transcript can't be read, so show that instead of a spinner/timeout.
   const [podGone, setPodGone] = useState<string | null>(null)
-  // ?pod=&runId= (e.g. from Task activity) focus one pod's session; applied
-  // once, to the knight named in the link.
-  const deepLink = useRef(parseSessionTarget(searchParams))
+  // ?pod=&runId= (e.g. from Task activity) focus one pod's session. Applied
+  // whenever the link changes (also on in-app navigation without a remount),
+  // to the knight named in the link; appliedLink is the last link applied.
+  const linkKey = searchParams.toString()
+  const appliedLink = useRef('')
+  // Set when a deep link names a pod on a live knight but no session was found.
+  const [linkNotice, setLinkNotice] = useState<string | null>(null)
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
 
   // Build dynamic knight config from fleet
@@ -255,17 +260,23 @@ export function SessionsPage() {
 
   // Load the knight's past-session list; reset to the live view on knight change.
   useEffect(() => {
+    if (linkKey !== appliedLink.current && linkKnight && linkKnight !== selectedKnight) {
+      setSelectedKnight(linkKnight) // re-runs this effect for the linked knight
+      return
+    }
     if (!selectedKnight) return
     setSelectedSession('live')
     setArchivedMeta(null)
     setPodGone(null)
-    const target = deepLink.current
-    deepLink.current = { pod: null, runId: null }
+    setLinkNotice(null)
+    const fresh = linkKey !== appliedLink.current && linkKnight === selectedKnight
+    const target = fresh ? parseSessionTarget(searchParams) : { pod: null, runId: null }
     let cancelled = false
     fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=history`)
       .then(r => (r && r.ok ? r.json() : null))
       .then(async d => {
         if (cancelled) return
+        if (fresh) appliedLink.current = linkKey
         const list: SessionHistoryItem[] = d?.sessions || []
         setSessions(list)
         const hit = pickTargetSession(list, target.pod, target.runId)
@@ -276,12 +287,15 @@ export function SessionsPage() {
           // pod shows "pod gone" rather than an unrelated live view.
           const probe = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=stats&pod=${encodeURIComponent(target.pod)}`)
           const gone = await podGoneFrom(probe, target.pod)
-          if (!cancelled && gone) setPodGone(gone)
+          if (cancelled) return
+          if (gone) setPodGone(gone)
+          else setLinkNotice(`No session found for pod ${target.pod}${target.runId ? ` in run ${target.runId}` : ''}; showing the live session.`)
         }
       })
       .catch(() => { if (!cancelled) setSessions([]) })
     return () => { cancelled = true }
-  }, [selectedKnight])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKnight, linkKey])
 
   const fetchData = useCallback(async () => {
     if (!selectedKnight) return
@@ -524,6 +538,9 @@ export function SessionsPage() {
         </div>
       )}
 
+      {linkNotice && !podGone && (
+        <div role="status" className="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-900/30 px-4 py-3 text-sm text-yellow-300">{linkNotice}</div>
+      )}
       {podGone && <PodGoneNotice pod={podGone} onBack={() => { setPodGone(null); setSelectedSession('live') }} />}
 
       {/* Archived session banner (replaces live stats when replaying history) */}

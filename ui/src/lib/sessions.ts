@@ -82,17 +82,19 @@ export function groupLabel(runId: string | null, pod: string | null): string {
 /**
  * The API answers 410 with {"podGone": true, "pod": ...} when a session's
  * pod has been scaled away or is no longer ready (#220). Returns the pod name
- * in that case, otherwise null.
+ * only for that body: a 410 from anything else (e.g. a proxy) is a plain error.
  */
 export async function podGoneFrom(res: Response | null, fallbackPod: string | null): Promise<string | null> {
   if (!res || res.status !== 410) return null
   try {
     const body = await res.json()
-    if (body && typeof body.pod === 'string' && body.pod) return body.pod
+    if (body && body.podGone === true) {
+      return typeof body.pod === 'string' && body.pod ? body.pod : fallbackPod || 'unknown'
+    }
   } catch {
-    // body is optional; the status alone says the pod is gone
+    // not the API's pod-gone body
   }
-  return fallbackPod || 'unknown'
+  return null
 }
 
 // Pod and run named by a "/sessions?knight=&pod=&runId=" deep link, if valid.

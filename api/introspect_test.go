@@ -279,8 +279,8 @@ func TestIntrospectPodParamRejected(t *testing.T) {
 		query string
 		want  int
 	}{
-		{"type=stats&pod=lancelot-a", http.StatusNotFound}, // another knight's pod
-		{"type=stats&pod=galahad-zzz", http.StatusGone},    // galahad's naming, not ready: scaled away
+		{"type=stats&pod=lancelot-a", http.StatusNotFound},          // another knight's pod
+		{"type=stats&pod=galahad-7d9f5c6b8-zzzzz", http.StatusGone}, // galahad's naming, not ready: scaled away
 		{"type=stats&pod=percival-a", http.StatusNotFound},
 		{"type=stats&pod=galahad-a.>", http.StatusBadRequest},
 		{"type=stats&pod=Galahad*", http.StatusBadRequest},
@@ -368,8 +368,8 @@ func TestIntrospectPodGone(t *testing.T) {
 		return nil, nats.ErrTimeout
 	}}
 	// galahad-b still exists but is terminating/not ready; galahad-c was scaled away.
-	h := setupIntrospectTest(t, f, makeKnightPod("galahad-a", "galahad", true), makeKnightPod("galahad-b", "galahad", false))
-	for _, pod := range []string{"galahad-b", "galahad-c"} {
+	h := setupIntrospectTest(t, f, makeKnightPod("galahad-a", "galahad", true), makeKnightPod("galahad-7d9f5c6b8-bbbbb", "galahad", false))
+	for _, pod := range []string{"galahad-7d9f5c6b8-bbbbb", "galahad-7d9f5c6b8-ccccc"} {
 		w, _ := doSession(t, h, "type=session&id=abc&pod="+pod)
 		if w.Code != http.StatusGone {
 			t.Fatalf("%s: status = %d, want 410", pod, w.Code)
@@ -400,7 +400,7 @@ func TestIntrospectPodGoneScaledToZero(t *testing.T) {
 	sessionRequester = func() introspectRequester { return f.requester() }
 	t.Cleanup(func() { sessionRequester = orig })
 
-	if w, _ := doSession(t, router, "type=session&id=abc&pod=galahad-7d9f-x1"); w.Code != http.StatusGone {
+	if w, _ := doSession(t, router, "type=session&id=abc&pod=galahad-7d9f5c6b8-x1y2z"); w.Code != http.StatusGone {
 		t.Errorf("named pod on a scaled-to-zero knight: status = %d, want 410", w.Code)
 	}
 	// Without a pod the old "no data" shape stays.
@@ -447,5 +447,25 @@ func TestIntrospectPodParamNoResponderSinglePodScope(t *testing.T) {
 	}
 	if got := w.Header().Get(introspectScopeHeader); got != "pod" {
 		t.Errorf("scope = %q, want pod", got)
+	}
+}
+
+func TestLooksLikeKnightPod(t *testing.T) {
+	for _, tt := range []struct {
+		knight, pod string
+		want        bool
+	}{
+		{"foo", "foo-7d9f5c6b8-x1y2z", true},
+		{"Foo", "foo-7d9f5c6b8-x1y2z", true},
+		{"foo", "foo-bar-7d9f5c6b8-x1y2z", false}, // a pod of knight foo-bar
+		{"foo-bar", "foo-bar-7d9f5c6b8-x1y2z", true},
+		{"foo", "foo-7d9f5c6b8", false},
+		{"foo", "foo-", false},
+		{"foo", "foobar-7d9f5c6b8-x1y2z", false},
+		{"foo", "bar-7d9f5c6b8-x1y2z", false},
+	} {
+		if got := looksLikeKnightPod(tt.knight, tt.pod); got != tt.want {
+			t.Errorf("looksLikeKnightPod(%q, %q) = %v, want %v", tt.knight, tt.pod, got, tt.want)
+		}
 	}
 }
