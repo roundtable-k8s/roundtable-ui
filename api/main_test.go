@@ -90,8 +90,8 @@ func setupTestRouter() *mux.Router {
 
 	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(fleetPrefix)).Methods("POST")
 
-	api.HandleFunc("/chains", chainsHandler(namespace)).Methods("GET")
-	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace)).Methods("GET")
+	api.HandleFunc("/chains", chainsHandler(namespace, nil)).Methods("GET")
+	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, nil)).Methods("GET")
 
 	api.HandleFunc("/missions", missionsHandler(namespace)).Methods("GET")
 	api.HandleFunc("/missions/{name}", missionDetailHandler(namespace)).Methods("GET")
