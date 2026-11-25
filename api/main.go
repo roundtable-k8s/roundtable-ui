@@ -1882,15 +1882,17 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 			}
 		}
 
-		// The Mission CRD requires planner.knightRef for meta-missions —
-		// reject here so clients get a clean 400 instead of an opaque
-		// CRD-validation error at create time
+		// planner.knightRef is optional for meta-missions: when omitted the
+		// operator uses the planner of the mission's RoundTable. If one is
+		// given, its name must still be valid.
 		if meta, _ := reqBody["metaMission"].(bool); meta {
-			planner, _ := reqBody["planner"].(map[string]interface{})
-			knightName := getRefName(planner, "knightRef")
-			if !validK8sName.MatchString(knightName) {
-				jsonError(w, "Meta-missions require planner.knightRef.name (a valid knight name)", http.StatusBadRequest)
-				return
+			if planner, _ := reqBody["planner"].(map[string]interface{}); planner != nil {
+				if ref, present := planner["knightRef"]; present && ref != nil {
+					if !validK8sName.MatchString(getRefName(planner, "knightRef")) {
+						jsonError(w, "planner.knightRef.name must be a valid knight name", http.StatusBadRequest)
+						return
+					}
+				}
 			}
 		}
 

@@ -88,12 +88,6 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   }
 
   const handleSubmit = async () => {
-    // The Mission CRD requires planner.knightRef for meta-missions
-    if (form.metaMission && !form.planner.knightRef.trim()) {
-      setError('Meta-missions require a planner knight (Advanced step)')
-      setStep(2)
-      return
-    }
     setSubmitting(true)
     setError(null)
     try {
@@ -116,7 +110,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
       // Add planner config if metaMission is enabled
       if (form.metaMission) {
         body.planner = {
-          knightRef: { name: form.planner.knightRef.trim() },
+          // omitted -> the operator uses the table's planner
+          knightRef: form.planner.knightRef.trim() ? { name: form.planner.knightRef.trim() } : undefined,
           timeoutSeconds: form.planner.timeout,
           context: form.planner.context || undefined,
           allowSkillGeneration: form.planner.allowSkillGeneration,
@@ -137,7 +132,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   const steps = [
     { title: 'Basics', valid: form.name.trim() && form.objective.trim() },
     { title: 'Knights', valid: form.metaMission || form.knights.some(k => k.name.trim()) },
-    { title: 'Advanced', valid: !form.metaMission || !!form.planner.knightRef.trim() },
+    { title: 'Advanced', valid: true },
     { title: 'Review', valid: true },
   ]
 
@@ -370,11 +365,11 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Planner Knight (required for meta-missions)</label>
+                    <label className="block text-xs text-gray-400 mb-1">Planner Knight (optional)</label>
                     <input
                       value={form.planner.knightRef}
                       onChange={e => updatePlanner('knightRef', e.target.value)}
-                      placeholder="e.g. planner-knight"
+                      placeholder="table planner (default)"
                       className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 text-sm"
                     />
                   </div>
