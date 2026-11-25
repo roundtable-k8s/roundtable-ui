@@ -1,0 +1,124 @@
+package main
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gorilla/mux"
+)
+
+type gwCall struct {
+	method, path, query, auth, body string
+}
+
+func deadLetterRouter(t *testing.T, status int, resp string) (*mux.Router, *[]gwCall) {
+	t.Helper()
+	var calls []gwCall
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		calls = append(calls, gwCall{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), string(b)})
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		io.WriteString(w, resp)
+	}))
+	t.Cleanup(gw.Close)
+	g := &gatewayClient{baseURL: gw.URL, token: "tok", http: gw.Client()}
+	r := mux.NewRouter()
+	r.HandleFunc("/api/dead-letters", deadLettersHandler(g)).Methods("GET")
+	r.HandleFunc("/api/dead-letters/{taskId}", deadLetterDetailHandler(g)).Methods("GET")
+	r.HandleFunc("/api/dead-letters/{taskId}/retry", deadLetterRetryHandler(g)).Methods("POST")
+	return r, &calls
+}
+
+func doReq(r http.Handler, method, target, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestDeadLettersList(t *testing.T) {
+	r, calls := deadLetterRouter(t, 200, `{"deadLetters":[{"taskId":"t1"}]}`)
+	w := doReq(r, "GET", "/api/dead-letters?knight=galahad&reason=lost&bogus=1", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"t1"`) {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	c := (*calls)[0]
+	if c.path != "/v1/dead-letters" || c.query != "knight=galahad&reason=lost" || c.auth != "Bearer tok" {
+		t.Errorf("gateway call %+v", c)
+	}
+}
+
+func TestDeadLetterDetail(t *testing.T) {
+	r, calls := deadLetterRouter(t, 200, `{"taskId":"t1","task":{"task":"do it"}}`)
+	if w := doReq(r, "GET", "/api/dead-letters/t1?table=fleet-a", ""); w.Code != 200 {
+		t.Fatalf("got %d", w.Code)
+	}
+	if c := (*calls)[0]; c.path != "/v1/dead-letters/t1" || c.query != "table=fleet-a" {
+		t.Errorf("gateway call %+v", c)
+	}
+	if w := doReq(r, "GET", "/api/dead-letters/..%2Fx", ""); w.Code == 200 || len(*calls) != 1 {
+		t.Errorf("bad id forwarded: %d", w.Code)
+	}
+}
+
+func TestDeadLetterRetryPassThrough(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		resp   string
+		body   string
+		want   string
+	}{
+		{"success", 202, `{"taskId":"t1-r2","retryOf":"t1","attempt":2,"knight":"galahad"}`, `{}`, `"t1-r2"`},
+		{"conflict", 409, `{"error":"dead letter t1 belongs to chain c","state":"open"}`, `{}`, "belongs to chain"},
+		{"unprocessable", 422, `{"error":"no original task payload"}`, ``, "no original task payload"},
+		{"not found", 404, `{"error":"dead letter not found"}`, `{"force":true}`, "not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, calls := deadLetterRouter(t, tt.status, tt.resp)
+			w := doReq(r, "POST", "/api/dead-letters/t1/retry", tt.body)
+			if w.Code != tt.status || !strings.Contains(w.Body.String(), tt.want) {
+				t.Fatalf("got %d %s", w.Code, w.Body)
+			}
+			if c := (*calls)[0]; c.method != "POST" || c.path != "/v1/dead-letters/t1/retry" {
+				t.Errorf("gateway call %+v", c)
+			}
+		})
+	}
+}
+
+func TestDeadLetterRetryForwardsForce(t *testing.T) {
+	r, calls := deadLetterRouter(t, 202, `{}`)
+	doReq(r, "POST", "/api/dead-letters/t1/retry", `{"force":true,"table":"fleet-a","namespace":"evil"}`)
+	if got := (*calls)[0].body; got != `{"force":true,"table":"fleet-a"}` {
+		t.Errorf("forwarded body %q", got)
+	}
+}
+
+func TestDeadLetterGatewayProblems(t *testing.T) {
+	r := mux.NewRouter()
+	g := &gatewayClient{http: http.DefaultClient}
+	r.HandleFunc("/api/dead-letters", deadLettersHandler(g))
+	if w := doReq(r, "GET", "/api/dead-letters", ""); w.Code != 503 {
+		t.Errorf("unconfigured: %d", w.Code)
+	}
+	g.baseURL = "http://127.0.0.1:1"
+	if w := doReq(r, "GET", "/api/dead-letters", ""); w.Code != 502 {
+		t.Errorf("unreachable: %d", w.Code)
+	}
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(502)
+		io.WriteString(w, "bad gateway")
+	}))
+	defer gw.Close()
+	g.baseURL = gw.URL
+	w := doReq(r, "GET", "/api/dead-letters", "")
+	if w.Code != 502 || !strings.Contains(w.Body.String(), `"error":"bad gateway"`) {
+		t.Errorf("non-json: %d %s", w.Code, w.Body)
+	}
+}

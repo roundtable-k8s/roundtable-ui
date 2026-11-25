@@ -94,7 +94,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 // Read-only guarantee: the only mutating routes are the documented ones.
 func TestNoUnexpectedMutatingRoutes(t *testing.T) {
-	allowed := map[string]bool{"POST /api/auth/login": true, "POST /api/tasks/dispatch": true, "POST /api/missions": true, "DELETE /api/missions/{name}": true}
+	allowed := map[string]bool{"POST /api/auth/login": true, "POST /api/tasks/dispatch": true, "POST /api/dead-letters/{taskId}/retry": true, "POST /api/missions": true, "DELETE /api/missions/{name}": true}
 	src, _ := os.ReadFile("main.go")
 	for _, line := range strings.Split(string(src), "\n") {
 		for _, m := range []string{"POST", "PUT", "PATCH", "DELETE"} {
