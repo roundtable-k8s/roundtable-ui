@@ -262,6 +262,7 @@ The dashboard API server is configured via environment variables:
 | `PORT` | HTTP server port | `8080` |
 | `FLEET_PREFIX` | Optional filter: only cover the RoundTable on this NATS prefix. Unset = every RoundTable in `NAMESPACE` (prefix and streams read from `spec.nats`); used as the only table when none can be discovered | unset (`fleet-a` fallback) |
 | `FLEET_STREAM` | Results stream for the `FLEET_PREFIX` table (overrides its `spec.nats.resultsStream`) | unset (`fleet_a_results` fallback) |
+| `CARDS_KV_BUCKET` | NATS KV bucket holding the knight agent cards (key `<table>.<knight>`). Read only: the dashboard never creates it, a missing bucket means no cards | `roundtable-cards` |
 | `GRAFANA_QUEUE_URL` | Optional long-term queue history link returned by the queue history endpoints; `{knight}` is replaced by the knight name | _(unset)_ |
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
 | `BRIEFINGS_DIRS` | Comma-separated vault-relative directories scanned for briefings (absolute and `..` entries are ignored; missing directories are skipped) | `Briefings/Daily,Agents/Briefings` |
@@ -317,6 +318,19 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/fleet/{knight}/queue/history?since=1h` — Sampled queue backlog and replicas (every 15 s, last 6 h, in memory) plus KEDA/HPA scale events with reasons
 - `GET /api/queues/history?since=1h` — The same history for every knight
 
+### Agent Cards
+- `GET /api/cards` — Every knight's agent card for the covered tables (optional `?table=<name>`; 400 for an unknown table), read from `CARDS_KV_BUCKET`, plus whether the knight is live and its load. Cards exist while a knight is scaled to zero. A missing bucket returns `{"cards": []}`.
+  ```json
+  {"cards": [
+    {"table": "personal", "knight": "galahad",
+     "card": {"schemaVersion": 1, "name": "galahad", "description": "…", "skills": […], "roundtable": {…}},
+     "live": true,
+     "stats": {"name": "roundtable-knight", "id": "…", "metadata": {"table": "personal", "knight": "galahad", …},
+               "started": "…", "endpoints": [{"name": "…", "data": {"activeTasks": 1, "maxConcurrentTasks": 2, …}}]}}
+  ]}
+  ```
+  `card` is the raw card JSON (schema: roundtable `docs/agent-cards.md`). `live`/`stats` come from `$SRV.STATS.roundtable-knight` (all replies within 500 ms, matched on the service's `table` and `knight` metadata, cached 10 s); `stats` is the latest STATS reply, `null` when the knight is not live. With several pods the most recently started one is used.
+
 ### Task Dispatch
 - `GET /api/tasks` — List recent tasks from JetStream
 - `POST /api/tasks/dispatch` — Dispatch task to knight
@@ -347,6 +361,7 @@ The dashboard exposes a comprehensive REST API:
 
 ### Real-time Events
 - `GET /api/ws` — WebSocket connection for live NATS events
+  - Agent cards: `{type:"cards", op:"upsert", table, data: <entry as in /api/cards>}` when a card is written, `{type:"cards", op:"delete", table, data: {table, knight, deleted: true}}` when it is removed (KV watch on `<table>.*` for each covered table).
   - Task activity: send `{"subscribe":"activity","taskId":"…"}` (and `{"unsubscribe":"activity","taskId":"…"}`) to watch up to 10 tasks per connection. The server replies with an `activity` event `{op:"backlog"}` holding the task's last 200 events (kept 15 minutes after `task.finished`), then `{op:"event"}` for each live event of that task only. Live events are droppable; `{op:"gap", fromSeq, toSeq}` marks events dropped for this client, and clients should also treat a `seq` jump as a gap.
 
 ### System
