@@ -42,6 +42,37 @@ export interface KnightScaling {
   lastScaleTime?: string
 }
 
+export type IsolationState = 'isolated' | 'opted-out' | 'not-enforced' | 'unknown'
+
+export interface EgressService {
+  name: string
+  namespace?: string
+  ports: number[]
+}
+
+export interface KnightEgress {
+  allowedHosts: string[]
+  allowedPorts: number[]
+  allowedServices: EgressService[]
+  /** "knight" (spec.egress) or "table" (the RoundTable's default) */
+  source: 'knight' | 'table'
+}
+
+/** How isolated a knight is and what it may reach (#269). */
+export interface KnightIsolation {
+  state: IsolationState
+  reason?: string             // Isolated condition reason
+  message?: string            // Isolated condition message
+  runtimeOptOut?: boolean     // spec.isolation.runtime: none
+  egressOptOut?: boolean      // spec.isolation.egress: unrestricted
+  optOutReason?: string       // spec.isolation.reason
+  runtimeClassName?: string   // effective RuntimeClass
+  hostnameRulesEnforced: boolean
+  egress?: KnightEgress
+  isolated?: KnightCondition
+  egressRestricted?: KnightCondition
+}
+
 export interface Knight {
   name: string
   domain: string
@@ -69,6 +100,7 @@ export interface Knight {
   conditions?: KnightCondition[]
   pods?: KnightPod[]
   scaling?: KnightScaling
+  isolation?: KnightIsolation
 }
 
 export function useFleet(refreshInterval = 10000) {

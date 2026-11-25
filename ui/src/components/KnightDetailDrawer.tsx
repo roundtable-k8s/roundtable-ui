@@ -1,12 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard } from 'lucide-react'
+import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
 import { formatCost, formatUptime, formatTimestamp } from '../lib/format'
 import { PodsPanel } from './PodsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
-import type { Knight, KnightCondition } from '../hooks/useFleet'
+import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet'
+import { IsolationBadge } from './IsolationBadge'
+import { optOutSummary } from '../lib/isolation'
 import { sanitizeText } from '../lib/untrusted'
 import { PodLogsViewer } from './PodLogsViewer'
 import { cardLoad, type CardEntry } from '../lib/cards'
@@ -94,6 +96,96 @@ export function KnightCardSection({ entry, fallbackMax }: { entry: CardEntry; fa
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function Chip({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-xs px-1.5 py-0.5 rounded bg-roundtable-navy/70 border border-roundtable-steel/50 text-gray-300 font-mono break-all">{children}</span>
+  )
+}
+
+/** Why hostname rules are not enforced, or null when they are (#269). */
+function hostnameWarning(iso: KnightIsolation): string | null {
+  if (iso.egressOptOut) return 'No egress policy: this knight may reach any host on any port.'
+  if (iso.hostnameRulesEnforced) return null
+  const er = iso.egressRestricted
+  if (er?.reason === 'FQDNPolicyUnavailable') {
+    return 'Hostname rules are not enforced: the CiliumNetworkPolicy API is unavailable, so the allowed ports are open to any destination.'
+  }
+  if (!er) return 'Hostname rules are not enforced: no egress policy applies to this knight.'
+  return `Hostname rules are not enforced (${sanitizeText(er.reason)})${er.message ? `: ${sanitizeText(er.message)}` : ''}`
+}
+
+/** "Isolation" section: RuntimeClass, opt-out reason and egress allowlist (#269). */
+export function KnightIsolationSection({ isolation: iso }: { isolation: KnightIsolation }) {
+  const optedOut = iso.state === 'opted-out'
+  const warning = hostnameWarning(iso)
+  const egress = iso.egress
+  const missingService = iso.egressRestricted?.reason === 'ServiceNotFound'
+  const optOuts = optOutSummary(iso)
+  return (
+    <div data-testid="knight-isolation-section">
+      <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+        <Shield className="w-4 h-4" />
+        Isolation
+      </h3>
+      <div className={`bg-roundtable-slate rounded-lg p-3 space-y-2 ${optedOut ? 'border border-red-500/40' : ''}`}>
+        <CardRow label="State"><IsolationBadge isolation={iso} /></CardRow>
+        {optedOut && (
+          <div className="text-xs bg-red-500/10 border border-red-500/30 rounded p-2 text-red-300">
+            <p className="font-medium">Opted out{optOuts ? ` (${optOuts})` : ''}</p>
+            <p className="mt-1">Reason: {sanitizeText(iso.optOutReason || iso.message || 'none given')}</p>
+          </div>
+        )}
+        {iso.state === 'not-enforced' && (
+          <div className="text-xs bg-amber-500/10 border border-amber-500/30 rounded p-2 text-amber-300">
+            Not enforced{iso.reason ? ` (${sanitizeText(iso.reason)})` : ''}{iso.message ? `: ${sanitizeText(iso.message)}` : ''}
+          </div>
+        )}
+        <CardRow label="RuntimeClass">
+          {iso.runtimeClassName
+            ? <Chip>{sanitizeText(iso.runtimeClassName)}</Chip>
+            : <span className="text-xs text-gray-500">{iso.runtimeOptOut ? 'none (cluster default runtime)' : 'not reported'}</span>}
+        </CardRow>
+        {warning && (
+          <p data-testid="hostname-warning" className="text-xs text-amber-300 flex items-start gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+            {warning}
+          </p>
+        )}
+        {missingService && iso.egressRestricted?.message && (
+          <p className="text-xs text-amber-300">{sanitizeText(iso.egressRestricted.message)}</p>
+        )}
+        {egress && (
+          <>
+            <CardRow label="Allowed hosts">
+              {egress.allowedHosts.length > 0
+                ? <span className="flex flex-wrap justify-end gap-1">{egress.allowedHosts.map((h) => <Chip key={h}>{sanitizeText(h)}</Chip>)}</span>
+                : <span className="text-xs text-gray-500">none (DNS, NATS and the baseline only)</span>}
+            </CardRow>
+            <CardRow label="Allowed ports">
+              {egress.allowedPorts.length > 0
+                ? <span className="flex flex-wrap justify-end gap-1">{egress.allowedPorts.map((p) => <Chip key={p}>{p}</Chip>)}</span>
+                : <span className="text-xs text-gray-500">—</span>}
+            </CardRow>
+            <CardRow label="Allowed services">
+              {egress.allowedServices.length > 0
+                ? (
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {egress.allowedServices.map((svc) => {
+                      const label = `${svc.namespace ? `${svc.namespace}/` : ''}${svc.name}:${svc.ports.join(',')}`
+                      return <Chip key={label}>{sanitizeText(label)}</Chip>
+                    })}
+                  </span>
+                )
+                : <span className="text-xs text-gray-500">none</span>}
+            </CardRow>
+            {egress.source === 'table' && <p className="text-[11px] text-gray-500">Allowlist inherited from the RoundTable default.</p>}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -198,6 +290,11 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
 
           {/* Agent card (#243) */}
           {card && <KnightCardSection entry={card} fallbackMax={knightDetail?.concurrency ?? knight.concurrency} />}
+
+          {/* Isolation (#269) */}
+          {(knightDetail?.isolation ?? knight.isolation) && (
+            <KnightIsolationSection isolation={(knightDetail?.isolation ?? knight.isolation)!} />
+          )}
 
           {/* Configuration */}
           {(knightDetail?.model || knightDetail?.runtime || knightDetail?.concurrency != null || knightDetail?.taskTimeoutSeconds || knightDetail?.suspend) && (

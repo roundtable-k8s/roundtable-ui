@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { KnightCard } from './KnightCard'
 import type { Knight } from '../hooks/useFleet'
 import { galahadCard, patsyCard } from '../test/fixtures/cards'
+import { isolated, notEnforced, optedOut } from '../test/fixtures/isolation'
 
 const mockKnight: Knight = {
   name: 'galahad',
@@ -342,5 +343,31 @@ describe('KnightCard', () => {
       expect(screen.queryByTestId('card-state')).not.toBeInTheDocument()
       expect(screen.getByText('galahad')).toBeInTheDocument()
     })
+  })
+})
+
+describe('KnightCard isolation badge (#269)', () => {
+  it('shows an isolated knight as isolated', () => {
+    render(<KnightCard knight={{ ...mockKnight, isolation: isolated }} />)
+    expect(screen.getByTestId('isolation-badge')).toHaveTextContent('isolated')
+  })
+
+  it('shows an opted-out knight with its reason on hover', () => {
+    render(<KnightCard knight={{ ...mockKnight, isolation: optedOut }} />)
+    const badge = screen.getByTestId('isolation-badge')
+    expect(badge).toHaveTextContent('opted out')
+    expect(badge).toHaveAttribute('title', 'Opted out (egress: unrestricted): scrapes arbitrary sites')
+  })
+
+  it('shows not enforced with the condition reason on hover', () => {
+    render(<KnightCard knight={{ ...mockKnight, isolation: notEnforced }} />)
+    const badge = screen.getByTestId('isolation-badge')
+    expect(badge).toHaveTextContent('not enforced')
+    expect(badge.getAttribute('title')).toMatch(/^FQDNPolicyUnavailable/)
+  })
+
+  it('shows no badge when the API reports no isolation', () => {
+    render(<KnightCard knight={mockKnight} />)
+    expect(screen.queryByTestId('isolation-badge')).not.toBeInTheDocument()
   })
 })

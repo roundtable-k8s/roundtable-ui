@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Zap, Crown, DollarSign, TrendingUp } from 'lucide-react'
+import { Zap, Crown, DollarSign, TrendingUp, ShieldOff } from 'lucide-react'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
 import { KnightCard } from '../components/KnightCard'
@@ -11,6 +11,7 @@ import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../co
 import { formatCost, formatTimestamp } from '../lib/format'
 import { useCards } from '../hooks/useCards'
 import { SkillFilter } from '../components/SkillFilter'
+import { isNotIsolated } from '../lib/isolation'
 import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as SkillFilterValue } from '../lib/cards'
 
 export function FleetPage() {
@@ -19,12 +20,16 @@ export function FleetPage() {
   const { events } = useWebSocket()
   const { cards } = useCards()
   const [skillFilter, setSkillFilter] = useState<SkillFilterValue>({})
+  const [notIsolatedOnly, setNotIsolatedOnly] = useState(false)
   const skillTags = useMemo(() => cardSkillTags(cards.values()), [cards])
+  const hasIsolation = knights.some((k) => k.isolation)
+  const notIsolatedCount = knights.filter(isNotIsolated).length
   const visibleKnights = useMemo(
     () => knights
       .filter((k) => matchesSkillFilter(cardForKnight(cards, k.name), skillFilter))
+      .filter((k) => !notIsolatedOnly || isNotIsolated(k))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    [knights, cards, skillFilter],
+    [knights, cards, skillFilter, notIsolatedOnly],
   )
 
   const knightActivity = useMemo(() => {
@@ -229,6 +234,27 @@ export function FleetPage() {
         />
       )}
 
+      {/* Isolation filter (#269): only when the API reports isolation */}
+      {!loading && hasIsolation && (
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            type="button"
+            aria-pressed={notIsolatedOnly}
+            onClick={() => setNotIsolatedOnly((v) => !v)}
+            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              notIsolatedOnly
+                ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                : notIsolatedCount > 0
+                  ? 'bg-roundtable-slate text-red-300 border-red-500/30 hover:border-red-500/50'
+                  : 'bg-roundtable-slate text-gray-400 border-roundtable-steel hover:border-roundtable-gold/30'
+            }`}
+          >
+            <ShieldOff className="w-3.5 h-3.5" aria-hidden />
+            Not isolated ({notIsolatedCount})
+          </button>
+        </div>
+      )}
+
       {/* Knight grid */}
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -244,7 +270,9 @@ export function FleetPage() {
         </div>
       )}
       {!loading && knights.length > 0 && visibleKnights.length === 0 && (
-        <p className="text-center text-gray-500 text-sm py-10">No knight has a skill matching this filter.</p>
+        <p className="text-center text-gray-500 text-sm py-10">
+          {notIsolatedOnly ? 'No knight matches these filters.' : 'No knight has a skill matching this filter.'}
+        </p>
       )}
 
       {/* Knight detail drawer */}

@@ -5,13 +5,15 @@ import { FleetPage } from './Fleet'
 import type { Knight } from '../hooks/useFleet'
 import { cardKey, type CardMap } from '../lib/cards'
 import { galahadCard, patsyCard } from '../test/fixtures/cards'
+import { isolated, notEnforced, optedOut } from '../test/fixtures/isolation'
 
 const k = (name: string, domain: string): Knight => ({
   name, domain, status: 'online', ready: true, restarts: 0, age: '1h', image: 'knight:latest', skills: 1, nixTools: 1, labels: {},
 })
 
+let knights: Knight[] = []
 vi.mock('../hooks/useFleet', () => ({
-  useFleet: () => ({ knights: [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')], loading: false, error: null, refresh: vi.fn() }),
+  useFleet: () => ({ knights, loading: false, error: null, refresh: vi.fn() }),
 }))
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
 let cards: CardMap = new Map()
@@ -21,6 +23,7 @@ vi.mock('../components/KnightDetailDrawer', () => ({ KnightDetailDrawer: () => n
 const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)
 
 beforeEach(() => {
+  knights = [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')]
   cards = new Map([
     [cardKey('personal', 'galahad'), galahadCard],
     [cardKey('personal', 'patsy'), patsyCard],
@@ -57,5 +60,32 @@ describe('Fleet skill filter', () => {
     render(<FleetPage />)
     expect(screen.queryByLabelText('Filter by skill')).not.toBeInTheDocument()
     expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+  })
+})
+
+describe('Fleet isolation filter (#269)', () => {
+  it('shows only opted-out and not-enforced knights', async () => {
+    cards = new Map()
+    knights = [
+      { ...k('galahad', 'security'), isolation: isolated },
+      { ...k('kay', 'research'), isolation: optedOut },
+      { ...k('patsy', 'vault'), isolation: notEnforced },
+      { ...k('tristan', 'infra'), isolation: { state: 'unknown', hostnameRulesEnforced: false } },
+      k('bedivere', 'home'),
+    ]
+    const user = userEvent.setup()
+    render(<FleetPage />)
+    expect(names()).toEqual(['bedivere', 'galahad', 'kay', 'patsy', 'tristan'])
+    const filter = screen.getByRole('button', { name: /not isolated \(2\)/i })
+    await user.click(filter)
+    expect(filter).toHaveAttribute('aria-pressed', 'true')
+    expect(names()).toEqual(['kay', 'patsy'])
+    await user.click(filter)
+    expect(names()).toEqual(['bedivere', 'galahad', 'kay', 'patsy', 'tristan'])
+  })
+
+  it('hides the filter when the API reports no isolation', () => {
+    render(<FleetPage />)
+    expect(screen.queryByRole('button', { name: /not isolated/i })).not.toBeInTheDocument()
   })
 })
