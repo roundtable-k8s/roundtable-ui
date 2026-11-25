@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"unicode/utf8"
 
 	"github.com/gorilla/mux"
 )
@@ -117,5 +118,33 @@ func chainRunStatusHandler(g *gatewayClient) http.HandlerFunc {
 			return
 		}
 		g.relay(w, r, http.MethodGet, "/v1/runs/"+url.PathEscape(v["namespace"])+"/"+url.PathEscape(v["run"]), nil, nil)
+	}
+}
+
+const maxCancelReasonLen = 500
+
+// chainRunCancelHandler proxies POST /v1/runs/{namespace}/{run}/cancel. The
+// optional JSON "reason" is capped at maxCancelReasonLen characters. The
+// gateway answers 404/409 for runs it cannot cancel; those pass through.
+func chainRunCancelHandler(g *gatewayClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		v := mux.Vars(r)
+		if !validKnightName.MatchString(v["namespace"]) || !validTaskID.MatchString(v["run"]) {
+			jsonError(w, "Invalid namespace or run", http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Reason string `json:"reason,omitempty"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil && err != io.EOF {
+			jsonError(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		if utf8.RuneCountInString(req.Reason) > maxCancelReasonLen {
+			jsonError(w, "Reason must be at most 500 characters", http.StatusBadRequest)
+			return
+		}
+		body, _ := json.Marshal(map[string]string{"reason": req.Reason})
+		g.relay(w, r, http.MethodPost, "/v1/runs/"+url.PathEscape(v["namespace"])+"/"+url.PathEscape(v["run"])+"/cancel", nil, body)
 	}
 }

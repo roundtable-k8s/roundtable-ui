@@ -46,6 +46,7 @@ func dispatchRouter(g *gatewayClient) *mux.Router {
 	r.HandleFunc("/api/tasks/dispatch/{taskId}", taskStatusHandler(g)).Methods("GET")
 	r.HandleFunc("/api/chains/{name}/run", chainRunHandler(g)).Methods("POST")
 	r.HandleFunc("/api/chains/runs/{namespace}/{run}", chainRunStatusHandler(g)).Methods("GET")
+	r.HandleFunc("/api/chains/runs/{namespace}/{run}/cancel", chainRunCancelHandler(g)).Methods("POST")
 	return r
 }
 
@@ -106,6 +107,7 @@ func TestDispatchGatewayNotConfigured(t *testing.T) {
 		{"GET", "/api/tasks/dispatch/t1", ""},
 		{"POST", "/api/chains/nightly/run", `{}`},
 		{"GET", "/api/chains/runs/roundtable/nightly-x", ""},
+		{"POST", "/api/chains/runs/roundtable/nightly-x/cancel", `{}`},
 	} {
 		w := doReq(r, c[0], c[1], c[2])
 		if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "Gateway not configured") {
@@ -279,5 +281,51 @@ func TestChainSummaryInvokableLabel(t *testing.T) {
 	}
 	if c := parseChainResource(mk(nil), nil); c.Invokable {
 		t.Error("no label must not be invokable")
+	}
+}
+
+func TestChainRunCancelRelaysReason(t *testing.T) {
+	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+		w.WriteHeader(http.StatusConflict)
+		io.WriteString(w, `{"error":"run already finished"}`)
+	}}
+	srv := f.server(t)
+	r := dispatchRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+	w := doReq(r, "POST", "/api/chains/runs/ns/run-1/cancel", `{"reason":"x","other":1}`)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "run already finished") {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	c := f.calls[0]
+	if c.method != "POST" || c.path != "/v1/runs/ns/run-1/cancel" || c.auth != "Bearer tok" {
+		t.Errorf("gateway call %+v", c)
+	}
+	var body map[string]interface{}
+	json.Unmarshal([]byte(c.body), &body)
+	if body["reason"] != "x" || len(body) != 1 {
+		t.Errorf("gateway body %v", body)
+	}
+	// An empty body is allowed.
+	if w := doReq(r, "POST", "/api/chains/runs/ns/run-1/cancel", ""); w.Code != http.StatusConflict {
+		t.Errorf("empty body: %d", w.Code)
+	}
+}
+
+func TestChainRunCancelValidation(t *testing.T) {
+	f := &fakeGateway{}
+	srv := f.server(t)
+	r := dispatchRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	long, _ := json.Marshal(map[string]string{"reason": strings.Repeat("a", maxCancelReasonLen+1)})
+	for name, c := range map[string][2]string{
+		"bad namespace": {"/api/chains/runs/N%20s/run-1/cancel", `{}`},
+		"bad run":       {"/api/chains/runs/ns/a%20b/cancel", `{}`},
+		"bad json":      {"/api/chains/runs/ns/run-1/cancel", `{`},
+		"long reason":   {"/api/chains/runs/ns/run-1/cancel", string(long)},
+	} {
+		if w := doReq(r, "POST", c[0], c[1]); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: got %d", name, w.Code)
+		}
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("invalid requests reached the gateway: %v", f.calls)
 	}
 }

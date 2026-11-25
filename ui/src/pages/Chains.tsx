@@ -1,6 +1,6 @@
-import { apiGet } from '../lib/api'
+import { apiGet, apiPost } from '../lib/api'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, ExternalLink } from 'lucide-react'
+import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, ExternalLink, Square } from 'lucide-react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
@@ -479,6 +479,40 @@ function useChainDetail(chain: Chain, expanded: boolean): { view: Chain | null; 
   return { view: detail && detail.name === chain.name ? detail : null, error }
 }
 
+const TERMINAL_PHASES = ['Succeeded', 'Completed', 'Failed', 'PartiallySucceeded', 'Cancelled', 'Canceled', 'TimedOut']
+
+/** "Cancel run" for a gateway-started run copy that has not finished. The
+ *  gateway answers 404/409 for runs it cannot cancel; the message is shown. */
+function CancelRun({ chain }: { chain: Chain }) {
+  const [cancelling, setCancelling] = useState(false)
+  const [error, setError] = useState('')
+  const cancel = async () => {
+    if (!window.confirm(`Cancel run ${chain.name}? Unfinished steps fail; tasks already sent to knights are not recalled.`)) return
+    setCancelling(true)
+    setError('')
+    try {
+      await apiPost(`/api/chains/runs/${encodeURIComponent(chain.namespace)}/${encodeURIComponent(chain.name)}/cancel`, {})
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to cancel the run')
+    } finally {
+      setCancelling(false)
+    }
+  }
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="cancel-run">
+      <button
+        onClick={cancel}
+        disabled={cancelling}
+        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium transition-colors disabled:opacity-50"
+      >
+        <Square className="w-3.5 h-3.5" />
+        {cancelling ? 'Cancelling…' : 'Cancel run'}
+      </button>
+      {error && <span role="alert" className="text-sm text-red-400">{sanitizeText(error)}</span>}
+    </div>
+  )
+}
+
 function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean }) {
   const [expanded, setExpanded] = useState(focused)
   const cardRef = useRef<HTMLDivElement>(null)
@@ -589,6 +623,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
             )}
           </div>
           {chain.invokable && <RunNow chain={chain.name} namespace={chain.namespace} />}
+          {chain.runTemplate && !TERMINAL_PHASES.includes(chain.phase) && <CancelRun chain={chain} />}
           <StepDAG steps={steps} currentStep={view.currentStep} />
           <StepProgress steps={steps} />
           {steps.length > 0 && <RunCostTable chain={view} />}
