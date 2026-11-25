@@ -1926,7 +1926,7 @@ func TestParseChainResource_StandardTypes(t *testing.T) {
 			},
 		},
 	}
-	c := parseChainResource(obj, map[string]string{"galahad": "security"})
+	c := parseChainResource(obj, map[string]knightInfo{"galahad": {Domain: "security"}})
 	if c.TimeoutSeconds != 120 || !c.Suspend {
 		t.Errorf("timeout/suspend not read: %+v", c)
 	}

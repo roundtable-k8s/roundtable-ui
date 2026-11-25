@@ -1,0 +1,70 @@
+{
+  "name": "cost-run",
+  "namespace": "roundtable",
+  "phase": "Succeeded",
+  "currentStep": "",
+  "startTime": "2026-11-24T12:00:00Z",
+  "completionTime": "2026-11-24T12:10:00Z",
+  "steps": [
+    {
+      "name": "plan",
+      "knight": "lancelot",
+      "domain": "planning",
+      "phase": "Succeeded",
+      "startTime": "2026-11-24T12:00:00Z",
+      "completionTime": "2026-11-24T12:03:00Z",
+      "result": null,
+      "dependsOn": null,
+      "retryCount": 0,
+      "costUSD": "0.250000",
+      "tokens": {
+        "input": 10000,
+        "output": 1500
+      },
+      "costNotional": true
+    },
+    {
+      "name": "build",
+      "knight": "galahad",
+      "domain": "security",
+      "phase": "Succeeded",
+      "startTime": "2026-11-24T12:03:00Z",
+      "completionTime": "2026-11-24T12:10:00Z",
+      "result": null,
+      "dependsOn": [
+        "plan"
+      ],
+      "retryCount": 1,
+      "costUSD": "0.500000",
+      "tokens": {
+        "input": 20000,
+        "output": 3000
+      }
+    },
+    {
+      "name": "notify",
+      "knight": "gawain",
+      "domain": "comms",
+      "phase": "Skipped",
+      "startTime": null,
+      "completionTime": "2026-11-24T12:10:00Z",
+      "result": null,
+      "dependsOn": [
+        "build"
+      ],
+      "retryCount": 0,
+      "reason": "WhenFalse",
+      "when": "false",
+      "skipped": true,
+      "skipReason": "WhenFalse",
+      "skipMessage": "when evaluated to false: false"
+    }
+  ],
+  "runId": "1795550000",
+  "costUSD": "0.750000",
+  "tokens": {
+    "input": 30000,
+    "output": 4500
+  },
+  "notionalCostUSD": "0.250000"
+}

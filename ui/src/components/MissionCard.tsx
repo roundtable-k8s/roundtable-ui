@@ -8,6 +8,8 @@ import { getKnightConfig } from '../lib/knights'
 import { formatRelativeTime, formatDuration, formatCost } from '../lib/format'
 import { phaseColor } from '../lib/status'
 import { Spinner } from './ui'
+import { CostTag } from './CostTag'
+import { tokensText } from '../lib/cost'
 
 interface MissionCardProps {
   mission: Mission
@@ -155,6 +157,18 @@ export function MissionCard({ mission, onClick }: MissionCardProps) {
           </div>
         )}
       </div>
+      <div className="flex items-center justify-between text-xs mt-2" aria-label="mission cost">
+        <div className="flex items-center gap-1 text-gray-500">
+          <DollarSign className="w-3 h-3" />
+          <span>Cost</span>
+          <CostTag costUSD={mission.totalCost} notionalUSD={mission.notionalCostUSD} className="text-gray-300" />
+        </div>
+        <div className="flex items-center gap-1 text-gray-500">
+          <Hash className="w-3 h-3" />
+          <span>Tokens</span>
+          <span className="text-gray-300">{tokensText(mission.tokens)}</span>
+        </div>
+      </div>
 
       {/* Knights Statuses */}
       {mission.knightStatuses && mission.knightStatuses.length > 0 && (
@@ -233,9 +247,15 @@ export function MissionCard({ mission, onClick }: MissionCardProps) {
                       <div className="text-xs text-gray-500 font-mono">{chain.chainCRName}</div>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded border ${phaseColor(chain.phase)}`}>
-                    {chain.phase}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right text-xs" aria-label={`${chain.name} cost`}>
+                      <CostTag costUSD={chain.costUSD} notionalUSD={chain.notionalCostUSD} className="text-gray-300" />
+                      <div className="text-gray-500">{tokensText(chain.tokens)}</div>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded border ${phaseColor(chain.phase)}`}>
+                      {chain.phase}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

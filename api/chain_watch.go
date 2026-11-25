@@ -30,8 +30,9 @@ const (
 type chainWatcher struct {
 	client    dynamic.Interface
 	namespace string
-	// domains resolves knight name → domain for ChainSummary step domains.
-	domains func(ctx context.Context) map[string]string
+	// domains resolves knight name → domain and plan-backing for ChainSummary
+	// step domains and notional cost.
+	domains func(ctx context.Context) map[string]knightInfo
 	// running is the in-flight registry joined onto every pushed chain so a
 	// status change does not wipe the pod/heartbeat the UI got from REST (#227).
 	running *runningRegistry
@@ -51,7 +52,7 @@ func newChainWatcher(client dynamic.Interface, namespace string, running *runnin
 		client:    client,
 		namespace: namespace,
 		running:   running,
-		domains:   cachedDomains(5*time.Second, func(ctx context.Context) map[string]string { return knightDomainMap(ctx, client, namespace) }),
+		domains:   cachedDomains(5*time.Second, func(ctx context.Context) map[string]knightInfo { return knightInfoMap(ctx, client, namespace) }),
 		backoff:   2 * time.Second,
 		subs:      map[int]func([]byte){},
 		seen:      map[string]string{},
@@ -102,7 +103,7 @@ func (c *chainWatcher) hasSubscribers() bool {
 
 // emit encodes and broadcasts one change. domains is resolved lazily (and at
 // most once per call site via the pointer) since it costs a Knight list.
-func (c *chainWatcher) emit(ctx context.Context, op string, obj *unstructured.Unstructured, domains *map[string]string) {
+func (c *chainWatcher) emit(ctx context.Context, op string, obj *unstructured.Unstructured, domains *map[string]knightInfo) {
 	if !c.hasSubscribers() {
 		return
 	}
@@ -118,16 +119,16 @@ func (c *chainWatcher) emit(ctx context.Context, op string, obj *unstructured.Un
 
 // cachedDomains memoises fn for ttl so a burst of chain changes costs one
 // Knight list instead of one per change. The result is cached even when the list
-// failed (knightDomainMap then returns an empty map), so a failing list is
+// failed (knightInfoMap then returns an empty map), so a failing list is
 // retried at most once per ttl.
-func cachedDomains(ttl time.Duration, fn func(ctx context.Context) map[string]string) func(ctx context.Context) map[string]string {
+func cachedDomains(ttl time.Duration, fn func(ctx context.Context) map[string]knightInfo) func(ctx context.Context) map[string]knightInfo {
 	var (
 		mu     sync.Mutex
 		at     time.Time
-		last   map[string]string
+		last   map[string]knightInfo
 		cached bool
 	)
-	return func(ctx context.Context) map[string]string {
+	return func(ctx context.Context) map[string]knightInfo {
 		mu.Lock()
 		defer mu.Unlock()
 		if cached && time.Since(at) < ttl {
@@ -183,7 +184,7 @@ func (c *chainWatcher) relist(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var domains map[string]string
+	var domains map[string]knightInfo
 	present := make(map[string]bool, len(list.Items))
 	for i := range list.Items {
 		item := &list.Items[i]
@@ -248,7 +249,7 @@ func (c *chainWatcher) watchOnce(ctx context.Context, rv string) (string, bool) 
 				}
 				rv = obj.GetResourceVersion()
 				name := obj.GetName()
-				var domains map[string]string
+				var domains map[string]knightInfo
 				if ev.Type == watch.Deleted {
 					delete(c.seen, name)
 					c.emit(ctx, chainOpDelete, obj, &domains)

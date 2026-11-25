@@ -8,6 +8,9 @@ import { formatDuration } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
 import { RunNow } from '../components/RunNow'
+import { CostTag } from '../components/CostTag'
+import { RunCostTable } from '../components/RunCostTable'
+import { tokensText } from '../lib/cost'
 import { useWebSocket } from '../hooks/useWebSocket'
 import {
   applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
@@ -402,6 +405,10 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
             </span>
           </div>
         )}
+        <div>
+          <span className="text-gray-500">Cost:</span> <CostTag costUSD={step.costUSD} notional={step.costNotional} className="text-gray-300" />
+        </div>
+        <div><span className="text-gray-500">Tokens:</span> <span className="text-gray-300">{tokensText(step.tokens)}</span></div>
         {step.phase === 'Skipped' && (
           <div className="col-span-2"><span className="text-gray-500">Skipped:</span> <span className="text-gray-300">{skipReasonText(step)}</span></div>
         )}
@@ -464,6 +471,9 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
           <span className="text-xs text-gray-500">⏱ {chain.timeoutSeconds}s timeout</span>
         )}
         <span className="text-xs text-gray-500">{(chain.steps || []).length} steps</span>
+        {chain.costUSD && (
+          <CostTag costUSD={chain.costUSD} notionalUSD={chain.notionalCostUSD} className="text-xs text-roundtable-gold" />
+        )}
         <span className="ml-auto flex items-center gap-1 text-xs text-gray-500">
           <Clock className="w-3 h-3" />
           {formatDuration(chain.startTime, chain.completionTime)}
@@ -514,6 +524,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
           {chain.invokable && <RunNow chain={chain.name} namespace={chain.namespace} />}
           <StepDAG steps={chain.steps || []} currentStep={chain.currentStep} />
           <StepProgress steps={chain.steps || []} />
+          {(chain.steps || []).length > 0 && <RunCostTable chain={chain} />}
           {/* Step list for drill-down (#49) */}
           <div className="mt-3 flex flex-wrap gap-2">
             {(chain.steps || []).map(step => {

@@ -56,6 +56,17 @@ export interface ChainStep {
   skipMessage?: string
   /** forEach concurrency cap (on the step, not inside fanOut). */
   maxParallel?: number
+  /** USD cost, summed over retries, fan-out items and loop rounds; unset without cost data. */
+  costUSD?: string
+  tokens?: TokenTotals | null
+  /** The knight is subscription-billed: costUSD is an API-equivalent estimate, not spend. */
+  costNotional?: boolean
+}
+
+/** Input and output token totals (api TokenTotals). */
+export interface TokenTotals {
+  input: number
+  output: number
 }
 
 /** In-flight registry view of a running task (api ChainTaskInFlight). */
@@ -151,4 +162,9 @@ export interface Chain {
   runsFailed?: number
   /** Carries ai.roundtable.io/invokable=true: the gateway can run it. */
   invokable?: boolean
+  /** Cost of the current (or most recent) run: the sum of its steps'. */
+  costUSD?: string
+  tokens?: TokenTotals | null
+  /** The part of costUSD spent by subscription-billed knights (notional). */
+  notionalCostUSD?: string
 }

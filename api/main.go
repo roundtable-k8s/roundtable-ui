@@ -1398,13 +1398,13 @@ var (
 	}
 )
 
-// getKnightDomainMap builds a name→domain lookup from Knight CRs.
-func getKnightDomainMap(ctx context.Context, namespace string) map[string]string {
-	return knightDomainMap(ctx, dynClient, namespace)
+// getKnightInfoMap builds a name→{domain, planBacked} lookup from Knight CRs.
+func getKnightInfoMap(ctx context.Context, namespace string) map[string]knightInfo {
+	return knightInfoMap(ctx, dynClient, namespace)
 }
 
-func knightDomainMap(ctx context.Context, client dynamic.Interface, namespace string) map[string]string {
-	m := map[string]string{}
+func knightInfoMap(ctx context.Context, client dynamic.Interface, namespace string) map[string]knightInfo {
+	m := map[string]knightInfo{}
 	if client == nil {
 		return m
 	}
@@ -1415,7 +1415,7 @@ func knightDomainMap(ctx context.Context, client dynamic.Interface, namespace st
 	for _, item := range list.Items {
 		spec, _ := item.Object["spec"].(map[string]interface{})
 		if spec != nil {
-			m[item.GetName()] = getStr(spec, "domain")
+			m[item.GetName()] = knightInfoFromSpec(spec)
 		}
 	}
 	return m
@@ -1444,6 +1444,12 @@ type ChainSummary struct {
 	// Invokable is true when the Chain carries ai.roundtable.io/invokable=true,
 	// so the gateway can run it (#247).
 	Invokable bool `json:"invokable,omitempty"`
+
+	// Cost of the current (or most recent) run (#270): USD and tokens, and
+	// the part of the cost that is notional (subscription-billed knights).
+	CostUSD         string       `json:"costUSD,omitempty"`
+	Tokens          *TokenTotals `json:"tokens,omitempty"`
+	NotionalCostUSD string       `json:"notionalCostUSD,omitempty"`
 }
 
 type StepSummary struct {
@@ -1481,6 +1487,13 @@ type StepSummary struct {
 
 	// Bounded loop (#227).
 	Loop *ChainLoopSummary `json:"loop,omitempty"`
+
+	// Cost of the step, summed over retries, fan-out items and loop rounds
+	// (#270). CostNotional: the knight is subscription-billed, so the cost
+	// is an API-equivalent estimate, not spend.
+	CostUSD      string       `json:"costUSD,omitempty"`
+	Tokens       *TokenTotals `json:"tokens,omitempty"`
+	CostNotional bool         `json:"costNotional,omitempty"`
 }
 
 func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc {
@@ -1497,10 +1510,10 @@ func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc 
 			return
 		}
 
-		knightDomains := getKnightDomainMap(r.Context(), namespace)
+		knights := getKnightInfoMap(r.Context(), namespace)
 		chains := []ChainSummary{}
 		for _, item := range list.Items {
-			c := parseChainResource(item.Object, knightDomains)
+			c := parseChainResource(item.Object, knights)
 			joinChainInFlight(&c, running)
 			chains = append(chains, c)
 		}
@@ -1530,8 +1543,8 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 			return
 		}
 
-		knightDomains := getKnightDomainMap(r.Context(), namespace)
-		chain := parseChainResource(obj.Object, knightDomains)
+		knights := getKnightInfoMap(r.Context(), namespace)
+		chain := parseChainResource(obj.Object, knights)
 		joinChainInFlight(&chain, running)
 		setSpanTable(r.Context(), chain.RoundTableRef)
 		w.Header().Set("Content-Type", "application/json")
@@ -1539,7 +1552,7 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 	}
 }
 
-func parseChainResource(obj map[string]interface{}, knightDomains map[string]string) ChainSummary {
+func parseChainResource(obj map[string]interface{}, knights map[string]knightInfo) ChainSummary {
 	spec := getNestedMap(obj, "spec")
 	status := getNestedMap(obj, "status")
 	metadata := getNestedMap(obj, "metadata")
@@ -1631,7 +1644,7 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 			if d := getStr(ss, "domain"); d != "" {
 				step.Domain = d
 			} else if step.Knight != "" {
-				step.Domain = knightDomains[step.Knight]
+				step.Domain = knights[step.Knight].Domain
 			}
 			if deps := getSlice(ss, "dependsOn"); deps != nil {
 				for _, d := range deps {
@@ -1646,6 +1659,7 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 		}
 		applyStepSpecExtras(&step, specStepMap[stepName])
 		applyStepStatusExtras(&step, sm, specStepMap[stepName])
+		applyStepCost(&step, sm, knights)
 
 		chain.Steps = append(chain.Steps, step)
 	}
@@ -1660,7 +1674,7 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 			knightName := getRefName(sm, "knightRef")
 			domain := getStr(sm, "domain")
 			if domain == "" && knightName != "" {
-				domain = knightDomains[knightName]
+				domain = knights[knightName].Domain
 			}
 			step := StepSummary{
 				Name:              getStr(sm, "name"),
@@ -1683,6 +1697,8 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 		}
 	}
 
+	applyChainCost(&chain, status)
+
 	return chain
 }
 
@@ -1699,6 +1715,11 @@ type MissionChainStatusDTO struct {
 	Name        string `json:"name"`
 	ChainCRName string `json:"chainCRName"`
 	Phase       string `json:"phase"`
+	// Cost of the chain's run (#270); NotionalCostUSD is the part spent by
+	// subscription-billed knights.
+	CostUSD         string       `json:"costUSD,omitempty"`
+	Tokens          *TokenTotals `json:"tokens,omitempty"`
+	NotionalCostUSD string       `json:"notionalCostUSD,omitempty"`
 }
 
 // MissionSummary is the API response for mission list
@@ -1727,6 +1748,10 @@ type MissionSummary struct {
 	ChainStatuses    []MissionChainStatusDTO  `json:"chainStatuses,omitempty"`
 	ResultsConfigMap string                   `json:"resultsConfigMap,omitempty"`
 	CompletedAt      *string                  `json:"completedAt,omitempty"`
+	// Tokens is the token use of the mission's chains; NotionalCostUSD the
+	// part of totalCost spent by subscription-billed knights (#270).
+	Tokens          *TokenTotals `json:"tokens,omitempty"`
+	NotionalCostUSD string       `json:"notionalCostUSD,omitempty"`
 }
 
 func missionsHandler(namespace string) http.HandlerFunc {
@@ -1743,9 +1768,12 @@ func missionsHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
+		chains := missionChainIndex(r.Context(), dynClient, namespace)
 		missions := []MissionSummary{}
 		for _, item := range list.Items {
-			missions = append(missions, parseMissionResource(item.Object))
+			m := parseMissionResource(item.Object)
+			applyMissionNotional(&m, chains)
+			missions = append(missions, m)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1774,6 +1802,7 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 		}
 
 		mission := parseMissionResource(obj.Object)
+		applyMissionNotional(&mission, missionChainIndex(r.Context(), dynClient, namespace))
 		setSpanTable(r.Context(), mission.RoundTableRef)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(mission)
@@ -1994,11 +2023,16 @@ func parseMissionResource(obj map[string]interface{}) MissionSummary {
 	if cs := getSlice(status, "chainStatuses"); cs != nil {
 		for _, c := range cs {
 			if cm, ok := c.(map[string]interface{}); ok {
-				mission.ChainStatuses = append(mission.ChainStatuses, MissionChainStatusDTO{
+				dto := MissionChainStatusDTO{
 					Name:        getStr(cm, "name"),
 					ChainCRName: getStr(cm, "chainCRName"),
 					Phase:       getStr(cm, "phase"),
-				})
+					Tokens:      getTokens(cm, "tokens"),
+				}
+				if _, ok := parseCost(getStr(cm, "costUSD")); ok {
+					dto.CostUSD = getStr(cm, "costUSD")
+				}
+				mission.ChainStatuses = append(mission.ChainStatuses, dto)
 			}
 		}
 	}
@@ -2007,6 +2041,7 @@ func parseMissionResource(obj map[string]interface{}) MissionSummary {
 	if t := getStr(status, "completedAt"); t != "" {
 		mission.CompletedAt = &t
 	}
+	mission.Tokens = getTokens(status, "tokens")
 
 	// Parse planning result
 	if pr := getNestedMap(status, "planningResult"); pr != nil {
