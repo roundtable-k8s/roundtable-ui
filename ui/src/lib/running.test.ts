@@ -92,3 +92,17 @@ describe('formatAge', () => {
     expect(formatAge('2026-11-24T12:00:05Z', now)).toBe('0s')
   })
 })
+
+describe('applyRunningDelta table', () => {
+  const base = { taskId: 'a', knight: 'galahad', status: 'running' as const, startedAt: '2026-11-24T10:00:00Z' }
+  it('keeps the known table when an upsert has none', () => {
+    const prev = new Map([['a', { ...base, table: 'alpha' }]])
+    const next = applyRunningDelta(prev, { op: 'upsert', task: { ...base, table: '' } })
+    expect(next.get('a')!.table).toBe('alpha')
+  })
+  it('takes the table an upsert carries', () => {
+    const prev = new Map([['a', { ...base, table: 'alpha' }]])
+    const next = applyRunningDelta(prev, { op: 'upsert', task: { ...base, table: 'beta' } })
+    expect(next.get('a')!.table).toBe('beta')
+  })
+})

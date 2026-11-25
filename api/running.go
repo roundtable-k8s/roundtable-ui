@@ -915,6 +915,28 @@ func runningHandler(reg *runningRegistry, namespace string) http.HandlerFunc {
 	}
 }
 
+// withTables returns a copy of d whose tasks carry their knight's table
+// ("none" when unknown), as GET /api/running does, so live updates match the
+// snapshot when the browser filters by table.
+func withTables(d RunningDelta, tables map[string]string) RunningDelta {
+	fill := func(t RunningTask) RunningTask {
+		t.Table = tableOrNone(tables[strings.ToLower(t.Knight)])
+		return t
+	}
+	if d.Task != nil {
+		t := fill(*d.Task)
+		d.Task = &t
+	}
+	if d.Tasks != nil {
+		ts := make([]RunningTask, len(d.Tasks))
+		for i, t := range d.Tasks {
+			ts[i] = fill(t)
+		}
+		d.Tasks = ts
+	}
+	return d
+}
+
 // runningWSEvent wraps a delta as a `running` WebSocket event.
 func runningWSEvent(d RunningDelta) []byte {
 	payload, _ := json.Marshal(d)

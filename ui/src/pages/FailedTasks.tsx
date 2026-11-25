@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Skull } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
-import { withTable } from '../lib/tables'
+import { inTable } from '../lib/tables'
 import { apiGet, apiPost } from '../lib/api'
 import { PageHeader, RefreshButton } from '../components/ui'
 import { DeadLettersView } from '../components/DeadLettersView'
@@ -16,8 +16,9 @@ export function FailedTasksPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await apiGet<{ deadLetters?: DeadLetter[] }>(withTable(DEAD_LETTERS_URL, table))
-      setEntries(data.deadLetters ?? [])
+      const data = await apiGet<{ deadLetters?: DeadLetter[] }>(DEAD_LETTERS_URL)
+      // The gateway list has no table filter, so narrow here.
+      setEntries((data.deadLetters ?? []).filter((d) => inTable(table, d.table)))
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load dead letters')

@@ -1295,8 +1295,20 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// wrong until it refetches.
 		var unsubRunning func()
 		if running != nil {
+			var tablesMu sync.Mutex
+			var knightTbl map[string]string
+			var tblAt time.Time
 			unsubRunning = running.subscribe(func(d RunningDelta) {
-				safeWrite(true, runningWSEvent(d))
+				// Tag tasks with their table like GET /api/running; the Knight
+				// list is cached because heartbeats arrive constantly.
+				tablesMu.Lock()
+				if knightTbl == nil || time.Since(tblAt) > 30*time.Second {
+					knightTbl = knightTables(context.Background(), envOr("NAMESPACE", "roundtable"))
+					tblAt = time.Now()
+				}
+				tbl := knightTbl
+				tablesMu.Unlock()
+				safeWrite(true, runningWSEvent(withTables(d, tbl)))
 			})
 		}
 
