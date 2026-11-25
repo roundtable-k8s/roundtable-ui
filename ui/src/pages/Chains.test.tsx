@@ -3,14 +3,14 @@ import { render, screen, within, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChainsPage, FALLBACK_POLL_MS } from './Chains'
-import { apiGet } from '../lib/api'
+import { apiGet, apiPost } from '../lib/api'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from '../lib/types'
 import apiFanout from '../test/fixtures/api/fanout.json'
 import apiLoop from '../test/fixtures/api/pr-pipeline-loop.json'
 import type { TopicListener } from '../hooks/useWebSocket'
 
-vi.mock('../lib/api', () => ({ apiGet: vi.fn() }))
+vi.mock('../lib/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
 
 let connected = true
 const listeners = new Map<string, Set<TopicListener>>()
@@ -175,5 +175,35 @@ describe('ChainsPage with real API payloads', () => {
     renderPage('/chains?chain=pr-pipeline-roundtable-ui-187')
     const step = await screen.findByRole('region', { name: 'step fixloop' })
     expect(step).toHaveTextContent('galahad-abc-1')
+  })
+})
+
+describe('ChainsPage run now', () => {
+  it('shows Run now only for chains the gateway can run, posts the input and links to the run', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === '/api/chains'
+        ? Promise.resolve([{ ...fanOutChain(), invokable: true }, { ...prPipelineChain(), name: 'closed-chain' }])
+        : Promise.reject(new Error('no KV')))
+    vi.mocked(apiPost).mockResolvedValue({ run: 'doc-sweep-x1', namespace: 'roundtable', phase: 'Pending', done: false })
+    renderPage('/chains?chain=doc-sweep')
+
+    const box = await screen.findByTestId('run-now')
+    expect(screen.getAllByTestId('run-now')).toHaveLength(1)
+
+    await userEvent.type(within(box).getByRole('textbox'), 'topic: nats')
+    await userEvent.click(within(box).getByRole('button', { name: /run now/i }))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chains/doc-sweep/run', { namespace: 'roundtable', input: 'topic: nats' }))
+    const link = await within(box).findByRole('link', { name: 'doc-sweep-x1' })
+    expect(link.getAttribute('href')).toBe('/chains?chain=doc-sweep-x1')
+  })
+
+  it('shows the error when the run cannot be started', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === '/api/chains' ? Promise.resolve([{ ...fanOutChain(), invokable: true }]) : Promise.reject(new Error('no KV')))
+    vi.mocked(apiPost).mockRejectedValue(new Error('Gateway not configured'))
+    renderPage('/chains?chain=doc-sweep')
+    const box = await screen.findByTestId('run-now')
+    await userEvent.click(within(box).getByRole('button', { name: /run now/i }))
+    expect((await within(box).findByRole('alert')).textContent).toContain('Gateway not configured')
   })
 })

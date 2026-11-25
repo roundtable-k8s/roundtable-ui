@@ -7,6 +7,7 @@ import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '
 import { formatDuration } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
+import { RunNow } from '../components/RunNow'
 import { useWebSocket } from '../hooks/useWebSocket'
 import {
   applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
@@ -510,6 +511,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
               </div>
             )}
           </div>
+          {chain.invokable && <RunNow chain={chain.name} namespace={chain.namespace} />}
           <StepDAG steps={chain.steps || []} currentStep={chain.currentStep} />
           <StepProgress steps={chain.steps || []} />
           {/* Step list for drill-down (#49) */}

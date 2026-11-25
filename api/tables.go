@@ -41,8 +41,6 @@ var validNATSPrefix = regexp.MustCompile(`^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$`)
 // validStreamName matches JetStream stream names (no spaces, dots or wildcards).
 var validStreamName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
 
-var errUnknownTable = errors.New("unknown table")
-
 // TableInfo is one RoundTable's NATS layout.
 type TableInfo struct {
 	Name          string `json:"name"`
@@ -233,47 +231,6 @@ func tableForSubject(tables []TableInfo, subject string) (TableInfo, bool) {
 	return best, found
 }
 
-// dispatchTable picks the table a manual dispatch is published to. An
-// explicit table name must be one of the covered tables. Without one the
-// knight's own table is used — derived from its Knight CR subjects — and,
-// when the CR is unreadable, the first table (FLEET_PREFIX on single-table
-// installs, as before).
-func (s *tableSource) dispatchTable(ctx context.Context, tableName, knight string) (TableInfo, error) {
-	tables := s.tables(ctx)
-	if tableName != "" {
-		if t, ok := findTableByName(tables, tableName); ok {
-			return t, nil
-		}
-		return TableInfo{}, errUnknownTable
-	}
-	if prefix, ok := knightPrefix(ctx, s.namespace, knight); ok {
-		if t, ok := findTableByPrefix(tables, prefix); ok {
-			return t, nil
-		}
-		// The knight listens on a prefix no covered table claims (e.g. its
-		// table was filtered out): its own subject is still where it listens.
-		return TableInfo{Prefix: prefix}, nil
-	}
-	return tables[0], nil
-}
-
-// knightPrefix derives a knight's NATS prefix from its CR subjects. Knight
-// CR names are lowercase; the dispatch form sends the CR name.
-func knightPrefix(ctx context.Context, namespace, knight string) (string, bool) {
-	if dynClient == nil || knight == "" {
-		return "", false
-	}
-	obj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(ctx, strings.ToLower(knight), metav1.GetOptions{})
-	if err != nil {
-		return "", false
-	}
-	p, err := deriveIntrospectPrefix(obj)
-	if err != nil || !validNATSPrefix.MatchString(p) {
-		return "", false
-	}
-	return p, true
-}
-
 // --- task history reading ---
 
 // resultsReader reads up to limit of the newest messages on filter from a
@@ -327,20 +284,4 @@ func jsReadResults(ctx context.Context, streamName, filter string, limit int) ([
 	return events, info.State.Msgs, nil
 }
 
-// --- task publishing ---
-
 var errNATSUnavailable = errors.New("NATS not available")
-
-// publishTask publishes a dispatched task. A variable so tests can capture
-// the subject without a NATS server.
-var publishTask = func(subject string, data []byte) error {
-	if nc == nil {
-		return errNATSUnavailable
-	}
-	return nc.Publish(subject, data)
-}
-
-// taskSubject is <prefix>.tasks.<domain>.<taskId>.
-func taskSubject(prefix, domain, taskID string) string {
-	return fmt.Sprintf("%s.tasks.%s.%s", prefix, domain, taskID)
-}

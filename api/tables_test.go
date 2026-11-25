@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -83,19 +81,6 @@ func stubResults(t *testing.T, byStream map[string][]TaskEvent, failing ...strin
 		return append([]TaskEvent(nil), evs...), uint64(len(evs)), nil
 	}
 	return &filters
-}
-
-// capturePublish records published subjects instead of sending to NATS.
-func capturePublish(t *testing.T) *[]string {
-	t.Helper()
-	old := publishTask
-	t.Cleanup(func() { publishTask = old })
-	var subjects []string
-	publishTask = func(subject string, _ []byte) error {
-		subjects = append(subjects, subject)
-		return nil
-	}
-	return &subjects
 }
 
 func resultEvent(subject string, ts time.Time) TaskEvent {
@@ -192,7 +177,6 @@ func TestTableSourceWithoutKubernetes(t *testing.T) {
 func tasksRouter(src *tableSource) *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/tasks", taskHistoryHandler(src)).Methods("GET")
-	r.HandleFunc("/api/tasks/dispatch", taskDispatchHandler(src)).Methods("POST")
 	return r
 }
 
@@ -289,72 +273,6 @@ func TestTaskHistorySingleTableEnv(t *testing.T) {
 	}
 	if !reflect.DeepEqual(*filters, []string{"fleet_a_results fleet-a.results.>"}) {
 		t.Errorf("filters = %v", *filters)
-	}
-}
-
-func postDispatch(t *testing.T, r http.Handler, body map[string]interface{}) (int, map[string]string) {
-	t.Helper()
-	b, _ := json.Marshal(body)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("POST", "/api/tasks/dispatch", bytes.NewReader(b)))
-	var resp map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	return w.Code, resp
-}
-
-func TestTaskDispatchToTables(t *testing.T) {
-	withTwoTables(t)
-	subjects := capturePublish(t)
-	r := tasksRouter(newTableSource(tablesTestNS, "", ""))
-
-	tests := []struct {
-		name       string
-		body       map[string]interface{}
-		wantStatus int
-		wantPrefix string
-		wantTable  string
-	}{
-		{"explicit second table", map[string]interface{}{"knight": "rt-ui", "domain": "ui", "task": "x", "table": "roundtable-dev"}, http.StatusOK, "rt-dev.tasks.ui.", "roundtable-dev"},
-		{"default: knight's own table", map[string]interface{}{"knight": "rt-ui", "domain": "ui", "task": "x"}, http.StatusOK, "rt-dev.tasks.ui.", "roundtable-dev"},
-		{"default: first-table knight", map[string]interface{}{"knight": "galahad", "domain": "security", "task": "x"}, http.StatusOK, "fleet-a.tasks.security.", "fleet-a"},
-		{"unknown knight falls back to first table", map[string]interface{}{"knight": "ghost", "domain": "security", "task": "x"}, http.StatusOK, "fleet-a.tasks.security.", "fleet-a"},
-		{"unknown table", map[string]interface{}{"knight": "rt-ui", "domain": "ui", "task": "x", "table": "nope"}, http.StatusBadRequest, "", ""},
-		{"injection in table", map[string]interface{}{"knight": "rt-ui", "domain": "ui", "task": "x", "table": "rt.>"}, http.StatusBadRequest, "", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			*subjects = nil
-			code, resp := postDispatch(t, r, tt.body)
-			if code != tt.wantStatus {
-				t.Fatalf("status %d, want %d (%v)", code, tt.wantStatus, resp)
-			}
-			if tt.wantPrefix == "" {
-				if len(*subjects) != 0 {
-					t.Errorf("published %v", *subjects)
-				}
-				return
-			}
-			if len(*subjects) != 1 || !strings.HasPrefix((*subjects)[0], tt.wantPrefix) {
-				t.Errorf("published %v, want prefix %s", *subjects, tt.wantPrefix)
-			}
-			if resp["table"] != tt.wantTable || resp["subject"] != (*subjects)[0] {
-				t.Errorf("response %v", resp)
-			}
-		})
-	}
-}
-
-// A single-table install publishes on FLEET_PREFIX, as before.
-func TestTaskDispatchSingleTableEnv(t *testing.T) {
-	old := dynClient
-	dynClient = nil
-	t.Cleanup(func() { dynClient = old })
-	subjects := capturePublish(t)
-	r := tasksRouter(newTableSource(tablesTestNS, "fleet-a", "fleet_a_results"))
-
-	code, _ := postDispatch(t, r, map[string]interface{}{"knight": "galahad", "domain": "security", "task": "x"})
-	if code != http.StatusOK || len(*subjects) != 1 || !strings.HasPrefix((*subjects)[0], "fleet-a.tasks.security.galahad-ui-") {
-		t.Errorf("code=%d subjects=%v", code, *subjects)
 	}
 }
 

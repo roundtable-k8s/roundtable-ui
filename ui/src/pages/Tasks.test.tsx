@@ -20,8 +20,9 @@ const events: NatsEvent[] = [
 ]
 
 const apiPost = vi.fn()
+const apiGet = vi.fn()
 vi.mock('../lib/api', () => ({
-  apiGet: (url: string) => Promise.resolve(url === '/api/tasks' ? { results: [], tables } : { fleetPrefix: 'fleet-a' }),
+  apiGet: (...args: unknown[]) => apiGet(...args),
   apiPost: (...args: unknown[]) => apiPost(...args),
 }))
 vi.mock('../hooks/useFleet', () => ({ useFleet: () => ({ knights, error: null }) }))
@@ -30,7 +31,10 @@ vi.mock('../components/Toast', () => ({ useToast: () => ({ addToast: vi.fn() }) 
 
 beforeEach(() => {
   apiPost.mockReset()
-  apiPost.mockResolvedValue({ task_id: 'rt-ui-ui-1', table: 'roundtable-dev' })
+  apiGet.mockReset()
+  apiGet.mockImplementation((url: string) =>
+    Promise.resolve(url === '/api/tasks' ? { results: [], tables } : { taskId: 'invoke-rt-ui-1', status: 'pending' }))
+  apiPost.mockResolvedValue({ taskId: 'invoke-rt-ui-1', runId: 'r1', status: 'pending', roundTable: 'dev' })
 })
 
 describe('TasksPage', () => {
@@ -51,28 +55,28 @@ describe('TasksPage', () => {
     expect(rows[0].textContent).toContain('t1')
   })
 
-  it("dispatches to the knight's own table by default", async () => {
+  it('dispatches to the picked knight through the gateway proxy, without a domain or table', async () => {
     render(<TasksPage />)
-    const tableSelect = await screen.findByLabelText('Table', { selector: '#dispatch-table' })
-    expect((tableSelect as HTMLSelectElement).value).toBe('fleet-a') // galahad's table
+    await screen.findByLabelText('Table', { selector: '#table-filter' })
+    expect(screen.queryByLabelText('Table', { selector: '#dispatch-table' })).toBeNull()
 
     await userEvent.selectOptions(screen.getAllByRole('combobox')[0], 'rt-ui')
-    expect((tableSelect as HTMLSelectElement).value).toBe('roundtable-dev')
-    expect(screen.getByText('rt-dev.tasks.ui.*')).toBeTruthy()
-
     await userEvent.type(screen.getByRole('textbox'), 'fix it{Enter}')
     await waitFor(() => expect(apiPost).toHaveBeenCalled())
-    expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', {
-      knight: 'rt-ui', domain: 'ui', task: 'fix it', table: 'roundtable-dev',
-    })
+    expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', { knight: 'rt-ui', task: 'fix it' })
+    expect(await screen.findByText('invoke-rt-ui-1')).toBeTruthy()
+    expect(screen.getByTestId('dispatch-status').textContent).toBe('pending')
   })
 
-  it('lets the user dispatch to another table', async () => {
+  it('polls the task and shows its status and output', async () => {
+    apiGet.mockImplementation((url: string) => {
+      if (url === '/api/tasks') return Promise.resolve({ results: [], tables })
+      return Promise.resolve({ taskId: 'invoke-rt-ui-1', status: 'succeeded', output: 'page fixed' })
+    })
     render(<TasksPage />)
-    const tableSelect = await screen.findByLabelText('Table', { selector: '#dispatch-table' })
-    await userEvent.selectOptions(tableSelect, 'roundtable-dev')
-    await userEvent.type(screen.getByRole('textbox'), 'hello{Enter}')
-    await waitFor(() => expect(apiPost).toHaveBeenCalled())
-    expect(apiPost.mock.calls[0][1]).toMatchObject({ knight: 'galahad', table: 'roundtable-dev' })
+    await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
+    await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('succeeded'), { timeout: 5000 })
+    expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1')
+    expect(screen.getByTestId('dispatch-output').textContent).toBe('page fixed')
   })
 })

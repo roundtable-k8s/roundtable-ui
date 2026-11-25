@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -25,20 +26,64 @@ const gatewayMaxBody = 4 << 20 // cap on a gateway response we relay
 // through the gateway, not NATS (whiteboard decision 6).
 type gatewayClient struct {
 	baseURL string // GATEWAY_URL; empty = not configured
-	token   string // GATEWAY_TOKEN; optional bearer token
-	http    *http.Client
+	token   string // GATEWAY_TOKEN; optional bearer token (used when no token file is set)
+	// tokenFile is GATEWAY_TOKEN_FILE: the bearer token is its first line,
+	// read on first use and again after the gateway answers 401 (rotation).
+	tokenFile string
+	mu        sync.Mutex
+	fileToken string
+	http      *http.Client
 }
 
 func newGatewayClientFromEnv() *gatewayClient {
 	return &gatewayClient{
-		baseURL: strings.TrimRight(strings.TrimSpace(os.Getenv("GATEWAY_URL")), "/"),
-		token:   strings.TrimSpace(os.Getenv("GATEWAY_TOKEN")),
-		http:    &http.Client{Timeout: 30 * time.Second},
+		baseURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("GATEWAY_URL")), "/"),
+		token:     strings.TrimSpace(os.Getenv("GATEWAY_TOKEN")),
+		tokenFile: strings.TrimSpace(os.Getenv("GATEWAY_TOKEN_FILE")),
+		http:      &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// readTokenFile returns the first line of the token file.
+func readTokenFile(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	line, _, _ := strings.Cut(string(b), "\n")
+	return strings.TrimSpace(line), nil
+}
+
+// bearer returns the token to send. With a token file the cached value is
+// used; reload re-reads the file first (after a 401).
+func (g *gatewayClient) bearer(reload bool) string {
+	if g.tokenFile == "" {
+		return g.token
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if reload || g.fileToken == "" {
+		t, err := readTokenFile(g.tokenFile)
+		if err != nil {
+			slog.Warn("cannot read gateway token file", "error", err)
+			return g.fileToken
+		}
+		g.fileToken = t
+	}
+	return g.fileToken
 }
 
 // do calls the gateway and returns its status and body.
 func (g *gatewayClient) do(ctx context.Context, method, path string, query url.Values, body []byte) (int, []byte, error) {
+	status, b, err := g.doOnce(ctx, method, path, query, body, g.bearer(false))
+	if err == nil && status == http.StatusUnauthorized && g.tokenFile != "" {
+		// The token may have been rotated: re-read the file and retry once.
+		status, b, err = g.doOnce(ctx, method, path, query, body, g.bearer(true))
+	}
+	return status, b, err
+}
+
+func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query url.Values, body []byte, token string) (int, []byte, error) {
 	u := g.baseURL + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -55,8 +100,8 @@ func (g *gatewayClient) do(ctx context.Context, method, path string, query url.V
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if g.token != "" {
-		req.Header.Set("Authorization", "Bearer "+g.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := g.http.Do(req)
 	if err != nil {

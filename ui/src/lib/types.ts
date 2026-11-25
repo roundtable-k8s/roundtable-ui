@@ -149,4 +149,6 @@ export interface Chain {
   suspend?: boolean
   runsCompleted?: number
   runsFailed?: number
+  /** Carries ai.roundtable.io/invokable=true: the gateway can run it. */
+  invokable?: boolean
 }

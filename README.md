@@ -266,8 +266,10 @@ The dashboard API server is configured via environment variables:
 | `GRAFANA_QUEUE_URL` | Optional long-term queue history link returned by the queue history endpoints; `{knight}` is replaced by the knight name | _(unset)_ |
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
 | `BRIEFINGS_DIRS` | Comma-separated vault-relative directories scanned for briefings (absolute and `..` entries are ignored; missing directories are skipped) | `Briefings/Daily,Agents/Briefings` |
-| `GATEWAY_URL` | Base URL of the roundtable gateway; the Failed & lost page lists dead letters and retries through it (unset = those endpoints return 503) | _(unset)_ |
+| `GATEWAY_URL` | Base URL of the roundtable gateway; dispatch, run-now and the Failed & lost page (dead letters, retry) go through it (unset = those endpoints return 503) | _(unset)_ |
+| `GATEWAY_TOKEN_FILE` | File whose first line is the gateway bearer token; re-read when the gateway answers 401 (token rotation). Takes precedence over `GATEWAY_TOKEN` | _(none)_ |
 | `GATEWAY_TOKEN` | Optional bearer token sent to the gateway | _(none)_ |
+| `DISPATCH_RATE` / `DISPATCH_BURST` | Rate limit (requests/sec, bucket size) of dispatch and run-now; rate <= 0 disables it | `2` / `10` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
 
@@ -333,11 +335,14 @@ The dashboard exposes a comprehensive REST API:
 
 ### Task Dispatch
 - `GET /api/tasks` — List recent tasks from JetStream
-- `POST /api/tasks/dispatch` — Dispatch task to knight
+- `POST /api/tasks/dispatch` — Dispatch a task through the invoke gateway (`POST /v1/knights/{knight}/invoke`, `timeoutSeconds: 0`). Body `{knight, task, model?, runId?}`; returns the gateway task record (`taskId`, `runId`, `status`). 503 when `GATEWAY_URL` is unset; rate limited (429)
+- `GET /api/tasks/dispatch/{taskId}` — Task status and output (`GET /v1/tasks/{taskId}`)
 
 ### Chain Orchestration
 - `GET /api/chains` — List all chains
 - `GET /api/chains/{name}` — Get chain details
+- `POST /api/chains/{name}/run` — Run now through the gateway (`POST /v1/chains/{name}/runs`, `waitSeconds: 0`). Optional body `{input}`; only Chains labelled `ai.roundtable.io/invokable: "true"` can be run (chain summaries carry `invokable`). 503 when `GATEWAY_URL` is unset; rate limited (429)
+- `GET /api/chains/runs/{namespace}/{run}` — Run status (`GET /v1/runs/{namespace}/{run}`)
 - `GET /api/chains/{name}/steps/{step}/output` — Get step output from NATS KV
 
 ### Mission Management
