@@ -1295,19 +1295,16 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// wrong until it refetches.
 		var unsubRunning func()
 		if running != nil {
-			var tablesMu sync.Mutex
-			var knightTbl map[string]string
-			var tblAt time.Time
+			// Tag tasks with their table like GET /api/running. The lookup
+			// happens here and in a background loop, never inside the
+			// registry callback (which runs under its lock).
+			tc := newTableCache(func(ctx context.Context) map[string]string {
+				return knightTables(ctx, envOr("NAMESPACE", "roundtable"))
+			}, 30*time.Second, 3*time.Second)
+			tc.refresh()
+			go tc.run(done)
 			unsubRunning = running.subscribe(func(d RunningDelta) {
-				// Tag tasks with their table like GET /api/running; the Knight
-				// list is cached because heartbeats arrive constantly.
-				tablesMu.Lock()
-				if knightTbl == nil || time.Since(tblAt) > 30*time.Second {
-					knightTbl = knightTables(context.Background(), envOr("NAMESPACE", "roundtable"))
-					tblAt = time.Now()
-				}
-				tbl := knightTbl
-				tablesMu.Unlock()
+				tbl := tc.get()
 				safeWrite(true, runningWSEvent(withTables(d, tbl)))
 			})
 		}
