@@ -265,6 +265,8 @@ The dashboard API server is configured via environment variables:
 | `GRAFANA_QUEUE_URL` | Optional long-term queue history link returned by the queue history endpoints; `{knight}` is replaced by the knight name | _(unset)_ |
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
 | `BRIEFINGS_DIRS` | Comma-separated vault-relative directories scanned for briefings (absolute and `..` entries are ignored; missing directories are skipped) | `Briefings/Daily,Agents/Briefings` |
+| `GATEWAY_URL` | Base URL of the roundtable gateway; the Failed & lost page lists dead letters and retries through it (unset = those endpoints return 503) | _(unset)_ |
+| `GATEWAY_TOKEN` | Optional bearer token sent to the gateway | _(none)_ |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
 

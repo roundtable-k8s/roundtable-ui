@@ -392,6 +392,12 @@ func main() {
 	api.HandleFunc("/tasks", taskHistoryHandler(tables)).Methods("GET")
 	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(tables)).Methods("POST")
 
+	// Dead letters: failed and lost tasks, retried through the gateway
+	gateway := newGatewayClientFromEnv()
+	api.HandleFunc("/dead-letters", deadLettersHandler(gateway)).Methods("GET")
+	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(gateway)).Methods("GET")
+	api.HandleFunc("/dead-letters/{taskId}/retry", deadLetterRetryHandler(gateway)).Methods("POST")
+
 	// Chain endpoints
 	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
 	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, running)).Methods("GET")

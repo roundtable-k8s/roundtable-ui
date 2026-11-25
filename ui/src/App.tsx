@@ -1,10 +1,11 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
 import { useTaskNotifications } from './hooks/useTaskNotifications'
+import { useOpenDeadLetters } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
 const TasksPage = lazy(() => import('./pages/Tasks').then(m => ({ default: m.TasksPage })))
@@ -18,6 +19,7 @@ const CostDashboardPage = lazy(() => import('./pages/CostDashboard').then(m => (
 const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ default: m.ArchitecturePage })))
 const RunningPage = lazy(() => import('./pages/Running').then(m => ({ default: m.RunningPage })))
 const QueuesPage = lazy(() => import('./pages/Queues').then(m => ({ default: m.QueuesPage })))
+const FailedTasksPage = lazy(() => import('./pages/FailedTasks').then(m => ({ default: m.FailedTasksPage })))
 const RoundTablesPage = lazy(() => import('./pages/RoundTables').then(m => ({ default: m.RoundTablesPage })))
 
 function PageLoading() {
@@ -39,6 +41,7 @@ const navItems = [
   { path: '/roundtables', icon: Crown, label: 'Round Tables' },
   { path: '/quests', icon: Scroll, label: 'Dispatch' },
   { path: '/queues', icon: Inbox, label: 'Queues' },
+  { path: '/failed', icon: Skull, label: 'Failed & lost' },
   { path: '/flow', icon: GitGraph, label: 'Message Flow' },
   { path: '/chains', icon: Link2, label: 'Chains' },
   { path: '/costs', icon: DollarSign, label: 'Cost Details' },
@@ -50,6 +53,7 @@ const navItems = [
 export default function App() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const openDeadLetters = useOpenDeadLetters()
 
   // Close sidebar on navigation (mobile)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
@@ -105,6 +109,11 @@ export default function App() {
               >
                 <Icon className="w-5 h-5" />
                 <span className="font-medium">{label}</span>
+                {path === '/failed' && openDeadLetters > 0 && (
+                  <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400" aria-label={`${openDeadLetters} open`}>
+                    {openDeadLetters}
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -129,6 +138,7 @@ export default function App() {
             <Route path="/roundtables" element={<RoundTablesPage />} />
             <Route path="/quests" element={<TasksPage />} />
             <Route path="/queues" element={<QueuesPage />} />
+            <Route path="/failed" element={<FailedTasksPage />} />
             <Route path="/flow" element={<LivePage />} />
             <Route path="/chronicles" element={<BriefingsPage />} />
             <Route path="/chains" element={<ChainsPage />} />
