@@ -408,3 +408,49 @@ describe('ChainsPage table filter', () => {
   })
 })
 
+describe('ChainsPage cancel run', () => {
+  const runCopy = (phase: string): Chain => ({ ...prPipelineChain(), name: 'pr-pipeline-roundtable-9', runTemplate: 'pr-pipeline', phase })
+
+  function open(chain: Chain) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === CHAINS_LIST_URL) return Promise.resolve([chain])
+      return Promise.reject(new Error('no KV'))
+    })
+    renderPage(`/chains?chain=${chain.name}`)
+  }
+
+  it('shows the button only on a running run copy', async () => {
+    open(runCopy('Running'))
+    expect(await screen.findByRole('button', { name: 'Cancel run' })).toBeTruthy()
+  })
+
+  it.each(['Succeeded', 'Failed'])('hides the button on a %s run copy', async (phase) => {
+    open(runCopy(phase))
+    await screen.findAllByText('pr-pipeline-roundtable-9')
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull()
+  })
+
+  it('hides the button on a running template', async () => {
+    open({ ...prPipelineChain(), name: 'pr-pipeline', phase: 'Running' })
+    await screen.findAllByText('pr-pipeline')
+    expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull()
+  })
+
+  it('calls the cancel endpoint after confirming and shows the gateway message on failure', async () => {
+    const mockPost = vi.mocked(apiPost)
+    mockPost.mockReset()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockPost.mockRejectedValueOnce(new Error('run already finished'))
+    open(runCopy('Running'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel run' }))
+    expect(confirm).toHaveBeenCalled()
+    expect(mockPost).toHaveBeenCalledWith('/api/chains/runs/roundtable/pr-pipeline-roundtable-9/cancel', {})
+    expect((await screen.findByRole('alert')).textContent).toContain('run already finished')
+    confirm.mockReturnValue(false)
+    mockPost.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel run' }))
+    expect(mockPost).not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+})

@@ -413,6 +413,7 @@ func main() {
 	api.HandleFunc("/tasks/dispatch/{taskId}", taskStatusHandler(gateway)).Methods("GET")
 	api.Handle("/chains/{name}/run", dispatchLimit.wrap(chainRunHandler(gateway))).Methods("POST")
 	api.HandleFunc("/chains/runs/{namespace}/{run}", chainRunStatusHandler(gateway)).Methods("GET")
+	api.Handle("/chains/runs/{namespace}/{run}/cancel", dispatchLimit.wrap(chainRunCancelHandler(gateway))).Methods("POST")
 
 	// Chat with a knight through the gateway: same auth and rate limit as dispatch
 	api.Handle("/chat/{knight}", dispatchLimit.wrap(chatSendHandler(gateway))).Methods("POST")
