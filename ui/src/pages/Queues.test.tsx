@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { QueuesPage, QueuesTable } from './Queues'
 import { apiGet } from '../lib/api'
 import type { KnightQueue, KnightQueueHistory, QueueSample } from '../lib/queues'
@@ -37,7 +38,7 @@ const mockApiGet = vi.mocked(apiGet)
 
 function mockApi(queues: KnightQueue[] | Error, hist: KnightQueueHistory[] | Error) {
   mockApiGet.mockImplementation((url: string) => {
-    const v = url.startsWith('/api/queues/history') ? hist : url === '/api/queues' ? queues : new Error('unexpected ' + url)
+    const v = url.startsWith('/api/queues/history') ? hist : url.startsWith('/api/queues') ? queues : new Error('unexpected ' + url)
     return v instanceof Error ? Promise.reject(v) : Promise.resolve(v)
   })
 }
@@ -47,7 +48,7 @@ describe('QueuesPage', () => {
 
   it('shows an empty state when there are no knights', async () => {
     mockApi([], [])
-    render(<QueuesPage />)
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
     expect(await screen.findByText('No knight queues found.')).toBeInTheDocument()
     expect(mockApiGet).toHaveBeenCalledWith('/api/queues')
     expect(mockApiGet).toHaveBeenCalledWith('/api/queues/history?since=1h')
@@ -58,7 +59,7 @@ describe('QueuesPage', () => {
       [queue({ pending: 8, ackPending: 2, freeSlots: 0, oldestWaitSeconds: 420 })],
       [history()],
     )
-    render(<QueuesPage />)
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
     const row = await screen.findByTestId('queue-row-galahad')
     const cells = within(row).getAllByRole('cell')
     expect(cells[1]).toHaveTextContent('8')
@@ -75,7 +76,7 @@ describe('QueuesPage', () => {
 
   it('shows ack-pending-only work without warnings', async () => {
     mockApi([queue({ ackPending: 2, freeSlots: 0, oldestWaitSeconds: 30 })], [history()])
-    render(<QueuesPage />)
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
     const row = await screen.findByTestId('queue-row-galahad')
     const cells = within(row).getAllByRole('cell')
     expect(cells[1]).toHaveTextContent('0')
@@ -86,14 +87,14 @@ describe('QueuesPage', () => {
 
   it('still renders the table when history is unavailable', async () => {
     mockApi([queue({ pending: 1 })], new Error('Queue history not available'))
-    render(<QueuesPage />)
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
     expect(await screen.findByTestId('queue-row-galahad')).toHaveTextContent('No history')
     await waitFor(() => expect(screen.getByText(/Scaling history unavailable/)).toBeInTheDocument())
   })
 
   it('shows an error banner when queues fail to load', async () => {
     mockApi(new Error('JetStream not available'), [])
-    render(<QueuesPage />)
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
     expect(await screen.findByText(/Failed to load queues: JetStream not available/)).toBeInTheDocument()
   })
 })
@@ -118,5 +119,28 @@ describe('QueuesTable', () => {
     expect(screen.getByRole('link', { name: /Grafana/ })).toHaveAttribute('href', 'https://grafana.example/d/queues?var-knight=galahad')
     rerender(<QueuesTable queues={[queue()]} history={[history({ grafanaUrl: 'javascript:alert(1)' })]} />)
     expect(screen.queryByRole('link', { name: /Grafana/ })).toBeNull()
+  })
+})
+
+describe('QueuesPage table filter', () => {
+  it('asks for one table and shows only its knights', async () => {
+    const all = [queue({ knight: 'galahad', table: 'personal' }), queue({ knight: 'rt-ui', table: 'roundtable-dev' })]
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.startsWith('/api/queues/history')) return Promise.resolve([])
+      const t = new URL(url, 'http://x').searchParams.get('table')
+      return Promise.resolve(all.filter((q) => !t || q.table === t))
+    })
+    render(<MemoryRouter initialEntries={['/queues?table=personal']}><QueuesPage /></MemoryRouter>)
+    expect(await screen.findByTestId('queue-row-galahad')).toBeInTheDocument()
+    expect(screen.queryByTestId('queue-row-rt-ui')).toBeNull()
+    expect(mockApiGet).toHaveBeenCalledWith('/api/queues?table=personal')
+    expect(screen.queryByTestId('table-badge')).toBeNull()
+  })
+
+  it('badges each row with its table when all tables are shown', async () => {
+    mockApi([queue({ knight: 'galahad', table: 'personal' }), queue({ knight: 'rt-ui', table: 'roundtable-dev' })], [])
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
+    await screen.findByTestId('queue-row-rt-ui')
+    expect(screen.getAllByTestId('table-badge').map((b) => b.textContent)).toEqual(['personal', 'roundtable-dev'])
   })
 })

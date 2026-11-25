@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { Inbox, AlertTriangle, Clock, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState } from '../components/ui'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { withTable } from '../lib/tables'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge } from '../components/ui'
 import { QueueSparkline } from '../components/QueueSparkline'
 import {
   OLDEST_WAIT_WARN_SECONDS,
@@ -34,7 +36,8 @@ function WarningBadge({ w }: { w: QueueWarning }) {
   )
 }
 
-export function QueuesTable({ queues, history }: {
+export function QueuesTable({ queues, history, showTable = false }: {
+  showTable?: boolean
   queues: KnightQueue[]
   history: KnightQueueHistory[]
 }) {
@@ -65,7 +68,7 @@ export function QueuesTable({ queues, history }: {
             return (
               <tr key={q.knight} className="border-b border-roundtable-steel/50 last:border-0 align-top" data-testid={`queue-row-${q.knight}`}>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-white">{q.knight}</div>
+                  <div className="font-medium text-white">{q.knight} {showTable && <TableBadge table={q.table} />}</div>
                   <div className="text-xs text-gray-500 font-mono">{q.consumer}</div>
                   {q.error && <div className="text-xs text-red-400 mt-1">{q.error}</div>}
                   {!q.error && !q.consumerFound && <div className="text-xs text-gray-500 mt-1">No consumer yet</div>}
@@ -116,7 +119,8 @@ export function QueuesTable({ queues, history }: {
 }
 
 export function QueuesPage() {
-  const { data: queues, loading, error, refresh } = usePolledFetch<KnightQueue[]>(QUEUES_URL, 5000, [])
+  const { table } = useTableFilter()
+  const { data: queues, loading, error, refresh } = usePolledFetch<KnightQueue[]>(withTable(QUEUES_URL, table), 5000, [])
   const { data: history, error: historyError, refresh: refreshHistory } = usePolledFetch<KnightQueueHistory[]>(HISTORY_URL, 15000, [])
 
   const totals = useMemo(() => ({
@@ -152,7 +156,7 @@ export function QueuesPage() {
         <EmptyState icon={Inbox} title="No knight queues found." />
       )}
 
-      {queues.length > 0 && <QueuesTable queues={queues} history={history} />}
+      {queues.length > 0 && <QueuesTable queues={queues} history={history} showTable={!table} />}
 
       <p className="mt-3 text-xs text-gray-500">
         Warnings: oldest wait over {formatWait(OLDEST_WAIT_WARN_SECONDS)}, or tasks pending with no free slots while replicas are at max.

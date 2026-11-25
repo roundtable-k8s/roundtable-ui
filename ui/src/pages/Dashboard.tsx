@@ -2,6 +2,8 @@ import { apiGet } from '../lib/api'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { inTable, withTable } from '../lib/tables'
 import { useFleet } from '../hooks/useFleet'
 import { fetchWithTimeout } from '../hooks/useKnightSession'
 import { useWebSocket, eventKey } from '../hooks/useWebSocket'
@@ -52,9 +54,14 @@ async function fetchSessionCosts(names: string[]): Promise<Record<string, number
 export const DASHBOARD_CHAINS_URL = '/api/chains?limit=500'
 
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
+  const { table } = useTableFilter()
   const { knights } = useFleet()
   const { events, connected } = useWebSocket()
-  const running = useRunning()
+  const runningAll = useRunning()
+  const running = useMemo(
+    () => ({ ...runningAll, tasks: new Map([...runningAll.tasks].filter(([, t]) => inTable(table, t.table))) }),
+    [runningAll, table],
+  )
   const [chains, setChains] = useState<Chain[]>([])
   const [sessionCosts, setSessionCosts] = useState<{ total: number; perKnight: Record<string, number> }>({ total: 0, perKnight: {} })
   const [costExpanded, setCostExpanded] = useState(defaultCostExpanded)
@@ -63,8 +70,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   useEffect(() => {
     // The list is paginated (default 100, #275); ask for the maximum so no
     // chain is dropped. Items are slim, which is all this panel needs.
-    apiGet<Chain[]>(DASHBOARD_CHAINS_URL).then(setChains).catch(() => {})
-  }, [])
+    apiGet<Chain[]>(withTable(DASHBOARD_CHAINS_URL, table)).then(setChains).catch(() => {})
+  }, [table])
 
   // Fetch cumulative session costs once the fleet list arrives (reuses the
   // useFleet poll instead of issuing a second /api/fleet request)

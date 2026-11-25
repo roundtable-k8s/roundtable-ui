@@ -5,6 +5,9 @@ import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
 import { useTaskNotifications } from './hooks/useTaskNotifications'
+import { useTableFilter } from './hooks/useTableFilter'
+import { useTables } from './hooks/useTables'
+import { TableSelect } from './components/ui'
 import { useOpenDeadLetters } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
@@ -58,7 +61,9 @@ const navItems = [
 export default function App() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const openDeadLetters = useOpenDeadLetters()
+  const { table, setTable } = useTableFilter()
+  const tables = useTables()
+  const openDeadLetters = useOpenDeadLetters(table)
 
   // Close sidebar on navigation (mobile)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
@@ -105,7 +110,7 @@ export default function App() {
             return (
               <Link
                 key={path}
-                to={path}
+                to={table ? `${path}?table=${encodeURIComponent(table)}` : path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   active
                     ? 'bg-roundtable-gold/10 text-roundtable-gold border border-roundtable-gold/20'
@@ -134,6 +139,9 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 overflow-auto p-4 md:p-8 mt-14 md:mt-0">
         <ErrorBoundary>
+          <div className="flex justify-end mb-4 empty:hidden">
+            <TableSelect tables={tables} value={table} onChange={setTable} />
+          </div>
           <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<DashboardPage />} />

@@ -1,7 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import { Zap, ArrowLeft, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState } from '../components/ui'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { withTable } from '../lib/tables'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge } from '../components/ui'
 import { formatRelativeTime, until } from '../lib/format'
 import { chainLink, TRIGGER_DOCS_URL, type Trigger } from '../lib/triggers'
 
@@ -40,7 +42,7 @@ function TriggersEmpty() {
   )
 }
 
-export function TriggersTable({ triggers }: { triggers: Trigger[] }) {
+export function TriggersTable({ triggers, showTable = false }: { triggers: Trigger[]; showTable?: boolean }) {
   return (
     <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
       <table className="w-full text-sm">
@@ -60,6 +62,7 @@ export function TriggersTable({ triggers }: { triggers: Trigger[] }) {
             <tr key={`${t.namespace}/${t.name}`} className="border-b border-roundtable-steel/50 last:border-0">
               <td className="px-4 py-3">
                 <Link to={`/triggers/${t.namespace}/${t.name}`} className="text-roundtable-gold hover:underline font-medium">{t.name}</Link>
+                {showTable && <span className="ml-2"><TableBadge table={t.table} /></span>}
               </td>
               <td className="px-4 py-3">
                 <span className="rounded bg-roundtable-steel/50 px-1.5 py-0.5 text-xs text-gray-300 mr-2">{t.source.type}</span>
@@ -81,7 +84,8 @@ export function TriggersTable({ triggers }: { triggers: Trigger[] }) {
 }
 
 export function TriggersPage() {
-  const { data, loading, error, refresh } = usePolledFetch<Trigger[]>('/api/triggers', POLL_MS, [])
+  const { table } = useTableFilter()
+  const { data, loading, error, refresh } = usePolledFetch<Trigger[]>(withTable('/api/triggers', table), POLL_MS, [])
   return (
     <div>
       <PageHeader icon={Zap} title="Triggers" subtitle="What starts your chains: schedules, NATS subjects and webhooks">
@@ -90,7 +94,7 @@ export function TriggersPage() {
       {error && <div className="mb-4"><ErrorBanner>Failed to load triggers: {error}</ErrorBanner></div>}
       {loading && data.length === 0 && !error && <div className="flex justify-center py-12"><Spinner /></div>}
       {!loading && !error && data.length === 0 && <TriggersEmpty />}
-      {data.length > 0 && <TriggersTable triggers={data} />}
+      {data.length > 0 && <TriggersTable triggers={data} showTable={!table} />}
     </div>
   )
 }

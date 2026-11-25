@@ -6,6 +6,7 @@ import { ReplicaDots } from './ReplicaDots'
 import { phaseColor, KNIGHT_STATUS_DOT } from '../lib/status'
 import { cardLoad, type CardEntry } from '../lib/cards'
 import { sanitizeText } from '../lib/untrusted'
+import { TableBadge } from './ui'
 import { IsolationBadge } from './IsolationBadge'
 
 interface KnightActivity {
@@ -16,6 +17,8 @@ interface KnightActivity {
 }
 
 interface KnightCardProps {
+  /** Show the table badge (when every table is listed together). */
+  showTable?: boolean
   knight: Knight
   onClick?: () => void
   activity?: KnightActivity
@@ -68,7 +71,7 @@ function extractModelShortName(model?: string): string | null {
   return parts[parts.length - 1].split('-').slice(0, 2).join('-')
 }
 
-export function KnightCard({ knight, onClick, activity, card }: KnightCardProps) {
+export function KnightCard({ knight, onClick, activity, card, showTable }: KnightCardProps) {
   const config = getKnightConfig(knight.name)
   const modelShortName = extractModelShortName(knight.model)
   const successRate = knight.tasksCompleted !== undefined && knight.tasksFailed !== undefined
@@ -105,6 +108,7 @@ export function KnightCard({ knight, onClick, activity, card }: KnightCardProps)
           <span className="text-2xl">{config.emoji}</span>
           <div>
             <h3 className="font-bold text-white capitalize">{knight.name}</h3>
+            {showTable && <TableBadge table={knight.table} />}
             <p className={`text-sm ${config.color}`}>{config.title}</p>
             {modelShortName && (
               <div className="mt-1 inline-flex items-center gap-1 bg-roundtable-navy/70 border border-roundtable-steel/50 rounded px-2 py-0.5">

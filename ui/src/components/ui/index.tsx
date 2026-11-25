@@ -205,3 +205,42 @@ export function Drawer({ onClose, children, widthClass = 'w-full max-w-xl' }: {
     </>
   )
 }
+
+/* ------------------------------------------------------------------ */
+/* RoundTable selector and badge                                       */
+/* ------------------------------------------------------------------ */
+
+/** Select one RoundTable or all of them. Hidden when there is only one table. */
+export function TableSelect({ tables, value, onChange }: {
+  tables: string[]
+  value: string
+  onChange: (table: string) => void
+}) {
+  // Keep a table named in the URL selectable even if it is not listed (yet).
+  const names = value && !tables.includes(value) ? [...tables, value] : tables
+  if (names.length < 2) return null
+  return (
+    <div className="flex items-center gap-2">
+      <label htmlFor="table-select" className="text-xs text-gray-400">Table</label>
+      <select
+        id="table-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1 text-sm text-white"
+      >
+        <option value="">All tables</option>
+        {names.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+    </div>
+  )
+}
+
+/** Small badge naming the table an object belongs to; renders nothing without one. */
+export function TableBadge({ table }: { table?: string }) {
+  if (!table) return null
+  return (
+    <span data-testid="table-badge" className="text-xs bg-roundtable-gold/10 text-roundtable-gold px-2 py-0.5 rounded font-mono">
+      {table}
+    </span>
+  )
+}

@@ -63,3 +63,14 @@ export function taskRows(events: NatsEvent[], tables: TableInfo[], table = ''): 
   }
   return rows.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
 }
+
+/** Adds ?table=<name> to an API url; the url is returned unchanged for "all". */
+export function withTable(url: string, table: string): string {
+  if (!table) return url
+  return `${url}${url.includes('?') ? '&' : '?'}table=${encodeURIComponent(table)}`
+}
+
+/** Whether an object on `have` belongs in the view narrowed to `table` ('' = all). */
+export function inTable(table: string, have: string | undefined): boolean {
+  return !table || (have || 'none') === table
+}

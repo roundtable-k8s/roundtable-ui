@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Skull } from 'lucide-react'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { withTable } from '../lib/tables'
 import { apiGet, apiPost } from '../lib/api'
 import { PageHeader, RefreshButton } from '../components/ui'
 import { DeadLettersView } from '../components/DeadLettersView'
 import { DEAD_LETTERS_URL, deadLetterUrl, type DeadLetter, type RetryResult } from '../lib/deadLetters'
 
 export function FailedTasksPage() {
+  const { table } = useTableFilter()
   const [entries, setEntries] = useState<DeadLetter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -13,7 +16,7 @@ export function FailedTasksPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await apiGet<{ deadLetters?: DeadLetter[] }>(DEAD_LETTERS_URL)
+      const data = await apiGet<{ deadLetters?: DeadLetter[] }>(withTable(DEAD_LETTERS_URL, table))
       setEntries(data.deadLetters ?? [])
       setError(null)
     } catch (e) {
@@ -21,7 +24,7 @@ export function FailedTasksPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [table])
 
   useEffect(() => { load() }, [load])
 

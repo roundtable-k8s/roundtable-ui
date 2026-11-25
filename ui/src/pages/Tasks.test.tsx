@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { TasksPage } from './Tasks'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
@@ -39,25 +40,23 @@ beforeEach(() => {
 
 describe('TasksPage', () => {
   it('shows tasks from every table, each labelled with its table', async () => {
-    render(<TasksPage />)
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
     const history = screen.getByTestId('task-history')
     await waitFor(() => expect(within(history).getAllByTestId('task-row')).toHaveLength(2))
     const labels = within(history).getAllByTestId('table-badge').map((b) => b.textContent)
     expect(labels).toEqual(['roundtable-dev', 'fleet-a'])
   })
 
-  it('filters history by table', async () => {
-    render(<TasksPage />)
-    const filter = await screen.findByLabelText('Table', { selector: '#table-filter' })
-    await userEvent.selectOptions(filter, 'fleet-a')
+  it('filters history by the shared ?table= parameter', async () => {
+    render(<MemoryRouter initialEntries={['/quests?table=fleet-a']}><TasksPage /></MemoryRouter>)
+    await waitFor(() => expect(within(screen.getByTestId('task-history')).getAllByTestId('task-row')).toHaveLength(1))
     const rows = within(screen.getByTestId('task-history')).getAllByTestId('task-row')
     expect(rows).toHaveLength(1)
     expect(rows[0].textContent).toContain('t1')
   })
 
   it('dispatches to the picked knight through the gateway proxy, without a domain or table', async () => {
-    render(<TasksPage />)
-    await screen.findByLabelText('Table', { selector: '#table-filter' })
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
     expect(screen.queryByLabelText('Table', { selector: '#dispatch-table' })).toBeNull()
 
     await userEvent.selectOptions(screen.getAllByRole('combobox')[0], 'rt-ui')
@@ -73,7 +72,7 @@ describe('TasksPage', () => {
       if (url === '/api/tasks') return Promise.resolve({ results: [], tables })
       return Promise.resolve({ taskId: 'invoke-rt-ui-1', status: 'succeeded', output: 'page fixed' })
     })
-    render(<TasksPage />)
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
     await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
     await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('succeeded'), { timeout: 5000 })
     expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1')
