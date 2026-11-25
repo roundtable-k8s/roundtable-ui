@@ -4,10 +4,53 @@ import { apiGet, apiPost } from '../lib/api'
 import { getKnightConfig } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { tableForKnight, taskRows, type TableInfo } from '../lib/tables'
+import { taskRows, type TableInfo } from '../lib/tables'
 import { useToast } from '../components/Toast'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
 import { formatTimestamp } from '../lib/format'
+import { sanitizeText } from '../lib/untrusted'
+
+const POLL_MS = 2000
+
+/** Task record returned by the gateway (POST /v1/knights/{name}/invoke, GET /v1/tasks/{id}). */
+interface GatewayTask {
+  taskId: string
+  runId?: string
+  roundTable?: string
+  status?: string
+  output?: string
+  error?: string
+}
+
+interface DispatchedTask {
+  taskId: string
+  knight: string
+  table: string
+  task: string
+  status: string
+  output?: string
+  error?: string
+  timestamp: string
+}
+
+const isFinal = (status: string) => status === 'succeeded' || status === 'failed'
+
+function statusClass(status: string) {
+  if (status === 'succeeded') return 'bg-green-500/20 text-green-400'
+  if (status === 'failed') return 'bg-red-500/20 text-red-400'
+  return 'bg-blue-500/20 text-blue-400'
+}
+
+function mergeTask(r: DispatchedTask, t: GatewayTask): DispatchedTask {
+  return {
+    ...r,
+    taskId: t.taskId || r.taskId,
+    table: t.roundTable ?? r.table,
+    status: t.status ?? r.status,
+    output: t.output ?? r.output,
+    error: t.error ?? r.error,
+  }
+}
 
 export function TasksPage() {
   const { knights, error: fleetError } = useFleet(60000)
@@ -15,19 +58,9 @@ export function TasksPage() {
   const [knight, setKnight] = useState('')
   const [task, setTask] = useState('')
   const [dispatching, setDispatching] = useState(false)
-  const [results, setResults] = useState<Array<{
-    taskId: string
-    knight: string
-    table: string
-    task: string
-    status: string
-    timestamp: string
-  }>>([])
-  const [fleetPrefix, setFleetPrefix] = useState('fleet-a')
-  // Every RoundTable the API covers (#239)
+  const [results, setResults] = useState<DispatchedTask[]>([])
+  // Every RoundTable the API covers (#239), for the history filter
   const [tables, setTables] = useState<TableInfo[]>([])
-  // Dispatch table picked by the user; '' = the knight's own table
-  const [tableChoice, setTableChoice] = useState('')
   // History filter; '' = all tables
   const [tableFilter, setTableFilter] = useState('')
   const { events } = useWebSocket()
@@ -40,47 +73,43 @@ export function TasksPage() {
   const selected = knights.find((k) => k.name === knight)
   const config = getKnightConfig(knight)
   const domain = selected?.domain ?? ''
-  const ownTable = tableForKnight(selected?.natsPrefix, tables)
-  const dispatchTable = tables.find((t) => t.name === tableChoice) ?? ownTable ?? tables[0]
-  const subjectPrefix = dispatchTable?.prefix ?? fleetPrefix
   const rows = useMemo(() => taskRows(events, tables, tableFilter), [events, tables, tableFilter])
 
-  // Fetch fleet configuration from backend (#60)
   useEffect(() => {
-    apiGet<{ fleetPrefix?: string }>('/api/config')
-      .then((data) => {
-        if (data.fleetPrefix) setFleetPrefix(data.fleetPrefix)
-      })
-      .catch(() => {})
     apiGet<{ tables?: TableInfo[] }>('/api/tasks')
       .then((data) => setTables(data.tables ?? []))
       .catch(() => {})
   }, [])
 
-  const selectKnight = (name: string) => {
-    setKnight(name)
-    setTableChoice('') // follow the new knight's own table
-  }
+  // Poll dispatched tasks through the gateway until they finish
+  const pendingIds = results.filter((r) => !isFinal(r.status)).map((r) => r.taskId).join(',')
+  useEffect(() => {
+    if (!pendingIds) return
+    const poll = () => {
+      for (const id of pendingIds.split(',')) {
+        apiGet<GatewayTask>(`/api/tasks/dispatch/${encodeURIComponent(id)}`)
+          .then((t) => setResults((prev) => prev.map((r) => (r.taskId === id ? mergeTask(r, t) : r))))
+          .catch(() => {})
+      }
+    }
+    const timer = setInterval(poll, POLL_MS)
+    return () => clearInterval(timer)
+  }, [pendingIds])
 
   const dispatch = async () => {
     if (!task.trim() || !selected) return
     setDispatching(true)
 
     try {
-      const data = await apiPost<{ task_id: string; table?: string }>('/api/tasks/dispatch', {
+      const data = await apiPost<GatewayTask>('/api/tasks/dispatch', { knight, task })
+      setResults((prev) => [mergeTask({
+        taskId: data.taskId,
         knight,
-        domain: selected.domain,
+        table: '',
         task,
-        ...(dispatchTable ? { table: dispatchTable.name } : {}),
-      })
-      setResults((prev) => [{
-        taskId: data.task_id,
-        knight,
-        table: data.table ?? dispatchTable?.name ?? '',
-        task,
-        status: 'dispatched',
+        status: 'pending',
         timestamp: new Date().toISOString(),
-      }, ...prev])
+      }, data), ...prev])
       setTask('')
     } catch (e) {
       addToast(`Dispatch failed: ${e instanceof Error ? e.message : 'unknown error'}`, 'error')
@@ -106,7 +135,7 @@ export function TasksPage() {
             <label className="text-sm text-gray-400 mb-2 block">Knight</label>
             <select
               value={knight}
-              onChange={(e) => selectKnight(e.target.value)}
+              onChange={(e) => setKnight(e.target.value)}
               className="w-full bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-white"
             >
               {knights.length === 0 && <option value="">Loading fleet…</option>}
@@ -117,23 +146,6 @@ export function TasksPage() {
               ))}
             </select>
           </div>
-          {tables.length > 1 && (
-            <div className="w-48">
-              <label htmlFor="dispatch-table" className="text-sm text-gray-400 mb-2 block">Table</label>
-              <select
-                id="dispatch-table"
-                value={dispatchTable?.name ?? ''}
-                onChange={(e) => setTableChoice(e.target.value)}
-                className="w-full bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-white"
-              >
-                {tables.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name}{t.name === ownTable?.name ? ' (own)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="flex-1">
             <label className="text-sm text-gray-400 mb-2 block">Quest</label>
             <div className="flex gap-2">
@@ -156,8 +168,8 @@ export function TasksPage() {
           </div>
         </div>
         <p className="text-xs text-gray-500">
-          Dispatching to domain: <span className="text-roundtable-gold font-mono">{domain || '—'}</span> via NATS subject: <span className="font-mono">{subjectPrefix}.tasks.{domain || '*'}.*</span>
-          {dispatchTable && <> on table <span className="text-roundtable-gold font-mono">{dispatchTable.name}</span></>}
+          Dispatching to <span className="text-roundtable-gold font-mono">{knight || '—'}</span>
+          {domain && <> (domain <span className="font-mono">{domain}</span>)</>} through the invoke gateway, which routes to the knight's own table.
         </p>
       </div>
 
@@ -179,7 +191,7 @@ export function TasksPage() {
                   <span>{kc.emoji}</span>
                   <span className="font-medium text-white capitalize">{r.knight}</span>
                   {r.table && <TableBadge table={r.table} />}
-                  <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
+                  <span data-testid="dispatch-status" className={`text-xs px-2 py-0.5 rounded ${statusClass(r.status)}`}>
                     {r.status}
                   </span>
                 </div>
@@ -190,6 +202,10 @@ export function TasksPage() {
               </div>
               <p className="text-gray-300 text-sm">{r.task}</p>
               <p className="text-gray-500 text-xs mt-1 font-mono">{r.taskId}</p>
+              {r.output && (
+                <pre data-testid="dispatch-output" className="mt-2 text-sm text-gray-200 bg-roundtable-navy rounded p-3 whitespace-pre-wrap break-words max-h-64 overflow-auto">{sanitizeText(r.output)}</pre>
+              )}
+              {r.error && <p className="mt-2 text-sm text-red-400">{sanitizeText(r.error)}</p>}
             </div>
           )
         })}

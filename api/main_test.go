@@ -88,7 +88,7 @@ func setupTestRouter() *mux.Router {
 	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
 	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
 
-	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(newTableSource(namespace, "", ""))).Methods("POST")
+	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(&gatewayClient{http: http.DefaultClient})).Methods("POST")
 
 	api.HandleFunc("/chains", chainsHandler(namespace, nil)).Methods("GET")
 	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, nil)).Methods("GET")
@@ -1694,81 +1694,6 @@ func TestInputValidation(t *testing.T) {
 			result := validKnightName.MatchString(tt.input)
 			if result != tt.valid {
 				t.Errorf("validKnightName(%s) = %v, expected %v", tt.input, result, tt.valid)
-			}
-		})
-	}
-}
-
-// TestTaskDispatchValidation tests task dispatch input validation
-func TestTaskDispatchValidation(t *testing.T) {
-	router := setupTestRouter()
-
-	// Set up NATS mock (nil will cause proper error)
-	nc = nil
-
-	tests := []struct {
-		name           string
-		requestBody    map[string]interface{}
-		expectedStatus int
-	}{
-		{
-			name: "valid task dispatch",
-			requestBody: map[string]interface{}{
-				"knight": "galahad",
-				"domain": "security",
-				"task":   "Scan for vulnerabilities",
-			},
-			expectedStatus: http.StatusServiceUnavailable, // NATS not available in test
-		},
-		{
-			name: "invalid knight name - NATS injection attempt",
-			requestBody: map[string]interface{}{
-				"knight": "fleet.>",
-				"domain": "security",
-				"task":   "malicious task",
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "invalid domain - NATS injection attempt",
-			requestBody: map[string]interface{}{
-				"knight": "galahad",
-				"domain": "tasks.*",
-				"task":   "malicious task",
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "task too long",
-			requestBody: map[string]interface{}{
-				"knight": "galahad",
-				"domain": "security",
-				"task":   strings.Repeat("a", 10001),
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "empty task",
-			requestBody: map[string]interface{}{
-				"knight": "galahad",
-				"domain": "security",
-				"task":   "",
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			body, _ := json.Marshal(tt.requestBody)
-			req := httptest.NewRequest("POST", "/api/tasks/dispatch", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-
-			router.ServeHTTP(w, req)
-
-			if w.Code != tt.expectedStatus {
-				t.Errorf("expected status %d, got %d (body: %s)", tt.expectedStatus, w.Code, w.Body.String())
 			}
 		})
 	}

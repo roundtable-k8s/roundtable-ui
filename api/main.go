@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"log/slog"
@@ -394,10 +393,16 @@ func main() {
 
 	// Task endpoints
 	api.HandleFunc("/tasks", taskHistoryHandler(tables)).Methods("GET")
-	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(tables)).Methods("POST")
+
+	// Dispatch and run-now go through the invoke gateway, not NATS (#247)
+	gateway := newGatewayClientFromEnv()
+	dispatchLimit := newDispatchLimiter()
+	api.Handle("/tasks/dispatch", dispatchLimit.wrap(taskDispatchHandler(gateway))).Methods("POST")
+	api.HandleFunc("/tasks/dispatch/{taskId}", taskStatusHandler(gateway)).Methods("GET")
+	api.Handle("/chains/{name}/run", dispatchLimit.wrap(chainRunHandler(gateway))).Methods("POST")
+	api.HandleFunc("/chains/runs/{namespace}/{run}", chainRunStatusHandler(gateway)).Methods("GET")
 
 	// Dead letters: failed and lost tasks, retried through the gateway
-	gateway := newGatewayClientFromEnv()
 	api.HandleFunc("/dead-letters", deadLettersHandler(gateway)).Methods("GET")
 	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(gateway)).Methods("GET")
 	api.HandleFunc("/dead-letters/{taskId}/retry", deadLetterRetryHandler(gateway)).Methods("POST")
@@ -1072,78 +1077,6 @@ const (
 	taskHistoryMax      = 200 // cap on the merged list (the UI keeps 200 events)
 )
 
-// dispatchRequest is the body of POST /tasks/dispatch.
-type dispatchRequest struct {
-	Knight  string `json:"knight"`
-	Domain  string `json:"domain"`
-	Task    string `json:"task"`
-	Table   string `json:"table,omitempty"` // RoundTable name; default: the knight's own table (#239)
-	Timeout int    `json:"timeout_ms,omitempty"`
-}
-
-func taskDispatchHandler(src *tableSource) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req dispatchRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-			jsonError(w, "Invalid request", http.StatusBadRequest)
-			return
-		}
-
-		// Validate inputs to prevent NATS subject injection
-		if !validKnightName.MatchString(req.Knight) || !validKnightName.MatchString(req.Domain) {
-			jsonError(w, "Invalid knight or domain name", http.StatusBadRequest)
-			return
-		}
-		if req.Table != "" && !validKnightName.MatchString(req.Table) {
-			jsonError(w, "Invalid table name", http.StatusBadRequest)
-			return
-		}
-		if len(req.Task) == 0 || len(req.Task) > 10000 {
-			jsonError(w, "Task must be 1-10000 characters", http.StatusBadRequest)
-			return
-		}
-
-		table, err := src.dispatchTable(r.Context(), req.Table, req.Knight)
-		if err != nil {
-			jsonError(w, "Unknown table", http.StatusBadRequest)
-			return
-		}
-
-		taskID := fmt.Sprintf("%s-ui-%d", req.Knight, time.Now().UnixMilli())
-		subject := taskSubject(table.Prefix, req.Domain, taskID)
-
-		payload, _ := json.Marshal(map[string]interface{}{
-			"from":    "ui",
-			"task_id": taskID,
-			"domain":  req.Domain,
-			"task":    req.Task,
-			"metadata": map[string]interface{}{
-				"type":       "manual",
-				"source":     "dashboard",
-				"timeout_ms": req.Timeout,
-			},
-		})
-
-		if err := publishTask(subject, payload); err != nil {
-			if errors.Is(err, errNATSUnavailable) {
-				jsonError(w, "NATS not available", http.StatusServiceUnavailable)
-				return
-			}
-			slog.Error("NATS publish error", "error", err)
-			jsonError(w, "Failed to dispatch task", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"task_id": taskID,
-			"subject": subject,
-			"table":   table.Name,
-			"status":  "dispatched",
-		})
-	}
-}
-
 // defaultBriefingDirs are the vault-relative directories searched for
 // briefings when BRIEFINGS_DIRS is unset.
 const defaultBriefingDirs = "Briefings/Daily,Agents/Briefings"
@@ -1264,10 +1197,6 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// memory without bound (#97). See the wsWriter docs for the policy.
 		ws := newWSWriter(conn, wsQueueSize, func() { conn.Close() })
 		go ws.run()
-		var dispatchLimiter *tokenBucket
-		if rate, burst := wsDispatchLimits(); rate > 0 {
-			dispatchLimiter = newTokenBucket(rate, burst, nil)
-		}
 		safeWrite := func(critical bool, data []byte) { ws.enqueue(data, critical) }
 
 		// Done channel to clean up NATS subscriptions when WS closes
@@ -1364,7 +1293,7 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			conn.Close()
 		}()
 
-		// Keep connection alive, read client messages (for dispatch)
+		// Keep connection alive, read client messages (activity watches)
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		conn.SetPongHandler(func(string) error {
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -1398,42 +1327,6 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 				continue
 			}
 
-			// Client can dispatch tasks via WebSocket too
-			var cmd struct {
-				Action string `json:"action"`
-				Knight string `json:"knight"`
-				Domain string `json:"domain"`
-				Task   string `json:"task"`
-				Table  string `json:"table"`
-			}
-			if json.Unmarshal(msg, &cmd) == nil && cmd.Action == "dispatch" {
-				if !checkDispatchLimit(dispatchLimiter, ws) {
-					continue
-				}
-				// Validate inputs
-				if !validKnightName.MatchString(cmd.Knight) || !validKnightName.MatchString(cmd.Domain) {
-					continue
-				}
-				if len(cmd.Task) == 0 || len(cmd.Task) > 10000 {
-					continue
-				}
-				if cmd.Table != "" && !validKnightName.MatchString(cmd.Table) {
-					continue
-				}
-				table, err := src.dispatchTable(r.Context(), cmd.Table, cmd.Knight)
-				if err != nil {
-					continue
-				}
-				taskID := fmt.Sprintf("%s-ws-%d", cmd.Knight, time.Now().UnixMilli())
-				subject := taskSubject(table.Prefix, cmd.Domain, taskID)
-				payload, _ := json.Marshal(map[string]interface{}{
-					"from":    "dashboard-ws",
-					"task_id": taskID,
-					"domain":  cmd.Domain,
-					"task":    cmd.Task,
-				})
-				publishTask(subject, payload)
-			}
 		}
 	}
 }
@@ -1529,6 +1422,9 @@ type ChainSummary struct {
 	RunsFailed     int           `json:"runsFailed,omitempty"`
 	// RunID identifies the current (or most recent) chain run (#227).
 	RunID string `json:"runId,omitempty"`
+	// Invokable is true when the Chain carries ai.roundtable.io/invokable=true,
+	// so the gateway can run it (#247).
+	Invokable bool `json:"invokable,omitempty"`
 }
 
 type StepSummary struct {
@@ -1644,6 +1540,7 @@ func parseChainResource(obj map[string]interface{}, knightDomains map[string]str
 	chain.RoundTableRef = getRefName(spec, "roundTableRef")
 	chain.MissionRef = getRefName(spec, "missionRef")
 	chain.Suspend = getBool(spec, "suspend")
+	chain.Invokable = getNestedMap(metadata, "labels")["ai.roundtable.io/invokable"] == "true"
 
 	// Scheduled-run counters from status
 	chain.RunsCompleted = getInt(status, "runsCompleted")
