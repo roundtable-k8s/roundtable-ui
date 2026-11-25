@@ -1,0 +1,25 @@
+{
+  "apiVersion": "ai.roundtable.io/v1alpha1",
+  "kind": "Chain",
+  "metadata": {"name": "cost-run", "namespace": "roundtable"},
+  "spec": {
+    "steps": [
+      {"name": "plan", "knightRef": {"name": "lancelot"}, "task": "plan"},
+      {"name": "build", "knightRef": {"name": "galahad"}, "task": "build", "dependsOn": ["plan"]},
+      {"name": "notify", "knightRef": {"name": "gawain"}, "task": "notify", "dependsOn": ["build"], "when": "false"}
+    ]
+  },
+  "status": {
+    "phase": "Succeeded",
+    "runId": "1795550000",
+    "startedAt": "2026-11-24T12:00:00Z",
+    "completedAt": "2026-11-24T12:10:00Z",
+    "costUSD": "0.750000",
+    "tokens": {"input": 30000, "output": 4500},
+    "stepStatuses": [
+      {"name": "plan", "phase": "Succeeded", "costUSD": "0.250000", "tokens": {"input": 10000, "output": 1500}, "startedAt": "2026-11-24T12:00:00Z", "completedAt": "2026-11-24T12:03:00Z"},
+      {"name": "build", "phase": "Succeeded", "retries": 1, "costUSD": "0.500000", "tokens": {"input": 20000, "output": 3000}, "startedAt": "2026-11-24T12:03:00Z", "completedAt": "2026-11-24T12:10:00Z"},
+      {"name": "notify", "phase": "Skipped", "reason": "WhenFalse", "completedAt": "2026-11-24T12:10:00Z"}
+    ]
+  }
+}

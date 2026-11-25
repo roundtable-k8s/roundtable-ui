@@ -8,6 +8,7 @@ import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from '../lib/types'
 import apiFanout from '../test/fixtures/api/fanout.json'
 import apiLoop from '../test/fixtures/api/pr-pipeline-loop.json'
+import apiCost from '../test/fixtures/api/cost.json'
 import type { TopicListener } from '../hooks/useWebSocket'
 
 vi.mock('../lib/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
@@ -175,6 +176,54 @@ describe('ChainsPage with real API payloads', () => {
     renderPage('/chains?chain=pr-pipeline-roundtable-ui-187')
     const step = await screen.findByRole('region', { name: 'step fixloop' })
     expect(step).toHaveTextContent('galahad-abc-1')
+  })
+})
+
+describe('ChainsPage cost', () => {
+  it('shows cost and tokens per step and a run total equal to their sum, marking notional cost', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === '/api/chains' ? Promise.resolve([apiCost]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=cost-run')
+    const table = await screen.findByRole('table', { name: 'cost-run cost' })
+    const rows = within(table).getAllByRole('row')
+    const row = (name: string) => rows.find(r => within(r).queryAllByRole('cell')[0]?.textContent === name)!
+
+    expect(row('plan')).toHaveTextContent('$0.25')
+    expect(within(row('plan')).getByText('notional')).toBeInTheDocument()
+    expect(row('plan')).toHaveTextContent('10k in / 1.5k out')
+    expect(row('build')).toHaveTextContent('$0.50')
+    expect(within(row('build')).queryByText('notional')).toBeNull()
+    // A step without cost data shows a dash.
+    expect(within(row('notify')).getAllByRole('cell')[2]).toHaveTextContent('—')
+    expect(within(row('notify')).getAllByRole('cell')[3]).toHaveTextContent('—')
+
+    const total = row('Total')
+    const stepSum = apiCost.steps.reduce((sum, s) => sum + Number((s as { costUSD?: string }).costUSD ?? 0), 0)
+    expect(Number(apiCost.costUSD)).toBeCloseTo(stepSum, 6)
+    expect(total).toHaveTextContent('$0.75')
+    expect(total).toHaveTextContent('incl. $0.25 notional')
+    expect(total).toHaveTextContent('30k in / 4.5k out')
+
+    // The collapsed header shows the run total too.
+    expect(screen.getByRole('button', { name: /cost-run/ })).toHaveTextContent('$0.75')
+  })
+
+  it('shows cost and tokens in the step detail', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === '/api/chains' ? Promise.resolve([apiCost]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=cost-run')
+    await screen.findByRole('table', { name: 'cost-run cost' })
+    const buttons = screen.getAllByRole('button').filter(b => b.textContent?.trim().endsWith('plan'))
+    await userEvent.click(buttons[buttons.length - 1])
+    expect(screen.getByText('Cost:').parentElement).toHaveTextContent('$0.25notional')
+    expect(screen.getByText('Tokens:').parentElement).toHaveTextContent('10k in / 1.5k out')
+  })
+
+  it('renders runs without cost data with dashes', async () => {
+    renderPage('/chains?chain=doc-sweep')
+    const table = await screen.findByRole('table', { name: 'doc-sweep cost' })
+    const total = within(table).getAllByRole('row').at(-1)!
+    expect(total).toHaveTextContent('Total——')
   })
 })
 

@@ -237,7 +237,7 @@ func TestChainWatcherJoinsInFlightOnEveryUpdate(t *testing.T) {
 
 func TestCachedDomainsNegativeCache(t *testing.T) {
 	calls := 0
-	get := cachedDomains(time.Hour, func(ctx context.Context) map[string]string {
+	get := cachedDomains(time.Hour, func(ctx context.Context) map[string]knightInfo {
 		calls++
 		return nil
 	})

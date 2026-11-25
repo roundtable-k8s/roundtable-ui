@@ -1,4 +1,5 @@
 import { usePolledFetch } from './usePolledFetch'
+import type { TokenTotals } from '../lib/types'
 
 export interface PlanningResult {
   completedAt: string
@@ -21,6 +22,10 @@ export interface ChainStatus {
   name: string
   chainCRName: string
   phase: string
+  costUSD?: string
+  tokens?: TokenTotals | null
+  /** The part of costUSD spent by subscription-billed knights (notional). */
+  notionalCostUSD?: string
 }
 
 export interface Mission {
@@ -45,6 +50,10 @@ export interface Mission {
   completedAt?: string
   successCriteria?: string
   briefing?: string
+  /** Token use of the mission's chains. */
+  tokens?: TokenTotals | null
+  /** The part of totalCost spent by subscription-billed knights (notional). */
+  notionalCostUSD?: string
 }
 
 export function useMissions(refreshInterval = 10000) {
