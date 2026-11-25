@@ -113,8 +113,13 @@ export function applyRunningDelta(prev: RunningMap, delta: RunningDelta): Runnin
       return new Map(delta.tasks.map((t) => [t.taskId, t]))
     case 'upsert': {
       const next = new Map(prev)
-      // Keep the known table when an update doesn't carry one.
-      const table = delta.task.table || prev.get(delta.task.taskId)?.table
+      // Keep the known table when an update doesn't carry one, or carries the
+      // untabled sentinel "none" while the task already has a real table.
+      const incoming = delta.task.table
+      const known = prev.get(delta.task.taskId)?.table
+      const table = incoming && incoming !== 'none'
+        ? incoming
+        : known && known !== 'none' ? known : incoming
       next.set(delta.task.taskId, table ? { ...delta.task, table } : delta.task)
       return next
     }

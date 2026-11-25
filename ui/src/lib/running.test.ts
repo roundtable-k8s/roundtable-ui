@@ -105,4 +105,18 @@ describe('applyRunningDelta table', () => {
     const next = applyRunningDelta(prev, { op: 'upsert', task: { ...base, table: 'beta' } })
     expect(next.get('a')!.table).toBe('beta')
   })
+  it('keeps the known table when an upsert is tagged "none"', () => {
+    const prev = new Map([['a', { ...base, table: 'alpha' }]])
+    const next = applyRunningDelta(prev, { op: 'upsert', task: { ...base, table: 'none' } })
+    expect(next.get('a')!.table).toBe('alpha')
+  })
+  it('stores "none" for an unknown task', () => {
+    const next = applyRunningDelta(new Map(), { op: 'upsert', task: { ...base, table: 'none' } })
+    expect(next.get('a')!.table).toBe('none')
+  })
+  it('replaces a "none" table with a real one', () => {
+    const prev = new Map([['a', { ...base, table: 'none' }]])
+    const next = applyRunningDelta(prev, { op: 'upsert', task: { ...base, table: 'beta' } })
+    expect(next.get('a')!.table).toBe('beta')
+  })
 })
