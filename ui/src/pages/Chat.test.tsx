@@ -4,10 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChatPage } from './Chat'
 import { parseKnightNames } from '../lib/chat'
+import { ApiError } from '../lib/api'
 
 const apiPost = vi.fn()
 const apiGet = vi.fn()
-vi.mock('../lib/api', () => ({
+vi.mock('../lib/api', async () => ({
+  ApiError: (await vi.importActual<typeof import('../lib/api')>('../lib/api')).ApiError,
   apiGet: (...a: unknown[]) => apiGet(...a),
   apiPost: (...a: unknown[]) => apiPost(...a),
 }))
@@ -44,6 +46,16 @@ describe('ChatPage', () => {
     expect(screen.getByText('Model opus')).toBeInTheDocument()
     expect(screen.getByText('$0.50')).toBeInTheDocument()
     expect(screen.getByText('3 tool calls')).toBeInTheDocument()
+  })
+
+  it('stops polling and fails the turn when the task is gone (404)', async () => {
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hi')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/chat/knights' ? Promise.resolve({ knights: [] }) : Promise.reject(new ApiError(404, 'not found')))
+    expect(await screen.findByText('Task not found on the gateway', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument()
   })
 
   it('continues the conversation with the runId from the URL', async () => {

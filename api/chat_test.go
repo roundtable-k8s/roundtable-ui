@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -127,5 +129,42 @@ func TestChatEventsStreamsAndFallsBack(t *testing.T) {
 	w = doReq(r, "GET", "/api/chat/tasks/t2/events", "")
 	if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "error") {
 		t.Errorf("got %d %s", w.Code, w.Body)
+	}
+}
+
+// Behind metricsMiddleware the writer is wrapped; events must still flush
+// while the upstream stream is open.
+func TestChatEventsFlushThroughMetricsMiddleware(t *testing.T) {
+	release := make(chan struct{})
+	f := &fakeGateway{handler: func(c gwCall, w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "data: first\n\n")
+		w.(http.Flusher).Flush()
+		<-release
+	}}
+	srv := f.server(t)
+	defer close(release)
+	r := chatRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+	front := httptest.NewServer(metricsMiddleware(r))
+	defer front.Close()
+
+	resp, err := http.Get(front.URL + "/api/chat/tasks/t1/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	got := make(chan string, 1)
+	go func() {
+		b := make([]byte, 64)
+		n, _ := resp.Body.Read(b)
+		got <- string(b[:n])
+	}()
+	select {
+	case s := <-got:
+		if !strings.Contains(s, "data: first") {
+			t.Fatalf("got %q", s)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("event not flushed while stream open")
 	}
 }

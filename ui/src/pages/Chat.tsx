@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MessageSquare, Send, Activity } from 'lucide-react'
-import { apiGet, apiPost } from '../lib/api'
+import { apiGet, apiPost, ApiError } from '../lib/api'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
 import { UntrustedText } from '../components/UntrustedText'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
@@ -51,7 +51,13 @@ export function ChatPage() {
       for (const id of ids) {
         apiGet<ChatTask>(`/api/chat/tasks/${encodeURIComponent(id)}`)
           .then((t) => setTurns((ts) => ts.map((x) => (x.taskId === id ? mergeTurn(x, t) : x))))
-          .catch(() => { /* transient: next tick retries */ })
+          .catch((e: unknown) => {
+            // A missing task will never finish; stop polling and unblock Send.
+            if (e instanceof ApiError && e.status === 404) {
+              setTurns((ts) => ts.map((x) => (x.taskId === id ? { ...x, status: 'failed', error: 'Task not found on the gateway' } : x)))
+            }
+            // other errors are transient: next tick retries
+          })
       }
     }, POLL_MS)
     return () => clearInterval(timer)

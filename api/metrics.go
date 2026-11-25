@@ -34,6 +34,16 @@ func (sr *statusRecorder) WriteHeader(code int) {
 	sr.ResponseWriter.WriteHeader(code)
 }
 
+// Flush lets streaming handlers (SSE) flush through the wrapper.
+func (sr *statusRecorder) Flush() {
+	if f, ok := sr.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap exposes the underlying writer to http.ResponseController.
+func (sr *statusRecorder) Unwrap() http.ResponseWriter { return sr.ResponseWriter }
+
 // routeLabel returns the mux route template (e.g. /api/fleet/{knight}) so
 // metric cardinality stays bounded; non-API paths collapse to "static".
 func routeLabel(r *http.Request) string {
