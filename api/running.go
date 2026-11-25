@@ -915,6 +915,28 @@ func runningHandler(reg *runningRegistry, namespace string) http.HandlerFunc {
 	}
 }
 
+// withTables returns a copy of d whose tasks carry their knight's table
+// ("none" when unknown), as GET /api/running does, so live updates match the
+// snapshot when the browser filters by table.
+func withTables(d RunningDelta, tables map[string]string) RunningDelta {
+	fill := func(t RunningTask) RunningTask {
+		t.Table = tableOrNone(tables[strings.ToLower(t.Knight)])
+		return t
+	}
+	if d.Task != nil {
+		t := fill(*d.Task)
+		d.Task = &t
+	}
+	if d.Tasks != nil {
+		ts := make([]RunningTask, len(d.Tasks))
+		for i, t := range d.Tasks {
+			ts[i] = fill(t)
+		}
+		d.Tasks = ts
+	}
+	return d
+}
+
 // runningWSEvent wraps a delta as a `running` WebSocket event.
 func runningWSEvent(d RunningDelta) []byte {
 	payload, _ := json.Marshal(d)
@@ -943,4 +965,53 @@ func knightTables(ctx context.Context, namespace string) map[string]string {
 		out[strings.ToLower(list.Items[i].GetName())] = knightTableName(&list.Items[i])
 	}
 	return out
+}
+
+// tableCache holds the knight-to-table map so hot paths (the running registry
+// callback, which runs under its lock) only read a cached copy; lookups are
+// time-limited and happen outside any lock.
+type tableCache struct {
+	mu       sync.RWMutex
+	tables   map[string]string
+	lookup   func(ctx context.Context) map[string]string
+	interval time.Duration
+	timeout  time.Duration
+}
+
+func newTableCache(lookup func(ctx context.Context) map[string]string, interval, timeout time.Duration) *tableCache {
+	return &tableCache{lookup: lookup, interval: interval, timeout: timeout}
+}
+
+// get returns the cached map (nil before the first successful refresh).
+func (c *tableCache) get() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.tables
+}
+
+// refresh does one time-limited lookup; an empty result keeps the old copy.
+func (c *tableCache) refresh() {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+	m := c.lookup(ctx)
+	if len(m) == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.tables = m
+	c.mu.Unlock()
+}
+
+// run refreshes periodically until done closes.
+func (c *tableCache) run(done <-chan struct{}) {
+	t := time.NewTicker(c.interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			c.refresh()
+		}
+	}
 }

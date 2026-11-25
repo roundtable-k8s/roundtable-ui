@@ -573,3 +573,22 @@ func TestRunningTaskWireNames(t *testing.T) {
 		t.Errorf("lastTool has legacy at: %s", b)
 	}
 }
+
+func TestWithTables(t *testing.T) {
+	tables := map[string]string{"galahad": "alpha"}
+	d := RunningDelta{Op: "upsert", Task: &RunningTask{TaskID: "t1", Knight: "Galahad"}}
+	got := withTables(d, tables)
+	if got.Task.Table != "alpha" {
+		t.Fatalf("table = %q, want alpha", got.Task.Table)
+	}
+	if d.Task.Table != "" {
+		t.Fatal("input delta was mutated")
+	}
+	snap := withTables(RunningDelta{Op: "snapshot", Tasks: []RunningTask{{TaskID: "t2", Knight: "Nobody"}}}, tables)
+	if snap.Tasks[0].Table != "none" {
+		t.Fatalf("unknown knight table = %q, want none", snap.Tasks[0].Table)
+	}
+	if rm := withTables(RunningDelta{Op: "remove", TaskID: "t1"}, tables); rm.Task != nil {
+		t.Fatal("remove delta gained a task")
+	}
+}

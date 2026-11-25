@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { FleetPage } from './Fleet'
 import type { Knight } from '../hooks/useFleet'
 import { cardKey, type CardMap } from '../lib/cards'
@@ -33,7 +34,7 @@ beforeEach(() => {
 describe('Fleet skill filter', () => {
   it('filters knights by skill tag', async () => {
     const user = userEvent.setup()
-    render(<FleetPage />)
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(names()).toEqual(['galahad', 'kay', 'patsy'])
     await user.click(screen.getByRole('button', { name: 'security' }))
     expect(names()).toEqual(['galahad'])
@@ -44,7 +45,7 @@ describe('Fleet skill filter', () => {
 
   it('filters knights by free text and clears', async () => {
     const user = userEvent.setup()
-    render(<FleetPage />)
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
     await user.type(screen.getByLabelText('Filter by skill'), 'vault')
     expect(names()).toEqual(['patsy'])
     await user.clear(screen.getByLabelText('Filter by skill'))
@@ -57,7 +58,7 @@ describe('Fleet skill filter', () => {
 
   it('hides the filter and shows every knight when there are no cards', () => {
     cards = new Map()
-    render(<FleetPage />)
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(screen.queryByLabelText('Filter by skill')).not.toBeInTheDocument()
     expect(names()).toEqual(['galahad', 'kay', 'patsy'])
   })
@@ -74,7 +75,7 @@ describe('Fleet isolation filter (#269)', () => {
       k('bedivere', 'home'),
     ]
     const user = userEvent.setup()
-    render(<FleetPage />)
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(names()).toEqual(['bedivere', 'galahad', 'kay', 'patsy', 'tristan'])
     const filter = screen.getByRole('button', { name: /not isolated \(2\)/i })
     await user.click(filter)
@@ -85,7 +86,7 @@ describe('Fleet isolation filter (#269)', () => {
   })
 
   it('hides the filter when the API reports no isolation', () => {
-    render(<FleetPage />)
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(screen.queryByRole('button', { name: /not isolated/i })).not.toBeInTheDocument()
   })
 })

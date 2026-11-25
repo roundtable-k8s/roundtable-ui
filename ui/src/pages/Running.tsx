@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Activity } from 'lucide-react'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { inTable } from '../lib/tables'
 import { useRunning } from '../hooks/useRunning'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
@@ -107,7 +109,8 @@ export function RunningPage() {
     }, { replace: true })
   }
 
-  const all = useMemo(() => [...tasks.values()], [tasks])
+  const { table } = useTableFilter()
+  const all = useMemo(() => [...tasks.values()].filter((t) => inTable(table, t.table)), [tasks, table])
   const counts = useMemo(() => countByStatus(all), [all])
   const knights = useMemo(() => [...new Set(all.map((t) => t.knight))].sort(), [all])
   const chains = useMemo(

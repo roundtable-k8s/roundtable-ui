@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Target, Filter, Plus } from 'lucide-react'
+import { useTableFilter } from '../hooks/useTableFilter'
 import { useMissions } from '../hooks/useMissions'
 import { MissionCard } from '../components/MissionCard'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
@@ -23,24 +24,17 @@ const PHASE_FILTERS = [
 
 export function MissionsPage() {
   const { missions, loading, error, refresh } = useMissions()
+  const { table } = useTableFilter()
   const [phaseFilter, setPhaseFilter] = useState('All')
-  const [roundTableFilter, setRoundTableFilter] = useState('All')
   const [showWizard, setShowWizard] = useState(false)
-
-  // Extract unique RoundTables
-  const roundTables = useMemo(() => {
-    const unique = new Set(missions.map(m => m.roundTableRef))
-    return ['All', ...Array.from(unique).sort()]
-  }, [missions])
 
   // Filtered missions
   const filteredMissions = useMemo(() => {
     return missions.filter(m => {
       if (phaseFilter !== 'All' && m.phase !== phaseFilter) return false
-      if (roundTableFilter !== 'All' && m.roundTableRef !== roundTableFilter) return false
       return true
     })
-  }, [missions, phaseFilter, roundTableFilter])
+  }, [missions, phaseFilter])
 
   // Summary stats
   const stats = useMemo(() => {
@@ -102,31 +96,12 @@ export function MissionsPage() {
           </div>
         </div>
 
-        {/* RoundTable Filter */}
-        {roundTables.length > 2 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">RoundTable:</span>
-            <select
-              value={roundTableFilter}
-              onChange={(e) => setRoundTableFilter(e.target.value)}
-              className="text-xs px-2 py-1 bg-roundtable-navy border border-roundtable-steel rounded-lg text-gray-300"
-            >
-              {roundTables.map((rt) => (
-                <option key={rt} value={rt}>
-                  {rt}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Active Filters Count */}
-        {(phaseFilter !== 'All' || roundTableFilter !== 'All') && (
+        {(phaseFilter !== 'All') && (
           <div className="ml-auto">
             <button
               onClick={() => {
                 setPhaseFilter('All')
-                setRoundTableFilter('All')
               }}
               className="text-xs text-gray-400 hover:text-roundtable-gold transition-colors"
             >
@@ -166,7 +141,6 @@ export function MissionsPage() {
           <button
             onClick={() => {
               setPhaseFilter('All')
-              setRoundTableFilter('All')
             }}
             className="text-sm text-roundtable-gold hover:text-yellow-300 mt-2"
           >
@@ -179,7 +153,7 @@ export function MissionsPage() {
       {filteredMissions.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredMissions.map((mission) => (
-            <MissionCard key={mission.name} mission={mission} />
+            <MissionCard key={mission.name} mission={mission} showTable={!table} />
           ))}
         </div>
       )}

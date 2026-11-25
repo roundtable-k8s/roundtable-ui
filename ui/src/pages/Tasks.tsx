@@ -4,9 +4,10 @@ import { apiGet, apiPost } from '../lib/api'
 import { getKnightConfig } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { useTableFilter } from '../hooks/useTableFilter'
 import { taskRows, type TableInfo } from '../lib/tables'
 import { useToast } from '../components/Toast'
-import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
+import { PageHeader, EmptyState, ErrorBanner, TableBadge } from '../components/ui'
 import { formatTimestamp } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 
@@ -61,8 +62,8 @@ export function TasksPage() {
   const [results, setResults] = useState<DispatchedTask[]>([])
   // Every RoundTable the API covers (#239), for the history filter
   const [tables, setTables] = useState<TableInfo[]>([])
-  // History filter; '' = all tables
-  const [tableFilter, setTableFilter] = useState('')
+  // Shared table filter (?table=); '' = all tables
+  const { table: tableFilter } = useTableFilter()
   const { events } = useWebSocket()
 
   // Default to the first knight once the fleet loads
@@ -214,22 +215,6 @@ export function TasksPage() {
       {/* Task history across every table (#239) */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-white">Task History</h2>
-        {tables.length > 1 && (
-          <div className="flex items-center gap-2">
-            <label htmlFor="table-filter" className="text-sm text-gray-400">Table</label>
-            <select
-              id="table-filter"
-              value={tableFilter}
-              onChange={(e) => setTableFilter(e.target.value)}
-              className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-1 text-white text-sm"
-            >
-              <option value="">All tables</option>
-              {tables.map((t) => (
-                <option key={t.name} value={t.name}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
       <div className="space-y-2" data-testid="task-history">
         {rows.length === 0 && <EmptyState title="No tasks seen yet." />}
@@ -251,7 +236,7 @@ export function TasksPage() {
                   {r.type === 'task' ? 'task' : r.success ? 'done' : 'failed'}
                 </span>
                 {r.knight && <span className="font-medium text-white capitalize">{r.knight}</span>}
-                {r.table && <TableBadge table={r.table} />}
+                {!tableFilter && <TableBadge table={r.table} />}
                 <span className="text-gray-500 text-xs font-mono truncate">{r.taskId}</span>
               </div>
               <div className="flex items-center gap-1 text-gray-500 text-xs shrink-0">
@@ -264,13 +249,5 @@ export function TasksPage() {
         ))}
       </div>
     </div>
-  )
-}
-
-function TableBadge({ table }: { table: string }) {
-  return (
-    <span data-testid="table-badge" className="text-xs bg-roundtable-gold/10 text-roundtable-gold px-2 py-0.5 rounded font-mono">
-      {table}
-    </span>
   )
 }

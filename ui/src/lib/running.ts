@@ -113,7 +113,9 @@ export function applyRunningDelta(prev: RunningMap, delta: RunningDelta): Runnin
       return new Map(delta.tasks.map((t) => [t.taskId, t]))
     case 'upsert': {
       const next = new Map(prev)
-      next.set(delta.task.taskId, delta.task)
+      // Keep the known table when an update doesn't carry one.
+      const table = delta.task.table || prev.get(delta.task.taskId)?.table
+      next.set(delta.task.taskId, table ? { ...delta.task, table } : delta.task)
       return next
     }
     case 'remove': {

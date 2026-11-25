@@ -1,4 +1,6 @@
 import { usePolledFetch } from './usePolledFetch'
+import { useTableFilter } from './useTableFilter'
+import { withTable } from '../lib/tables'
 import type { TokenTotals } from '../lib/types'
 
 export interface PlanningResult {
@@ -59,6 +61,7 @@ export interface Mission {
 }
 
 export function useMissions(refreshInterval = 10000) {
-  const { data: missions, loading, error, refresh } = usePolledFetch<Mission[]>('/api/missions', refreshInterval, [])
+  const { table } = useTableFilter()
+  const { data: missions, loading, error, refresh } = usePolledFetch<Mission[]>(withTable('/api/missions', table), refreshInterval, [])
   return { missions, loading, error, refresh }
 }

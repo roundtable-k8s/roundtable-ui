@@ -1,4 +1,6 @@
 import { usePolledFetch } from './usePolledFetch'
+import { useTableFilter } from './useTableFilter'
+import { withTable } from '../lib/tables'
 
 export interface KnightCondition {
   type: string
@@ -106,6 +108,7 @@ export interface Knight {
 }
 
 export function useFleet(refreshInterval = 10000) {
-  const { data: knights, loading, error, refresh } = usePolledFetch<Knight[]>('/api/fleet', refreshInterval, [])
+  const { table } = useTableFilter()
+  const { data: knights, loading, error, refresh } = usePolledFetch<Knight[]>(withTable('/api/fleet', table), refreshInterval, [])
   return { knights, loading, error, refresh }
 }

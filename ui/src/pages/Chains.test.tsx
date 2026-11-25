@@ -393,3 +393,18 @@ describe('ChainsPage run copies grouped by template', () => {
     expect(listCalls()).toBe(1)
   })
 })
+
+describe('ChainsPage table filter', () => {
+  it('asks for one table and ignores live chains of other tables', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === `${CHAINS_LIST_URL}&table=personal`) return Promise.resolve([{ ...fanOutChain(), name: 'mine', table: 'personal' }])
+      return Promise.reject(new Error('no KV'))
+    })
+    renderPage('/chains?table=personal')
+    expect(await screen.findByText('mine')).toBeInTheDocument()
+    expect(mockApiGet.mock.calls.some(c => c[0] === `${CHAINS_LIST_URL}&table=personal`)).toBe(true)
+    emitChain({ ...prPipelineChain(), name: 'theirs', table: 'roundtable-dev' })
+    expect(screen.queryByText('theirs')).toBeNull()
+  })
+})
+

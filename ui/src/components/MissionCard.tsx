@@ -7,11 +7,13 @@ import { PlanningResultViewer } from './PlanningResultViewer'
 import { getKnightConfig } from '../lib/knights'
 import { formatRelativeTime, formatDuration, formatCost } from '../lib/format'
 import { phaseColor } from '../lib/status'
-import { Spinner } from './ui'
+import { Spinner, TableBadge } from './ui'
 import { CostTag } from './CostTag'
 import { tokensText } from '../lib/cost'
 
 interface MissionCardProps {
+  /** Show the table badge (when every table is listed together). */
+  showTable?: boolean
   mission: Mission
   onClick?: () => void
 }
@@ -38,7 +40,7 @@ function MissionResults({ name }: { name: string }) {
   )
 }
 
-export function MissionCard({ mission, onClick }: MissionCardProps) {
+export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
   // Meta-missions start with no knights/chains — the API serializes those
   // nil slices as null
   const knights = mission.knights ?? []
@@ -69,6 +71,7 @@ export function MissionCard({ mission, onClick }: MissionCardProps) {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-white">{mission.name}</h3>
+              {showTable && <TableBadge table={mission.table} />}
               {mission.metaMission && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1">
                   <Brain className="w-3 h-3" />

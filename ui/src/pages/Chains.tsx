@@ -12,6 +12,8 @@ import { CostTag } from '../components/CostTag'
 import { RunCostTable } from '../components/RunCostTable'
 import { tokensText } from '../lib/cost'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { withTable } from '../lib/tables'
 import {
   appendPage, applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
   parseChainUpdate, runGroupSummary, runningHref, scheduleSummary, skipReasonText, sortScheduledFirst, sortedItems, upsertNewestFirst, type ChainUpdate,
@@ -720,6 +722,7 @@ export function ChainsPage() {
   // ?chain=<name> deep link (e.g. from the Running page) expands that chain
   const [searchParams] = useSearchParams()
   const focusChain = searchParams.get('chain') || ''
+  const { table } = useTableFilter()
   const { connected, subscribeTopic } = useWebSocket()
   const [chains, setChains] = useState<Chain[]>([])
   const [groups, setGroups] = useState<ChainRunGroup[]>([])
@@ -750,7 +753,7 @@ export function ChainsPage() {
     setLoading(true)
     setRefreshToken(t => t + 1)
     fetchGroups()
-    apiGet<Chain[]>(CHAINS_LIST_URL, { signal: controller.signal })
+    apiGet<Chain[]>(withTable(CHAINS_LIST_URL, table), { signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return
         setChains(replay.reduce(applyChainUpdate, data || []))
@@ -765,7 +768,7 @@ export function ChainsPage() {
         if (pending.current === replay) pending.current = null
         setLoading(false)
       })
-  }, [fetchGroups])
+  }, [fetchGroups, table])
 
   // A run copy changed: refresh the group counts, coalescing bursts.
   const groupsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -783,6 +786,8 @@ export function ChainsPage() {
   useEffect(() => subscribeTopic('chain', (data, msg) => {
     const u = parseChainUpdate(data, msg)
     if (!u) return
+    // Another table's chain: not part of this view.
+    if (u.op === 'upsert' && table && u.chain.table && u.chain.table !== table) return
     if (u.op === 'upsert' && u.chain.runTemplate) {
       scheduleGroups()
       return
@@ -790,7 +795,7 @@ export function ChainsPage() {
     if (u.op === 'delete') scheduleGroups()
     pending.current?.push(u)
     setChains(prev => applyChainUpdate(prev, u))
-  }), [subscribeTopic, scheduleGroups])
+  }), [subscribeTopic, scheduleGroups, table])
 
   // Fetch on mount and re-sync on every (re)connect, so changes missed
   // while the feed was down are picked up.

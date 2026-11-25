@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiGet } from '../lib/api'
 
 /**
@@ -10,14 +10,31 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // The url in force; a response for an earlier url (e.g. another table) is dropped.
+  const current = useRef(url)
+  const initialRef = useRef(initial)
+  current.current = url
+
+  // A new url (the table filter changed) shows no data from the old one.
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) { first.current = false; return }
+    setData(initialRef.current)
+    setError(null)
+    setLoading(true)
+  }, [url])
+
   const refresh = useCallback(async () => {
     try {
-      setData(await apiGet<T>(url))
+      const next = await apiGet<T>(url)
+      if (current.current !== url) return
+      setData(next)
       setError(null)
     } catch (e) {
+      if (current.current !== url) return
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
-      setLoading(false)
+      if (current.current === url) setLoading(false)
     }
   }, [url])
 

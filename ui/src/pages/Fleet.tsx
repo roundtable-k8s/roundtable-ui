@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Zap, Crown, DollarSign, TrendingUp, ShieldOff } from 'lucide-react'
+import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
 import { KnightCard } from '../components/KnightCard'
@@ -16,6 +17,7 @@ import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as S
 
 export function FleetPage() {
   const { knights, loading, error, refresh } = useFleet()
+  const { table } = useTableFilter()
   const [selectedKnight, setSelectedKnight] = useState<Knight | null>(null)
   const { events } = useWebSocket()
   const { cards } = useCards()
@@ -265,6 +267,7 @@ export function FleetPage() {
               onClick={() => setSelectedKnight(knight)}
               activity={knightActivity[knight.name]}
               card={cardForKnight(cards, knight.name)}
+              showTable={!table}
             />
           ))}
         </div>
