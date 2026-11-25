@@ -68,9 +68,11 @@ func installTracerProvider(exp sdktrace.SpanExporter, opts ...sdktrace.TracerPro
 	return tp.Shutdown
 }
 
-// otelSkipPath lists endpoints that never produce spans.
+// otelSkipPath lists endpoints that never produce spans. /api/ws is skipped
+// because a WebSocket span would stay open for the whole connection (out of
+// scope until NATS/WS propagation lands).
 func otelSkipPath(p string) bool {
-	return p == "/healthz" || p == "/readyz" || p == "/metrics"
+	return p == "/healthz" || p == "/readyz" || p == "/metrics" || p == "/api/ws"
 }
 
 // tracingMiddleware starts a server span per request, named by mux route

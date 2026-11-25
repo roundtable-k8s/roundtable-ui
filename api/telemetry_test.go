@@ -19,6 +19,7 @@ func newTracedRouter(h http.HandlerFunc) *mux.Router {
 	r := mux.NewRouter()
 	r.Use(tracingMiddleware)
 	r.HandleFunc("/api/fleet/{knight}", h).Methods("GET")
+	r.HandleFunc("/api/ws", func(w http.ResponseWriter, _ *http.Request) {}).Methods("GET")
 	r.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {}).Methods("GET")
 	return r
 }
@@ -38,12 +39,12 @@ func TestSpanNameIsRouteTemplateAndTable(t *testing.T) {
 	r := newTracedRouter(func(w http.ResponseWriter, req *http.Request) {
 		setSpanTable(req.Context(), "fleet-a")
 	})
-	for _, p := range []string{"/api/fleet/galahad", "/healthz"} {
+	for _, p := range []string{"/api/fleet/galahad", "/healthz", "/api/ws"} {
 		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", p, nil))
 	}
 	spans := sr.Ended()
 	if len(spans) != 1 {
-		t.Fatalf("want 1 span (healthz skipped), got %d", len(spans))
+		t.Fatalf("want 1 span (healthz and ws skipped), got %d", len(spans))
 	}
 	if got := spans[0].Name(); got != "GET /api/fleet/{knight}" {
 		t.Errorf("span name = %q", got)
