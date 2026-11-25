@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
@@ -20,6 +20,7 @@ const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ 
 const RunningPage = lazy(() => import('./pages/Running').then(m => ({ default: m.RunningPage })))
 const QueuesPage = lazy(() => import('./pages/Queues').then(m => ({ default: m.QueuesPage })))
 const FailedTasksPage = lazy(() => import('./pages/FailedTasks').then(m => ({ default: m.FailedTasksPage })))
+const ChatPage = lazy(() => import('./pages/Chat').then(m => ({ default: m.ChatPage })))
 const RoundTablesPage = lazy(() => import('./pages/RoundTables').then(m => ({ default: m.RoundTablesPage })))
 
 function PageLoading() {
@@ -39,6 +40,7 @@ const navItems = [
   { path: '/running', icon: Activity, label: 'Running' },
   { path: '/missions', icon: Target, label: 'Missions' },
   { path: '/roundtables', icon: Crown, label: 'Round Tables' },
+  { path: '/chat', icon: MessageSquare, label: 'Chat' },
   { path: '/quests', icon: Scroll, label: 'Dispatch' },
   { path: '/queues', icon: Inbox, label: 'Queues' },
   { path: '/failed', icon: Skull, label: 'Failed & lost' },
@@ -136,6 +138,7 @@ export default function App() {
             <Route path="/running" element={<RunningPage />} />
             <Route path="/missions" element={<MissionsPage />} />
             <Route path="/roundtables" element={<RoundTablesPage />} />
+            <Route path="/chat" element={<ChatPage />} />
             <Route path="/quests" element={<TasksPage />} />
             <Route path="/queues" element={<QueuesPage />} />
             <Route path="/failed" element={<FailedTasksPage />} />
