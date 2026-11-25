@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { KnightCard } from './KnightCard'
 import type { Knight } from '../hooks/useFleet'
+import { galahadCard, patsyCard } from '../test/fixtures/cards'
 
 const mockKnight: Knight = {
   name: 'galahad',
@@ -313,5 +314,33 @@ describe('KnightCard', () => {
     // so 'minimal' renders twice (name + title)
     expect(screen.getAllByText('minimal').length).toBeGreaterThan(0)
     expect(screen.queryByText('SUSPENDED')).not.toBeInTheDocument()
+  })
+
+  describe('agent card (#243)', () => {
+    it('shows the card description, live badge and load for a card with skills', () => {
+      render(<KnightCard knight={mockKnight} card={galahadCard} />)
+      expect(screen.getByText('Security analyst: CVE triage and the daily security brief.')).toBeInTheDocument()
+      const badge = screen.getByTestId('card-state')
+      expect(badge).toHaveTextContent('live')
+      expect(badge).toHaveTextContent('1/3')
+    })
+
+    it('shows a not-live badge when no pod answers', () => {
+      render(<KnightCard knight={{ ...mockKnight, status: 'scaled-to-zero' }} card={{ ...galahadCard, live: false, stats: null }} />)
+      expect(screen.getByTestId('card-state')).toHaveTextContent('not live')
+    })
+
+    it('marks a knight suspended from its card', () => {
+      render(<KnightCard knight={{ ...mockKnight, name: 'patsy' }} card={patsyCard} />)
+      expect(screen.getByText('SUSPENDED')).toBeInTheDocument()
+      expect(screen.getByText('Vault keeper: files notes and briefings.')).toBeInTheDocument()
+      expect(screen.queryByTestId('card-state')).not.toBeInTheDocument()
+    })
+
+    it('renders the card-less view for a knight without a card', () => {
+      render(<KnightCard knight={mockKnight} />)
+      expect(screen.queryByTestId('card-state')).not.toBeInTheDocument()
+      expect(screen.getByText('galahad')).toBeInTheDocument()
+    })
   })
 })

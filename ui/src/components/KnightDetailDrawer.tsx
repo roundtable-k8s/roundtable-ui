@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
@@ -9,10 +9,93 @@ import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition } from '../hooks/useFleet'
 import { sanitizeText } from '../lib/untrusted'
 import { PodLogsViewer } from './PodLogsViewer'
+import { cardLoad, type CardEntry } from '../lib/cards'
 
 interface Props {
   knight: Knight | null
   onClose: () => void
+  /** The knight's agent card (#243); absent → no Card section. */
+  card?: CardEntry
+}
+
+function CardRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3 text-sm items-start">
+      <span className="text-gray-400 flex-shrink-0">{label}</span>
+      <span className="text-right min-w-0">{children}</span>
+    </div>
+  )
+}
+
+/** "Card" section: the knight's agent card, live state and load. */
+export function KnightCardSection({ entry, fallbackMax }: { entry: CardEntry; fallbackMax?: number }) {
+  const { card, live } = entry
+  const rt = card.roundtable
+  const load = cardLoad(entry, fallbackMax)
+  const state = rt.suspended ? 'Suspended' : live ? 'Live' : 'Not live'
+  const stateClass = rt.suspended
+    ? 'bg-red-500/10 text-red-400 border-red-500/20'
+    : live
+      ? 'bg-green-500/10 text-green-400 border-green-500/20'
+      : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+  return (
+    <div data-testid="knight-card-section">
+      <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+        <IdCard className="w-4 h-4" />
+        Card
+      </h3>
+      <div className="bg-roundtable-slate rounded-lg p-3 space-y-2">
+        {card.description && <p className="text-sm text-gray-300">{sanitizeText(card.description)}</p>}
+        <CardRow label="State">
+          <span className={`text-xs px-2 py-0.5 rounded-full border ${stateClass}`}>{state}</span>
+        </CardRow>
+        <CardRow label="Load">
+          <span className="text-gray-200 font-mono text-xs">
+            {load ? `${load.active} / ${load.max ?? '?'} active` : '—'}
+          </span>
+        </CardRow>
+        {rt.model && (
+          <CardRow label="Model">
+            <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono break-all">{sanitizeText(rt.model)}</span>
+          </CardRow>
+        )}
+        {rt.taskSubject && (
+          <CardRow label="Task subject">
+            <span className="text-xs text-gray-300 font-mono break-all">{sanitizeText(rt.taskSubject)}</span>
+          </CardRow>
+        )}
+        {rt.tools && rt.tools.length > 0 && (
+          <CardRow label="Tools">
+            <span className="flex flex-wrap justify-end gap-1">
+              {rt.tools.map((t) => (
+                <span key={t} className="text-xs px-1.5 py-0.5 rounded bg-roundtable-navy/70 border border-roundtable-steel/50 text-gray-300 font-mono">{sanitizeText(t)}</span>
+              ))}
+            </span>
+          </CardRow>
+        )}
+      </div>
+      {card.skills.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-gray-500">Skills ({card.skills.length})</p>
+          {card.skills.map((skill) => (
+            <div key={skill.id ?? skill.name} className="bg-roundtable-slate border border-roundtable-steel/50 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-medium text-gray-200 font-mono">{sanitizeText(skill.name)}</span>
+                {skill.tags && skill.tags.length > 0 && (
+                  <span className="flex flex-wrap gap-1">
+                    {skill.tags.map((tag) => (
+                      <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20">{sanitizeText(tag)}</span>
+                    ))}
+                  </span>
+                )}
+              </div>
+              {skill.description && <p className="text-xs text-gray-400 mt-1">{sanitizeText(skill.description)}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const entryTypeColors: Record<string, string> = {
@@ -24,7 +107,7 @@ const entryTypeColors: Record<string, string> = {
   compaction: 'bg-red-500/20 text-red-400',
 }
 
-export function KnightDetailDrawer({ knight, onClose }: Props) {
+export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const { stats, recent, loading, error, fetchStats, fetchRecent } = useKnightSession()
   const [recentLoading, setRecentLoading] = useState(false)
   const [logsExpanded, setLogsExpanded] = useState(false)
@@ -112,6 +195,9 @@ export function KnightDetailDrawer({ knight, onClose }: Props) {
               <p className="text-red-400/60 text-xs mt-1">Knight may not have introspection enabled yet</p>
             </ErrorBanner>
           )}
+
+          {/* Agent card (#243) */}
+          {card && <KnightCardSection entry={card} fallbackMax={knightDetail?.concurrency ?? knight.concurrency} />}
 
           {/* Configuration */}
           {(knightDetail?.model || knightDetail?.runtime || knightDetail?.concurrency != null || knightDetail?.taskTimeoutSeconds || knightDetail?.suspend) && (

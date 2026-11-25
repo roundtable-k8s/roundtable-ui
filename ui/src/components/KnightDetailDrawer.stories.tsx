@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { KnightDetailDrawer } from './KnightDetailDrawer'
 import type { Knight } from '../hooks/useFleet'
+import { galahadCard, patsyCard } from '../test/fixtures/cards'
 
 const meta: Meta<typeof KnightDetailDrawer> = {
   title: 'Components/KnightDetailDrawer',
@@ -112,6 +113,31 @@ export const SandboxKnight: Story = {
         'roundtable.io/runtime': 'sandbox',
       },
     },
+    onClose: () => {},
+  },
+}
+
+// Agent cards (#243)
+
+export const WithAgentCard: Story = {
+  args: {
+    knight: mockKnight,
+    card: galahadCard,
+    onClose: () => {},
+  },
+}
+
+export const SuspendedWithAgentCard: Story = {
+  args: {
+    knight: { ...mockKnight, name: 'patsy', domain: 'vault', status: 'scaled-to-zero', ready: false, suspend: true },
+    card: patsyCard,
+    onClose: () => {},
+  },
+}
+
+export const WithoutAgentCard: Story = {
+  args: {
+    knight: mockKnight,
     onClose: () => {},
   },
 }
