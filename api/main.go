@@ -409,6 +409,12 @@ func main() {
 	api.Handle("/chains/{name}/run", dispatchLimit.wrap(chainRunHandler(gateway))).Methods("POST")
 	api.HandleFunc("/chains/runs/{namespace}/{run}", chainRunStatusHandler(gateway)).Methods("GET")
 
+	// Chat with a knight through the gateway: same auth and rate limit as dispatch
+	api.Handle("/chat/{knight}", dispatchLimit.wrap(chatSendHandler(gateway))).Methods("POST")
+	api.HandleFunc("/chat/knights", chatKnightsHandler(gateway)).Methods("GET")
+	api.HandleFunc("/chat/tasks/{taskId}", taskStatusHandler(gateway)).Methods("GET")
+	api.HandleFunc("/chat/tasks/{taskId}/events", chatEventsHandler(gateway)).Methods("GET")
+
 	// Dead letters: failed and lost tasks, retried through the gateway
 	api.HandleFunc("/dead-letters", deadLettersHandler(gateway)).Methods("GET")
 	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(gateway)).Methods("GET")
