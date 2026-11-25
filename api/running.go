@@ -780,43 +780,87 @@ func activityPrefixes(tablePrefixes []string) []string {
 	return out
 }
 
+// activityResyncInterval is how often the set of tables is re-read to follow
+// RoundTables created or removed after startup (#291).
+const activityResyncInterval = 30 * time.Second
+
+// activityFollower keeps one `<prefix>.activity.>` subscription per prefix,
+// idempotently: sync subscribes prefixes it does not have yet and
+// unsubscribes those that disappeared.
+type activityFollower struct {
+	conn *nats.Conn
+	reg  *runningRegistry
+	act  *activityStore
+
+	mu   sync.Mutex
+	subs map[string]*nats.Subscription
+}
+
+func newActivityFollower(conn *nats.Conn, reg *runningRegistry, act *activityStore) *activityFollower {
+	return &activityFollower{conn: conn, reg: reg, act: act, subs: map[string]*nats.Subscription{}}
+}
+
+// sync makes the subscribed set equal prefixes and returns the prefixes newly
+// subscribed. A failed subscribe is retried on the next call.
+func (f *activityFollower) sync(prefixes []string) []string {
+	want := map[string]bool{}
+	for _, p := range prefixes {
+		want[p] = true
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for p, sub := range f.subs {
+		if !want[p] {
+			_ = sub.Unsubscribe()
+			delete(f.subs, p)
+			slog.Info("Running: activity unsubscribed", "prefix", p)
+		}
+	}
+	var added []string
+	for _, p := range prefixes {
+		if _, ok := f.subs[p]; ok {
+			continue
+		}
+		sub, err := f.subscribe(p)
+		if err != nil {
+			slog.Error("Running: activity subscribe failed", "prefix", p, "error", err)
+			continue
+		}
+		f.subs[p] = sub
+		added = append(added, p)
+	}
+	return added
+}
+
+func (f *activityFollower) subscribe(p string) (*nats.Subscription, error) {
+	tokenIdx := strings.Count(p, ".") + 2 // <prefix>.activity.<Knight>.<taskId>
+	return f.conn.Subscribe(p+".activity.>", func(msg *nats.Msg) {
+		knight := ""
+		if parts := strings.Split(msg.Subject, "."); len(parts) > tokenIdx {
+			knight = parts[tokenIdx]
+		}
+		ev, ok := parseActivityEvent(msg.Data, knight)
+		if !ok {
+			return
+		}
+		f.reg.apply(ev)
+		if f.act != nil {
+			f.act.add(ev, msg.Data)
+		}
+	})
+}
+
 // startRunningRegistry subscribes the registry to activity events and JetStream
 // MAX_DELIVERIES advisories, bootstraps it from pod introspection and starts
 // the stale sweeper and pod reconciler. Background goroutines stop with ctx.
 // When act is non-nil the same activity events also feed the per-task
 // activity buffers (#184) and are swept on the same ticker.
-func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, tablePrefixes []string, namespace string) {
-	prefixes := activityPrefixes(tablePrefixes)
-	for _, p := range prefixes {
-		subject := p + ".activity.>"
-		tokenIdx := strings.Count(p, ".") + 2 // <prefix>.activity.<Knight>.<taskId>
-		if _, err := nc.Subscribe(subject, func(msg *nats.Msg) {
-			knight := ""
-			if parts := strings.Split(msg.Subject, "."); len(parts) > tokenIdx {
-				knight = parts[tokenIdx]
-			}
-			ev, ok := parseActivityEvent(msg.Data, knight)
-			if !ok {
-				return
-			}
-			reg.apply(ev)
-			if act != nil {
-				act.add(ev, msg.Data)
-			}
-		}); err != nil {
-			slog.Error("Running: activity subscribe failed", "subject", subject, "error", err)
+func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, listPrefixes func(context.Context) []string, namespace string) {
+	follower := newActivityFollower(nc, reg, act)
+	bootstrap := func(prefixes []string) {
+		if len(prefixes) == 0 {
+			return
 		}
-	}
-
-	if _, err := nc.Subscribe("$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.>", func(msg *nats.Msg) {
-		reg.handleMaxDeliveries(msg.Data, jsFetchMessage)
-	}); err != nil {
-		slog.Warn("Running: MAX_DELIVERIES advisory subscribe failed", "error", err)
-	}
-
-	// Bootstrap after subscribing so no event between the two is missed;
-	// entries already seen live win over the introspected ones.
-	go func() {
 		req := func(subject string, data []byte, timeout time.Duration) ([]byte, error) {
 			m, err := nc.Request(subject, data, timeout)
 			if err != nil {
@@ -827,8 +871,35 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activi
 		bctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		n := bootstrapRunning(bctx, reg, namespace, prefixes, req, 3*time.Second)
-		slog.Info("Running: registry bootstrapped from introspection", "tasks", n)
+		slog.Info("Running: registry bootstrapped from introspection", "prefixes", prefixes, "tasks", n)
+	}
+	// Subscribe first, bootstrap after, so no event between the two is missed;
+	// entries already seen live win over the introspected ones.
+	initial := follower.sync(activityPrefixes(listPrefixes(ctx)))
+	go bootstrap(initial)
+
+	go func() {
+		t := time.NewTicker(activityResyncInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				// Only newly added prefixes are bootstrapped.
+				added := follower.sync(activityPrefixes(listPrefixes(ctx)))
+				if len(added) > 0 {
+					go bootstrap(added)
+				}
+			}
+		}
 	}()
+
+	if _, err := nc.Subscribe("$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.>", func(msg *nats.Msg) {
+		reg.handleMaxDeliveries(msg.Data, jsFetchMessage)
+	}); err != nil {
+		slog.Warn("Running: MAX_DELIVERIES advisory subscribe failed", "error", err)
+	}
 
 	go func() {
 		sweep := time.NewTicker(2 * time.Second)

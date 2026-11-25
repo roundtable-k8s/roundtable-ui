@@ -349,7 +349,7 @@ func main() {
 	// optionally narrow them to one table (#239).
 	tables := newTableSourceFromEnv(namespace)
 	fleetPrefix := tables.defaultPrefix()
-	startRunningRegistry(runningCtx, running, activity, tables.prefixes(runningCtx), namespace)
+	startRunningRegistry(runningCtx, running, activity, tables.prefixes, namespace)
 
 	// Live chain updates over WS (#228)
 	var chains *chainWatcher
