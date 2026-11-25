@@ -167,4 +167,23 @@ export interface Chain {
   tokens?: TokenTotals | null
   /** The part of costUSD spent by subscription-billed knights (notional). */
   notionalCostUSD?: string
+  /** Template Chain this one is a run copy of (ai.roundtable.io/run-template). */
+  runTemplate?: string
+  /**
+   * Set on GET /api/chains list items: steps carry only name and phase.
+   * The full chain comes from GET /api/chains/{name} or a WS push.
+   */
+  slim?: boolean
+}
+
+/** GET /api/chain-groups: the run copies of one template. */
+export interface ChainRunGroup {
+  template: string
+  runs: number
+  /** Copies per phase. */
+  phases: Record<string, number>
+  /** Start of the newest copy. */
+  lastStartTime?: string | null
+  /** False when the template Chain itself no longer exists. */
+  templateExists: boolean
 }

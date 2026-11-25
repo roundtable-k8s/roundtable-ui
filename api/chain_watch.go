@@ -22,7 +22,8 @@ const (
 
 // chainWatcher watches Chain resources through the Kubernetes API and fans
 // every add/update/delete out to WebSocket clients as a "chain" message whose
-// data is the same ChainSummary served by /api/chains (#228).
+// data is the same full ChainSummary served by /api/chains/{name} (#228); the
+// GET /api/chains list is slim (#275), so a push also carries step detail.
 //
 // The operator does not publish chain progress over NATS, so the watch is the
 // only live source. On watch expiry or error the watcher re-lists and emits
