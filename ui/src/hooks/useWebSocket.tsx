@@ -17,8 +17,8 @@ export interface NatsEvent {
  * `chain` carries live Chain state (ChainSummary + envelope `op`), not
  * feed events, so it is routed here too.
  */
-export type WsTopic = 'running' | 'activity' | 'chain'
-const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running', 'activity', 'chain'])
+export type WsTopic = 'running' | 'activity' | 'chain' | 'cards'
+const TOPICS: ReadonlySet<string> = new Set<WsTopic>(['running', 'activity', 'chain', 'cards'])
 /** Receives the message's `data`, plus the whole envelope (e.g. for `op`). */
 export type TopicListener = (data: unknown, msg: Record<string, unknown>) => void
 

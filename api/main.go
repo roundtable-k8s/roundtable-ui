@@ -122,8 +122,8 @@ type PlanningResult struct {
 
 // TaskEvent represents a NATS task/result/mission/chain event
 type TaskEvent struct {
-	Type      string          `json:"type"`         // task, result, chain
-	Op        string          `json:"op,omitempty"` // chain: upsert | delete
+	Type      string          `json:"type"`         // task, result, chain, cards
+	Op        string          `json:"op,omitempty"` // chain, cards: upsert | delete
 	Subject   string          `json:"subject"`
 	Table     string          `json:"table,omitempty"` // RoundTable the subject belongs to (#239)
 	Data      json.RawMessage `json:"data"`
@@ -348,6 +348,10 @@ func main() {
 		go chains.run(runningCtx)
 	}
 
+	// Agent cards from NATS KV plus knight STATS, pushed live over WS (#251)
+	cards := newCardStore(nc, js, envOr("CARDS_KV_BUCKET", defaultCardsBucket), tables.tables)
+	go cards.run(runningCtx)
+
 	// Queue history sampler (#205): 15s samples, 6h in-memory ring buffer
 	samplerCtx, stopSampler := context.WithCancel(context.Background())
 	defer stopSampler()
@@ -416,11 +420,14 @@ func main() {
 	api.HandleFunc("/briefings", briefingListHandler(vaultPath, briefingDirs)).Methods("GET")
 	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath, briefingDirs)).Methods("GET")
 
+	// Agent cards with live state and load (#251)
+	api.HandleFunc("/cards", cardsHandler(cards)).Methods("GET")
+
 	// In-flight tasks across all knight pods (#199)
 	api.HandleFunc("/running", runningHandler(running)).Methods("GET")
 
 	// WebSocket for real-time NATS events
-	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains))
+	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards))
 
 	// Config endpoint to expose fleet prefix to frontend (#60)
 	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
@@ -1226,7 +1233,7 @@ func briefingHandler(vaultPath string, dirs []string) http.HandlerFunc {
 	}
 }
 
-func wsHandler(src *tableSource, running *runningRegistry, activity *activityStore, chains *chainWatcher) http.HandlerFunc {
+func wsHandler(src *tableSource, running *runningRegistry, activity *activityStore, chains *chainWatcher, cards *cardStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check NATS health BEFORE upgrading (#19). Upgrading first and then
 		// closing makes the client fire onopen (UI shows "Connected") before
@@ -1309,6 +1316,12 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			unsubChains = chains.subscribe(func(data []byte) { safeWrite(true, data) })
 		}
 
+		// Agent card changes (#251) from a KV watch on the cards bucket.
+		var unsubCards func()
+		if cards != nil {
+			unsubCards = cards.subscribe(func(data []byte) { safeWrite(true, data) })
+		}
+
 		// In-flight registry deltas (#199): a snapshot first, then upserts and
 		// removes. Critical: a dropped delta would leave the client's view
 		// wrong until it refetches.
@@ -1335,6 +1348,9 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			}
 			if unsubChains != nil {
 				unsubChains()
+			}
+			if unsubCards != nil {
+				unsubCards()
 			}
 			close(done)
 			unsubscribeAll()

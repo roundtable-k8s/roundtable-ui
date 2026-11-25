@@ -53,6 +53,18 @@ describe('useWebSocket chain topic', () => {
   })
 })
 
+describe('useWebSocket cards topic', () => {
+  it('routes card changes to listeners, not the feed', () => {
+    const { result } = renderHook(() => useWebSocket(), { wrapper })
+    const seen: Array<[unknown, unknown]> = []
+    act(() => { result.current.subscribeTopic('cards', (d, msg) => seen.push([d, msg.op])) })
+    const data = { table: 'personal', knight: 'galahad', deleted: true }
+    act(() => FakeWS.last.onmessage!({ data: JSON.stringify({ type: 'cards', subject: 'cards.personal.galahad', op: 'delete', table: 'personal', data, timestamp: '2026-11-24T10:00:00Z' }) }))
+    expect(seen).toEqual([[data, 'delete']])
+    expect(result.current.events).toHaveLength(0)
+  })
+})
+
 describe('useWebSocket activity', () => {
   it('routes activity messages to listeners and sends commands only when open', () => {
     const { result } = renderHook(() => useWebSocket(), { wrapper })
