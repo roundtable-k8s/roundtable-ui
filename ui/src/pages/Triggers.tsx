@@ -129,7 +129,7 @@ export function TriggerDetail({ trigger: t }: { trigger: Trigger }) {
         {t.activeRuns.length === 0 ? <p className="text-sm text-gray-500">No runs in flight.</p> : (
           <ul className="text-sm space-y-1">
             {t.activeRuns.map(r => (
-              <li key={r}><Link to={chainLink(t.targetChain, r)} className="font-mono text-roundtable-gold hover:underline">{r}</Link></li>
+              <li key={r}><Link to={chainLink(r)} className="font-mono text-roundtable-gold hover:underline">{r}</Link></li>
             ))}
           </ul>
         )}
@@ -156,7 +156,7 @@ export function TriggerDetail({ trigger: t }: { trigger: Trigger }) {
                       {f.skipReason
                         ? <span className="text-amber-300">Skipped: {f.skipReason}</span>
                         : f.run
-                          ? <Link to={chainLink(t.targetChain, f.run)} className="font-mono text-roundtable-gold hover:underline">{f.run}</Link>
+                          ? <Link to={chainLink(f.run)} className="font-mono text-roundtable-gold hover:underline">{f.run}</Link>
                           : <span className="text-gray-500">—</span>}
                     </td>
                   </tr>

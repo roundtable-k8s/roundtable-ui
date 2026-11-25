@@ -40,11 +40,10 @@ export interface Trigger {
   ready: 'true' | 'false' | 'unknown'
 }
 
-export const TRIGGER_DOCS_URL = 'https://github.com/roundtable-k8s/roundtable/blob/main/docs/crd-design.md'
+export const TRIGGER_DOCS_URL = 'https://github.com/roundtable-k8s/roundtable/blob/main/docs/triggers.md'
 
-/** Deep link to the chain a trigger starts (and, via ?run=, one of its runs). */
-export function chainLink(chain: string, run?: string): string {
+/** Deep link to a chain (a trigger target, or a run, which is its own Chain object). */
+export function chainLink(chain: string): string {
   const q = new URLSearchParams({ chain })
-  if (run) q.set('run', run)
   return `/chains?${q.toString()}`
 }

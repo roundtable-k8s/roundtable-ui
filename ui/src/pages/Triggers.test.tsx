@@ -72,6 +72,6 @@ describe('TriggerDetailPage', () => {
     const section = await screen.findByRole('region', { name: 'recent firings' })
     expect(mockApiGet).toHaveBeenCalledWith('/api/triggers/roundtable/nightly')
     expect(section).toHaveTextContent('Skipped: ConcurrencyForbid')
-    expect(within(section).getByRole('link', { name: 'run-2' })).toHaveAttribute('href', '/chains?chain=nightly-scan&run=run-2')
+    expect(within(section).getByRole('link', { name: 'run-2' })).toHaveAttribute('href', '/chains?chain=run-2')
   })
 })
