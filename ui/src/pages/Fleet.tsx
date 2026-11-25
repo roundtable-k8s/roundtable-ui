@@ -9,11 +9,23 @@ import { getKnightConfig } from '../lib/knights'
 import { parseEvent, resultFailureReason } from '../lib/events'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
+import { useCards } from '../hooks/useCards'
+import { SkillFilter } from '../components/SkillFilter'
+import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as SkillFilterValue } from '../lib/cards'
 
 export function FleetPage() {
   const { knights, loading, error, refresh } = useFleet()
   const [selectedKnight, setSelectedKnight] = useState<Knight | null>(null)
   const { events } = useWebSocket()
+  const { cards } = useCards()
+  const [skillFilter, setSkillFilter] = useState<SkillFilterValue>({})
+  const skillTags = useMemo(() => cardSkillTags(cards.values()), [cards])
+  const visibleKnights = useMemo(
+    () => knights
+      .filter((k) => matchesSkillFilter(cardForKnight(cards, k.name), skillFilter))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [knights, cards, skillFilter],
+  )
 
   const knightActivity = useMemo(() => {
     const now = Date.now()
@@ -206,19 +218,41 @@ export function FleetPage() {
         )
       })()}
 
+      {/* Skill filter (#243): only when the API serves cards */}
+      {!loading && cards.size > 0 && (
+        <SkillFilter
+          tags={skillTags}
+          value={skillFilter}
+          onChange={setSkillFilter}
+          shown={visibleKnights.length}
+          total={knights.length}
+        />
+      )}
+
       {/* Knight grid */}
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {knights
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((knight) => (
-              <KnightCard key={knight.name} knight={knight} onClick={() => setSelectedKnight(knight)} activity={knightActivity[knight.name]} />
-            ))}
+          {visibleKnights.map((knight) => (
+            <KnightCard
+              key={knight.name}
+              knight={knight}
+              onClick={() => setSelectedKnight(knight)}
+              activity={knightActivity[knight.name]}
+              card={cardForKnight(cards, knight.name)}
+            />
+          ))}
         </div>
+      )}
+      {!loading && knights.length > 0 && visibleKnights.length === 0 && (
+        <p className="text-center text-gray-500 text-sm py-10">No knight has a skill matching this filter.</p>
       )}
 
       {/* Knight detail drawer */}
-      <KnightDetailDrawer knight={selectedKnight} onClose={() => setSelectedKnight(null)} />
+      <KnightDetailDrawer
+        knight={selectedKnight}
+        onClose={() => setSelectedKnight(null)}
+        card={selectedKnight ? cardForKnight(cards, selectedKnight.name) : undefined}
+      />
     </div>
   )
 }

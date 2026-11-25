@@ -1,0 +1,61 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { FleetPage } from './Fleet'
+import type { Knight } from '../hooks/useFleet'
+import { cardKey, type CardMap } from '../lib/cards'
+import { galahadCard, patsyCard } from '../test/fixtures/cards'
+
+const k = (name: string, domain: string): Knight => ({
+  name, domain, status: 'online', ready: true, restarts: 0, age: '1h', image: 'knight:latest', skills: 1, nixTools: 1, labels: {},
+})
+
+vi.mock('../hooks/useFleet', () => ({
+  useFleet: () => ({ knights: [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')], loading: false, error: null, refresh: vi.fn() }),
+}))
+vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
+let cards: CardMap = new Map()
+vi.mock('../hooks/useCards', () => ({ useCards: () => ({ cards, loading: false, unavailable: false }) }))
+vi.mock('../components/KnightDetailDrawer', () => ({ KnightDetailDrawer: () => null }))
+
+const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+
+beforeEach(() => {
+  cards = new Map([
+    [cardKey('personal', 'galahad'), galahadCard],
+    [cardKey('personal', 'patsy'), patsyCard],
+  ])
+})
+
+describe('Fleet skill filter', () => {
+  it('filters knights by skill tag', async () => {
+    const user = userEvent.setup()
+    render(<FleetPage />)
+    expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+    await user.click(screen.getByRole('button', { name: 'security' }))
+    expect(names()).toEqual(['galahad'])
+    expect(screen.getByText('1 of 3 knights')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'security' }))
+    expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+  })
+
+  it('filters knights by free text and clears', async () => {
+    const user = userEvent.setup()
+    render(<FleetPage />)
+    await user.type(screen.getByLabelText('Filter by skill'), 'vault')
+    expect(names()).toEqual(['patsy'])
+    await user.clear(screen.getByLabelText('Filter by skill'))
+    await user.type(screen.getByLabelText('Filter by skill'), 'nothing-matches')
+    expect(names()).toEqual([])
+    expect(screen.getByText('No knight has a skill matching this filter.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /clear/i }))
+    expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+  })
+
+  it('hides the filter and shows every knight when there are no cards', () => {
+    cards = new Map()
+    render(<FleetPage />)
+    expect(screen.queryByLabelText('Filter by skill')).not.toBeInTheDocument()
+    expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+  })
+})

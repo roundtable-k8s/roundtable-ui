@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { KnightCard } from './KnightCard'
 import type { Knight } from '../hooks/useFleet'
+import { galahadCard, patsyCard } from '../test/fixtures/cards'
 
 const meta: Meta<typeof KnightCard> = {
   title: 'Components/KnightCard',
@@ -163,5 +164,34 @@ export const DegradedPhase: Story = {
       restarts: 8,
       model: 'claude-sonnet-4-20250514'
     },
+  },
+}
+
+// Agent cards (#243)
+
+export const WithAgentCard: Story = {
+  args: {
+    knight: { ...baseKnight, phase: 'Ready', model: 'claude-sonnet-4-20250514', concurrency: 3 },
+    card: galahadCard,
+  },
+}
+
+export const SuspendedWithAgentCard: Story = {
+  args: {
+    knight: { ...baseKnight, name: 'patsy', domain: 'vault', status: 'scaled-to-zero', ready: false, phase: 'Suspended' },
+    card: patsyCard,
+  },
+}
+
+export const ScaledToZeroNotLive: Story = {
+  args: {
+    knight: { ...baseKnight, status: 'scaled-to-zero', ready: false },
+    card: { ...galahadCard, live: false, stats: null },
+  },
+}
+
+export const WithoutAgentCard: Story = {
+  args: {
+    knight: { ...baseKnight, phase: 'Ready' },
   },
 }

@@ -4,6 +4,8 @@ import { getKnightConfig } from '../lib/knights'
 import { formatRelativeTime } from '../lib/format'
 import { ReplicaDots } from './ReplicaDots'
 import { phaseColor, KNIGHT_STATUS_DOT } from '../lib/status'
+import { cardLoad, type CardEntry } from '../lib/cards'
+import { sanitizeText } from '../lib/untrusted'
 
 interface KnightActivity {
   recent: number
@@ -16,6 +18,29 @@ interface KnightCardProps {
   knight: Knight
   onClick?: () => void
   activity?: KnightActivity
+  /** The knight's agent card (#243); absent → the card-less view. */
+  card?: CardEntry
+}
+
+/** Live / not live badge plus load (active / max) from the knight's card. */
+function CardStateBadge({ card, fallbackMax }: { card: CardEntry; fallbackMax?: number }) {
+  const load = cardLoad(card, fallbackMax)
+  return (
+    <span
+      data-testid="card-state"
+      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+        card.live
+          ? 'bg-green-500/10 text-green-400 border-green-500/20'
+          : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+      }`}
+      title={card.live ? 'Answering on NATS' : 'No running pod answered'}
+    >
+      {card.live ? 'live' : 'not live'}
+      {card.live && load && (
+        <span className="font-mono text-gray-300">· {load.active}{load.max !== undefined ? `/${load.max}` : ''}</span>
+      )}
+    </span>
+  )
 }
 
 function MiniSparkline({ bars, active }: { bars: number[]; active: boolean }) {
@@ -42,12 +67,14 @@ function extractModelShortName(model?: string): string | null {
   return parts[parts.length - 1].split('-').slice(0, 2).join('-')
 }
 
-export function KnightCard({ knight, onClick, activity }: KnightCardProps) {
+export function KnightCard({ knight, onClick, activity, card }: KnightCardProps) {
   const config = getKnightConfig(knight.name)
   const modelShortName = extractModelShortName(knight.model)
   const successRate = knight.tasksCompleted !== undefined && knight.tasksFailed !== undefined
     ? knight.tasksCompleted / (knight.tasksCompleted + knight.tasksFailed || 1)
     : null
+  const suspended = knight.suspend || card?.card.roundtable.suspended === true
+  const description = card?.card.description
 
   return (
     <div
@@ -55,7 +82,7 @@ export function KnightCard({ knight, onClick, activity }: KnightCardProps) {
       className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-5 hover:border-roundtable-gold/30 transition-all cursor-pointer group relative"
     >
       {/* Suspended overlay */}
-      {knight.suspend && (
+      {suspended && (
         <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-lg z-10">
           SUSPENDED
         </div>
@@ -96,8 +123,15 @@ export function KnightCard({ knight, onClick, activity }: KnightCardProps) {
               {knight.phase}
             </span>
           )}
+          {card && !suspended && <CardStateBadge card={card} fallbackMax={knight.concurrency} />}
         </div>
       </div>
+
+      {description && (
+        <p className="text-xs text-gray-400 mb-3 line-clamp-2" title={sanitizeText(description)}>
+          {sanitizeText(description)}
+        </p>
+      )}
 
       {(knight.pods || knight.scaling) && (
         <div className="mb-3"><ReplicaDots knight={knight} /></div>
