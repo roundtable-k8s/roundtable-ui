@@ -2112,6 +2112,13 @@ type RoundTableSummary struct {
 	Description         string             `json:"description,omitempty"`
 	Suspend             bool               `json:"suspend"`
 	Ephemeral           bool               `json:"ephemeral"`
+	// PlannerKnight is the knight that plans this table's missions (status.plannerKnight).
+	PlannerKnight string `json:"plannerKnight"`
+	// PlannerEnabled is false when spec.planner.enabled is false or the table is ephemeral.
+	PlannerEnabled      bool `json:"plannerEnabled"`
+	KnightsScaledToZero int  `json:"knightsScaledToZero"`
+	KnightsSuspended    int  `json:"knightsSuspended"`
+	KnightsNotReady     int  `json:"knightsNotReady"`
 }
 
 func roundTablesHandler(namespace string) http.HandlerFunc {
@@ -2180,6 +2187,18 @@ func parseRoundTableResource(obj map[string]interface{}) RoundTableSummary {
 		Description:  getStr(spec, "description"),
 		Suspend:      getBool(spec, "suspend"),
 		Ephemeral:    getBool(spec, "ephemeral"),
+
+		PlannerKnight:       getStr(status, "plannerKnight"),
+		KnightsScaledToZero: getInt(status, "knightsScaledToZero"),
+		KnightsSuspended:    getInt(status, "knightsSuspended"),
+		KnightsNotReady:     getInt(status, "knightsNotReady"),
+	}
+	// The planner is on unless spec.planner.enabled is false; ephemeral tables have none.
+	rt.PlannerEnabled = !rt.Ephemeral
+	if planner := getNestedMap(spec, "planner"); planner != nil {
+		if enabled, ok := planner["enabled"].(bool); ok && !enabled {
+			rt.PlannerEnabled = false
+		}
 	}
 
 	// Parse totalTasksCompleted (int64)

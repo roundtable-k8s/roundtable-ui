@@ -29,6 +29,13 @@ export interface RoundTable {
   description?: string
   suspend?: boolean
   ephemeral?: boolean
+  /** Knight that plans this table's missions; empty when unknown. */
+  plannerKnight?: string
+  /** False when the planner is disabled or the table is ephemeral. */
+  plannerEnabled?: boolean
+  knightsScaledToZero?: number
+  knightsSuspended?: number
+  knightsNotReady?: number
 }
 
 export interface ChainStep {
