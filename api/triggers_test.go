@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func trigObj(name string, source map[string]interface{}, status map[string]interface{}) map[string]interface{} {
@@ -135,5 +138,30 @@ func TestTriggersHandler_Empty(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/triggers", nil))
 	if w.Code != http.StatusOK || w.Body.String() != "[]\n" {
 		t.Errorf("status %d body %q", w.Code, w.Body.String())
+	}
+}
+
+func TestTriggerDetailHandler_GetErrors(t *testing.T) {
+	r := setupTriggerRouter(t, trigObj("nightly", map[string]interface{}{"schedule": map[string]interface{}{"cron": "0 3 * * *"}}, nil))
+	dynClient.(*fake.FakeDynamicClient).PrependReactor("get", "triggers", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.(k8stesting.GetAction).GetName() == "nightly" {
+			return true, nil, apierrors.NewForbidden(triggerGVR.GroupResource(), "nightly", nil)
+		}
+		return false, nil, nil
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/triggers/roundtable/nightly", nil))
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("forbidden get: status %d, want 500: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "not found") {
+		t.Errorf("forbidden get: body says not found: %s", w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/triggers/roundtable/missing", nil))
+	if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "Trigger not found") {
+		t.Errorf("missing trigger: status %d body %s, want 404 Trigger not found", w.Code, w.Body.String())
 	}
 }

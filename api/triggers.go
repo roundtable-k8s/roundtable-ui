@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -222,7 +223,13 @@ func triggerDetailHandler(namespace string) http.HandlerFunc {
 		}
 		obj, err := dynClient.Resource(triggerGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			jsonError(w, "Trigger not found", http.StatusNotFound)
+			if apierrors.IsNotFound(err) {
+				jsonError(w, "Trigger not found", http.StatusNotFound)
+				return
+			}
+			// Forbidden, timeout and other API errors are not "missing".
+			slog.Error("Get trigger failed", "namespace", namespace, "trigger", name, "error", err)
+			jsonError(w, "Failed to read trigger", http.StatusInternalServerError)
 			return
 		}
 		t := parseTriggerResource(obj.Object)
