@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"regexp"
 	"sort"
@@ -285,3 +286,25 @@ func jsReadResults(ctx context.Context, streamName, filter string, limit int) ([
 }
 
 var errNATSUnavailable = errors.New("NATS not available")
+
+// tableNone is the table value reported for objects without a RoundTable.
+const tableNone = "none"
+
+// tableOrNone returns name, or "none" when it is empty.
+func tableOrNone(name string) string {
+	if name == "" {
+		return tableNone
+	}
+	return name
+}
+
+// tableFilter returns the ?table= query value ("" means no filtering). An
+// unknown table matches nothing, so list endpoints return an empty list.
+func tableFilter(r *http.Request) string {
+	return r.URL.Query().Get("table")
+}
+
+// tableMatches reports whether an object on table have passes the filter.
+func tableMatches(filter, have string) bool {
+	return filter == "" || filter == tableOrNone(have)
+}

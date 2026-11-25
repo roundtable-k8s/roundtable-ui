@@ -23,6 +23,8 @@ export interface TriggerCondition {
 }
 
 export interface Trigger {
+  /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
+  table?: string
   name: string
   namespace: string
   source: TriggerSource

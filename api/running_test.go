@@ -471,7 +471,7 @@ func TestRunningHandler(t *testing.T) {
 	reg.handleActivity(activity(t, "tool.finished", "t1", 2, map[string]any{"tool": "Bash", "outputPreview": "token=ghp_abcdefghijklmnopqrstuvwxyz0123"}), "Galahad")
 
 	w := httptest.NewRecorder()
-	runningHandler(reg)(w, httptest.NewRequest(http.MethodGet, "/api/running", nil))
+	runningHandler(reg, "roundtable")(w, httptest.NewRequest(http.MethodGet, "/api/running", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}

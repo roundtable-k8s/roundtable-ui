@@ -79,7 +79,9 @@ type SequenceDTO struct {
 
 // KnightQueue is the queue state of one knight's durable task consumer.
 type KnightQueue struct {
-	Knight   string `json:"knight"`
+	Knight string `json:"knight"`
+	// Table is the knight's RoundTable, "none" when unset (#273).
+	Table    string `json:"table"`
 	Stream   string `json:"stream"`
 	Consumer string `json:"consumer"`
 	// ConsumerFound is false when no durable consumer exists yet (knight
@@ -118,6 +120,7 @@ type KnightQueue struct {
 // queueTarget is what the queue lookup needs from a Knight CR.
 type queueTarget struct {
 	knight        string
+	table         string
 	stream        string
 	consumers     []string // candidate durable names, in lookup order
 	concurrency   int32
@@ -132,7 +135,7 @@ func queueTargetFromCR(cr *unstructured.Unstructured) queueTarget {
 	status := getNestedMap(cr.Object, "status")
 	natsSpec := getNestedMap(spec, "nats")
 
-	t := queueTarget{knight: cr.GetName()}
+	t := queueTarget{knight: cr.GetName(), table: tableOrNone(knightTableName(cr))}
 
 	t.stream = getStr(natsSpec, "stream")
 	if t.stream == "" {
@@ -183,6 +186,7 @@ func consumerSubjects(cfg jetstream.ConsumerConfig) []string {
 func buildKnightQueue(ctx context.Context, b queueBackend, t queueTarget) KnightQueue {
 	q := KnightQueue{
 		Knight:        t.knight,
+		Table:         t.table,
 		Stream:        t.stream,
 		Consumer:      t.consumers[0],
 		Concurrency:   t.concurrency,
@@ -308,16 +312,23 @@ func queuesHandler(namespace string) http.HandlerFunc {
 		defer cancel()
 
 		// Look up knights concurrently, a few at a time.
-		out := make([]KnightQueue, len(crList.Items))
+		filter := tableFilter(r)
+		items := make([]*unstructured.Unstructured, 0, len(crList.Items))
+		for i := range crList.Items {
+			if tableMatches(filter, knightTableName(&crList.Items[i])) {
+				items = append(items, &crList.Items[i])
+			}
+		}
+		out := make([]KnightQueue, len(items))
 		sem := make(chan struct{}, 8)
 		var wg sync.WaitGroup
-		for i := range crList.Items {
+		for i := range items {
 			wg.Add(1)
 			sem <- struct{}{}
 			go func(i int) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				out[i] = buildKnightQueue(ctx, b, queueTargetFromCR(&crList.Items[i]))
+				out[i] = buildKnightQueue(ctx, b, queueTargetFromCR(items[i]))
 			}(i)
 		}
 		wg.Wait()

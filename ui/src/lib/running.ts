@@ -22,6 +22,8 @@ export interface RunningToolEvent {
 }
 
 export interface RunningTask {
+  /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
+  table?: string
   taskId: string
   knight: string
   pod?: string

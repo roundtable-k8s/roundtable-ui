@@ -104,8 +104,11 @@ type RunningToolEvent struct {
 
 // RunningTask is one in-flight task as served by GET /api/running.
 type RunningTask struct {
-	TaskID      string `json:"taskId"`
-	Knight      string `json:"knight"`
+	TaskID string `json:"taskId"`
+	Knight string `json:"knight"`
+	// Table is the knight's RoundTable, "none" when unknown (#273). Filled
+	// when served, not stored in the registry.
+	Table       string `json:"table"`
 	Pod         string `json:"pod,omitempty"`
 	Node        string `json:"node,omitempty"`
 	RunID       string `json:"runId,omitempty"`
@@ -885,9 +888,18 @@ type runningResponse struct {
 	StaleAfterMs        int64         `json:"staleAfterMs"`
 }
 
-func runningHandler(reg *runningRegistry) http.HandlerFunc {
+func runningHandler(reg *runningRegistry, namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tasks := reg.snapshot()
+		tables := knightTables(r.Context(), namespace)
+		filter := tableFilter(r)
+		all := reg.snapshot()
+		tasks := make([]RunningTask, 0, len(all))
+		for _, t := range all {
+			t.Table = tableOrNone(tables[strings.ToLower(t.Knight)])
+			if tableMatches(filter, t.Table) {
+				tasks = append(tasks, t)
+			}
+		}
 		body, err := json.Marshal(runningResponse{
 			Tasks:               tasks,
 			Count:               len(tasks),
@@ -913,4 +925,22 @@ func runningWSEvent(d RunningDelta) []byte {
 		Timestamp: time.Now().UTC(),
 	})
 	return data
+}
+
+// knightTables maps the lowercased Knight CR name (the registry reports the
+// capitalised name) to its RoundTable. Best effort: empty on
+// error.
+func knightTables(ctx context.Context, namespace string) map[string]string {
+	out := map[string]string{}
+	if dynClient == nil {
+		return out
+	}
+	list, err := dynClient.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return out
+	}
+	for i := range list.Items {
+		out[strings.ToLower(list.Items[i].GetName())] = knightTableName(&list.Items[i])
+	}
+	return out
 }

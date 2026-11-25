@@ -14,6 +14,8 @@ export interface SequencePair {
 
 /** One knight's live queue, from GET /api/queues. */
 export interface KnightQueue {
+  /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
+  table?: string
   knight: string
   stream: string
   consumer: string
