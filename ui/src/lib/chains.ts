@@ -63,6 +63,11 @@ export function loopRounds(loop: ChainLoop): ChainLoopRound[] {
   return [...(loop.rounds || [])].sort((a, b) => b.iteration - a.iteration)
 }
 
+/** True when any body step of the round failed (or carries an error). */
+export function roundFailed(round: ChainLoopRound): boolean {
+  return round.steps.some(s => s.phase === 'Failed' || !!s.error)
+}
+
 export function loopLabel(loop: ChainLoop): string {
   return loop.maxIterations ? `round ${loop.iteration}/${loop.maxIterations}` : `round ${loop.iteration}`
 }

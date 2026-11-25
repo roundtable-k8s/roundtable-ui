@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -69,22 +70,26 @@ type ChainFanOutSummary struct {
 
 // ChainLoopStepSummary is one loop body step in the round it last ran in.
 type ChainLoopStepSummary struct {
-	Name           string             `json:"name"`
-	Knight         string             `json:"knight,omitempty"`
-	Iteration      int                `json:"iteration"`
-	Phase          string             `json:"phase"`
-	TaskID         string             `json:"taskId,omitempty"`
-	Error          string             `json:"error,omitempty"`
-	OutputBytes    int                `json:"outputBytes"`
+	Name        string `json:"name"`
+	Knight      string `json:"knight,omitempty"`
+	Iteration   int    `json:"iteration"`
+	Phase       string `json:"phase"`
+	TaskID      string `json:"taskId,omitempty"`
+	Error       string `json:"error,omitempty"`
+	OutputBytes int    `json:"outputBytes"`
+	// OutputSummary is the operator's truncated (1 KiB) output of a finished
+	// run from status.loop.history; empty for the live entry of a body step.
+	OutputSummary  string             `json:"outputSummary,omitempty"`
 	Retries        int                `json:"retries,omitempty"`
 	StartTime      *string            `json:"startTime,omitempty"`
 	CompletionTime *string            `json:"completionTime,omitempty"`
 	InFlight       *ChainTaskInFlight `json:"inFlight,omitempty"`
 }
 
-// ChainLoopRound groups the body steps whose latest run was in one round.
-// The operator keeps only the latest round of each body step, so earlier
-// rounds whose steps all ran again are not listed.
+// ChainLoopRound groups the body step runs of one round. Rounds come from
+// status.loop.history (finished runs of earlier rounds) merged with
+// status.loop.steps (the latest run of each body step); without history
+// (older operator) only the latter is listed.
 type ChainLoopRound struct {
 	Iteration int                    `json:"iteration"`
 	Steps     []ChainLoopStepSummary `json:"steps"`
@@ -215,6 +220,15 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 		}
 
 		byRound := map[int]*ChainLoopRound{}
+		add := func(bs ChainLoopStepSummary) {
+			r, ok := byRound[bs.Iteration]
+			if !ok {
+				r = &ChainLoopRound{Iteration: bs.Iteration, Steps: []ChainLoopStepSummary{}}
+				byRound[bs.Iteration] = r
+			}
+			r.Steps = append(r.Steps, bs)
+		}
+		live := map[[2]string]bool{} // round/taskId of live entries
 		for _, b := range getSlice(ls, "steps") {
 			bm, ok := b.(map[string]interface{})
 			if !ok {
@@ -232,15 +246,42 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 			bs.Knight = bodyKnight[bs.Name]
 			bs.StartTime = optStr(getStr(bm, "startedAt"))
 			bs.CompletionTime = optStr(getStr(bm, "completedAt"))
-			r, ok := byRound[bs.Iteration]
+			live[[2]string{strconv.Itoa(bs.Iteration), bs.TaskID}] = true
+			add(bs)
+		}
+		// History: finished runs of earlier rounds. The live entry wins when
+		// it is the same run (same round and taskId).
+		for _, h := range getSlice(ls, "history") {
+			hm, ok := h.(map[string]interface{})
 			if !ok {
-				r = &ChainLoopRound{Iteration: bs.Iteration, Steps: []ChainLoopStepSummary{}}
-				byRound[bs.Iteration] = r
+				continue
 			}
-			r.Steps = append(r.Steps, bs)
+			bs := ChainLoopStepSummary{
+				Name:          getStr(hm, "step"),
+				Iteration:     getInt(hm, "round"),
+				Phase:         getStr(hm, "phase"),
+				TaskID:        getStr(hm, "taskId"),
+				Error:         getStr(hm, "error"),
+				OutputSummary: getStr(hm, "outputSummary"),
+				OutputBytes:   len(getStr(hm, "outputSummary")),
+			}
+			if bs.TaskID != "" && live[[2]string{strconv.Itoa(bs.Iteration), bs.TaskID}] {
+				continue
+			}
+			bs.Knight = bodyKnight[bs.Name]
+			bs.StartTime = optStr(getStr(hm, "startedAt"))
+			bs.CompletionTime = optStr(getStr(hm, "finishedAt"))
+			add(bs)
+		}
+		bodyIdx := map[string]int{}
+		for i, n := range l.Body {
+			bodyIdx[n] = i
 		}
 		l.Rounds = make([]ChainLoopRound, 0, len(byRound))
 		for _, r := range byRound {
+			sort.SliceStable(r.Steps, func(i, j int) bool {
+				return bodyIdx[r.Steps[i].Name] < bodyIdx[r.Steps[j].Name]
+			})
 			l.Rounds = append(l.Rounds, *r)
 		}
 		sort.Slice(l.Rounds, func(i, j int) bool { return l.Rounds[i].Iteration < l.Rounds[j].Iteration })

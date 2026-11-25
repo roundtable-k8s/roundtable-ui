@@ -125,6 +125,8 @@ export interface ChainLoopStep extends ChainTaskLive {
   phase: string
   knight?: string
   iteration?: number
+  /** Truncated (1 KiB) output of a finished earlier-round run (status.loop.history). */
+  outputSummary?: string
 }
 
 export interface ChainLoopRound {

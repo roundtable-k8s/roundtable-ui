@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  applyChainUpdate, elapsedLabel, fanOutCounts, heartbeatLabel, loopLabel, loopRounds,
+  applyChainUpdate, elapsedLabel, fanOutCounts, heartbeatLabel, loopLabel, loopRounds, roundFailed,
   parseChainUpdate, runningHref, scheduleSummary, skipReasonText, sortedItems, sortScheduledFirst,
 } from './chains'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
@@ -47,6 +47,12 @@ it('loop rounds and label', () => {
   const loop = prPipelineChain().steps![1].loop!
   expect(loopLabel(loop)).toBe('round 2/5')
   expect(loopRounds(loop).map(r => r.iteration)).toEqual([2, 1])
+})
+
+it('roundFailed flags a failed or errored body step', () => {
+  expect(roundFailed({ iteration: 1, steps: [{ name: 'a', phase: 'Succeeded' }] })).toBe(false)
+  expect(roundFailed({ iteration: 1, steps: [{ name: 'a', phase: 'Succeeded' }, { name: 'b', phase: 'Failed' }] })).toBe(true)
+  expect(roundFailed({ iteration: 1, steps: [{ name: 'a', phase: 'Succeeded', error: 'x' }] })).toBe(true)
 })
 
 it('elapsed and heartbeat labels', () => {

@@ -184,6 +184,34 @@ describe('ChainsPage with real API payloads', () => {
   })
 })
 
+describe('ChainsPage loop history', () => {
+  it('lists every round newest first, flags failed rounds and shows error and output summary', async () => {
+    const chain = structuredClone(apiLoop) as typeof apiLoop
+    const loop = chain.steps.find(s => s.name === 'fixloop')!.loop as unknown as { iteration: number; rounds: unknown[] }
+    loop.iteration = 3
+    loop.rounds = [
+      { iteration: 1, steps: [
+        { name: 'fix', iteration: 1, phase: 'Failed', taskId: 't-fix-1', error: 'task timed out <b>x</b>', outputBytes: 0 },
+        { name: 'rereview', iteration: 1, phase: 'Succeeded', taskId: 't-rr-1', outputBytes: 12, outputSummary: 'needs fixes one' }] },
+      { iteration: 2, steps: [{ name: 'fix', iteration: 2, phase: 'Succeeded', taskId: 't-fix-2', outputBytes: 3 }] },
+      { iteration: 3, steps: [{ name: 'fix', iteration: 3, phase: 'Running', taskId: 't-fix-3', outputBytes: 0 }] },
+    ]
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([chain]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=pr-pipeline-roundtable-ui-187')
+    const step = await screen.findByRole('region', { name: 'step fixloop' })
+    expect(step).toHaveTextContent('Past rounds (2)')
+    const items = within(step).getAllByRole('listitem')
+    expect(items.map(i => i.getAttribute('aria-label'))).toEqual(['round 2', 'round 1'])
+    const r1 = within(step).getByRole('listitem', { name: 'round 1' })
+    expect(r1).toHaveTextContent('failed')
+    expect(r1).toHaveTextContent('task timed out <b>x</b>')
+    expect(r1.querySelector('b')).toBeNull()
+    expect(r1).toHaveTextContent('needs fixes one')
+    expect(within(step).getByRole('listitem', { name: 'round 2' })).not.toHaveTextContent('failed')
+  })
+})
+
 describe('ChainsPage cost', () => {
   it('shows cost and tokens per step and a run total equal to their sum, marking notional cost', async () => {
     mockApiGet.mockImplementation((url: string) =>

@@ -395,3 +395,65 @@ func TestParseChainResource_Scheduled(t *testing.T) {
 		}
 	}
 }
+
+func TestParseChainResource_LoopHistory(t *testing.T) {
+	obj := loadChainFixture(t, "loop-history.json")
+	l := stepByName(t, parseChainResource(obj, nil), "fixloop").Loop
+	if l == nil || len(l.Rounds) != 3 {
+		t.Fatalf("rounds = %+v", l)
+	}
+	for i, r := range l.Rounds {
+		if r.Iteration != i+1 || len(r.Steps) != 2 {
+			t.Fatalf("round %d = %+v", i, r)
+		}
+		// body order: fix before rereview
+		if r.Steps[0].Name != "fix" || r.Steps[1].Name != "rereview" {
+			t.Errorf("round %d order = %s, %s", r.Iteration, r.Steps[0].Name, r.Steps[1].Name)
+		}
+	}
+	fix1 := l.Rounds[0].Steps[0]
+	if fix1.Phase != "Failed" || fix1.Error != "task timed out after 10m" || fix1.TaskID != "t-fix-1" || fix1.Knight != "rt-ui" {
+		t.Errorf("round 1 fix = %+v", fix1)
+	}
+	if fix1.StartTime == nil || fix1.CompletionTime == nil || *fix1.CompletionTime != "2026-11-24T11:40:00Z" {
+		t.Errorf("round 1 fix times = %+v", fix1)
+	}
+	re1 := l.Rounds[0].Steps[1]
+	if re1.OutputSummary != "Verdict: needs fixes" || re1.OutputBytes != len(re1.OutputSummary) {
+		t.Errorf("round 1 rereview = %+v", re1)
+	}
+	// Round 3 fix is in both history and steps: shown once, live entry wins.
+	fix3 := l.Rounds[2].Steps[0]
+	if fix3.OutputSummary != "" || fix3.OutputBytes != len("patched") {
+		t.Errorf("round 3 fix should be the live entry: %+v", fix3)
+	}
+
+	// Without history (older operator): only the latest run of each step.
+	delete(stepStatusMap(t, obj, "fixloop")["loop"].(map[string]interface{}), "history")
+	l = stepByName(t, parseChainResource(obj, nil), "fixloop").Loop
+	if len(l.Rounds) != 1 || l.Rounds[0].Iteration != 3 || len(l.Rounds[0].Steps) != 2 {
+		t.Errorf("no-history rounds = %+v", l.Rounds)
+	}
+}
+
+func stepStatusMap(t *testing.T, obj map[string]interface{}, name string) map[string]interface{} {
+	t.Helper()
+	for _, s := range obj["status"].(map[string]interface{})["stepStatuses"].([]interface{}) {
+		if m := s.(map[string]interface{}); m["name"] == name {
+			return m
+		}
+	}
+	t.Fatalf("no step status %q", name)
+	return nil
+}
+
+func TestSlimChain_DropsLoopHistory(t *testing.T) {
+	c := parseChainResource(loadChainFixture(t, "loop-history.json"), nil)
+	b, err := json.Marshal(slimChain(c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "t-fix-1") || strings.Contains(string(b), "timed out") {
+		t.Errorf("slim list carries loop history: %s", b)
+	}
+}
