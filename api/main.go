@@ -255,7 +255,13 @@ func main() {
 	if envOr("LOG_LEVEL", "") == "debug" {
 		level = slog.LevelDebug
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+	slog.SetDefault(slog.New(newTraceHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))))
+
+	// OpenTelemetry traces: only active when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+	otelShutdown, otelErr := setupTelemetry(context.Background())
+	if otelErr != nil {
+		slog.Warn("OpenTelemetry setup failed, tracing disabled", "error", otelErr)
+	}
 
 	natsURL := envOr("NATS_URL", "nats://nats.database.svc:4222")
 	namespace := envOr("NAMESPACE", "roundtable")
@@ -365,6 +371,7 @@ func main() {
 
 	// Router
 	r := mux.NewRouter()
+	r.Use(tracingMiddleware)
 	r.Use(securityHeaders)
 	r.Use(metricsMiddleware)
 	r.Use(authMiddleware)
@@ -483,6 +490,9 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
+		if err := otelShutdown(ctx); err != nil {
+			slog.Warn("OpenTelemetry shutdown failed", "error", err)
+		}
 	}()
 
 	slog.Info("Round Table Dashboard API starting", "port", port)
@@ -687,6 +697,7 @@ func knightHandler(namespace string) http.HandlerFunc {
 			}
 		}
 
+		setSpanTable(r.Context(), getRefName(getNestedMap(crObj.Object, "spec"), "roundTableRef"))
 		scaling := buildKnightScaling(r.Context(), crObj, pods)
 
 		// Build safe DTO (#46) from CR + pods
@@ -1514,6 +1525,7 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 		knightDomains := getKnightDomainMap(r.Context(), namespace)
 		chain := parseChainResource(obj.Object, knightDomains)
 		joinChainInFlight(&chain, running)
+		setSpanTable(r.Context(), chain.RoundTableRef)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(chain)
 	}
@@ -1754,6 +1766,7 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 		}
 
 		mission := parseMissionResource(obj.Object)
+		setSpanTable(r.Context(), mission.RoundTableRef)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(mission)
 	}
@@ -2081,6 +2094,7 @@ func roundTableDetailHandler(namespace string) http.HandlerFunc {
 		}
 
 		roundTable := parseRoundTableResource(obj.Object)
+		setSpanTable(r.Context(), roundTable.Name)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(roundTable)
 	}
