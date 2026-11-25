@@ -160,6 +160,9 @@ export interface Chain {
   roundTableRef?: string
   missionRef?: string
   suspend?: boolean
+  timeZone?: string
+  nextScheduledAt?: string
+  lastScheduledAt?: string
   runsCompleted?: number
   runsFailed?: number
   /** Carries ai.roundtable.io/invokable=true: the gateway can run it. */

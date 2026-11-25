@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Zap, ArrowLeft, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState } from '../components/ui'
-import { formatRelativeTime } from '../lib/format'
+import { formatRelativeTime, until } from '../lib/format'
 import { chainLink, TRIGGER_DOCS_URL, type Trigger } from '../lib/triggers'
 
 const POLL_MS = 10000
@@ -20,17 +20,6 @@ function ReadyBadge({ t }: { t: Trigger }) {
 
 function when(iso?: string): string {
   return iso ? formatRelativeTime(iso) : '—'
-}
-
-/** Future timestamps (next scheduled run) as "in 5m". */
-function until(iso?: string): string {
-  if (!iso) return '—'
-  const sec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
-  if (sec <= 0) return 'due now'
-  if (sec < 60) return `in ${sec}s`
-  if (sec < 3600) return `in ${Math.floor(sec / 60)}m`
-  if (sec < 86400) return `in ${Math.floor(sec / 3600)}h`
-  return `in ${Math.floor(sec / 86400)}d`
 }
 
 function TriggersEmpty() {

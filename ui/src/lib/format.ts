@@ -45,3 +45,14 @@ export function formatTimestamp(ts: string): string {
     return ts
   }
 }
+
+/** Future timestamps (next scheduled run) as "in 5m". */
+export function until(iso?: string): string {
+  if (!iso) return '—'
+  const sec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
+  if (sec <= 0) return 'due now'
+  if (sec < 60) return `in ${sec}s`
+  if (sec < 3600) return `in ${Math.floor(sec / 60)}m`
+  if (sec < 86400) return `in ${Math.floor(sec / 3600)}h`
+  return `in ${Math.floor(sec / 86400)}d`
+}
