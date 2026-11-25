@@ -423,6 +423,8 @@ func main() {
 	// Chain endpoints
 	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
 	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, running)).Methods("GET")
+	api.HandleFunc("/triggers", triggersHandler(namespace)).Methods("GET")
+	api.HandleFunc("/triggers/{namespace}/{name}", triggerDetailHandler(namespace)).Methods("GET")
 
 	// Mission endpoints
 	api.HandleFunc("/missions", missionsHandler(namespace)).Methods("GET")
