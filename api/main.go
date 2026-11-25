@@ -262,6 +262,7 @@ func main() {
 	namespace := envOr("NAMESPACE", "roundtable")
 	port := envOr("PORT", "8080")
 	vaultPath := envOr("VAULT_PATH", "/vault")
+	briefingDirs := parseBriefingDirs(envOr("BRIEFINGS_DIRS", defaultBriefingDirs))
 
 	// Connect to NATS. Reconnect forever: NATS can restart underneath a
 	// long-lived dashboard pod, and the nats.go defaults (MaxReconnects=60)
@@ -412,8 +413,8 @@ func main() {
 	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
 
 	// Briefing endpoints
-	api.HandleFunc("/briefings", briefingListHandler(vaultPath)).Methods("GET")
-	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath)).Methods("GET")
+	api.HandleFunc("/briefings", briefingListHandler(vaultPath, briefingDirs)).Methods("GET")
+	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath, briefingDirs)).Methods("GET")
 
 	// In-flight tasks across all knight pods (#199)
 	api.HandleFunc("/running", runningHandler(running)).Methods("GET")
@@ -1130,19 +1131,49 @@ func taskDispatchHandler(src *tableSource) http.HandlerFunc {
 	}
 }
 
-func briefingListHandler(vaultPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		dir := fmt.Sprintf("%s/Briefings/Daily", vaultPath)
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			jsonError(w, "Briefings directory not found", http.StatusNotFound)
-			return
-		}
+// defaultBriefingDirs are the vault-relative directories searched for
+// briefings when BRIEFINGS_DIRS is unset.
+const defaultBriefingDirs = "Briefings/Daily,Agents/Briefings"
 
-		briefings := []string{}
-		for _, e := range entries {
-			if !e.IsDir() {
-				briefings = append(briefings, e.Name())
+// parseBriefingDirs splits a comma-separated list of vault-relative
+// directories, dropping empty, absolute, traversing and duplicate entries.
+func parseBriefingDirs(raw string) []string {
+	dirs := []string{}
+	seen := map[string]bool{}
+	for _, d := range strings.Split(raw, ",") {
+		d = strings.TrimSpace(d)
+		if d == "" || filepath.IsAbs(d) {
+			continue
+		}
+		d = filepath.Clean(d)
+		if d == "." || d == ".." || strings.HasPrefix(d, ".."+string(filepath.Separator)) || seen[d] {
+			continue
+		}
+		seen[d] = true
+		dirs = append(dirs, d)
+	}
+	return dirs
+}
+
+type briefingEntry struct {
+	Name string `json:"name"`
+	Dir  string `json:"dir"`
+}
+
+// briefingListHandler lists briefings across all configured directories.
+// Missing directories are skipped; the result is an empty list, not an error.
+func briefingListHandler(vaultPath string, dirs []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		briefings := []briefingEntry{}
+		for _, d := range dirs {
+			entries, err := os.ReadDir(filepath.Join(vaultPath, d))
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && briefingDateRe.MatchString(strings.TrimSuffix(e.Name(), ".md")) {
+					briefings = append(briefings, briefingEntry{Name: e.Name(), Dir: d})
+				}
 			}
 		}
 
@@ -1151,32 +1182,47 @@ func briefingListHandler(vaultPath string) http.HandlerFunc {
 	}
 }
 
-func briefingHandler(vaultPath string) http.HandlerFunc {
-	allowedDir := filepath.Clean(fmt.Sprintf("%s/Briefings/Daily", vaultPath))
+var briefingDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// briefingHandler serves one briefing. The optional ?dir= query selects one of
+// the configured directories; otherwise they are searched in order.
+func briefingHandler(vaultPath string, dirs []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		date := vars["date"]
+		date := mux.Vars(r)["date"]
 
 		// Sanitize: only allow YYYY-MM-DD format to prevent path traversal
-		if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(date) {
+		if !briefingDateRe.MatchString(date) {
 			jsonError(w, "Invalid date format", http.StatusBadRequest)
 			return
 		}
 
-		path := filepath.Clean(fmt.Sprintf("%s/%s.md", allowedDir, date))
-		if !strings.HasPrefix(path, allowedDir) {
-			jsonError(w, "Forbidden", http.StatusForbidden)
-			return
+		search := dirs
+		if want := r.URL.Query().Get("dir"); want != "" {
+			// Only configured directories are allowed.
+			search = nil
+			for _, d := range dirs {
+				if d == filepath.Clean(want) {
+					search = []string{d}
+					break
+				}
+			}
+			if search == nil {
+				jsonError(w, "Forbidden", http.StatusForbidden)
+				return
+			}
 		}
 
-		content, err := os.ReadFile(path)
-		if err != nil {
-			jsonError(w, "Briefing not found", http.StatusNotFound)
+		for _, d := range search {
+			content, err := os.ReadFile(filepath.Join(vaultPath, d, date+".md"))
+			if err != nil {
+				continue
+			}
+			w.Header().Set("Content-Type", "text/markdown")
+			w.Header().Set("X-Briefing-Dir", d)
+			w.Write(content)
 			return
 		}
-
-		w.Header().Set("Content-Type", "text/markdown")
-		w.Write(content)
+		jsonError(w, "Briefing not found", http.StatusNotFound)
 	}
 }
 

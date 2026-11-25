@@ -264,6 +264,7 @@ The dashboard API server is configured via environment variables:
 | `FLEET_STREAM` | Results stream for the `FLEET_PREFIX` table (overrides its `spec.nats.resultsStream`) | unset (`fleet_a_results` fallback) |
 | `GRAFANA_QUEUE_URL` | Optional long-term queue history link returned by the queue history endpoints; `{knight}` is replaced by the knight name | _(unset)_ |
 | `VAULT_PATH` | Path to mounted Obsidian vault | `/vault` |
+| `BRIEFINGS_DIRS` | Comma-separated vault-relative directories scanned for briefings (absolute and `..` entries are ignored; missing directories are skipped) | `Briefings/Daily,Agents/Briefings` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
 
@@ -339,8 +340,8 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/kv/{bucket}/{key}` — Get value from KV store
 
 ### Briefings
-- `GET /api/briefings` — List available briefings
-- `GET /api/briefings/{date}` — Get briefing for specific date (YYYY-MM-DD)
+- `GET /api/briefings` — List available briefings across all `BRIEFINGS_DIRS` as `[{name, dir}]` (only `YYYY-MM-DD.md` files; missing directories are skipped, so the result may be `[]`)
+- `GET /api/briefings/{date}` — Get briefing for specific date (YYYY-MM-DD). Optional `?dir=` selects one configured directory (403 if it is not configured); otherwise directories are searched in order. The `X-Briefing-Dir` response header names the directory the briefing came from
 
 ### Real-time Events
 - `GET /api/ws` — WebSocket connection for live NATS events
