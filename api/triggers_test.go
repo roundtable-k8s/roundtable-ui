@@ -38,7 +38,7 @@ func setupTriggerRouter(t *testing.T, objs ...map[string]interface{}) *mux.Route
 	old := dynClient
 	t.Cleanup(func() { dynClient = old })
 	dynClient = fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
-		map[schema.GroupVersionResource]string{triggerGVR: "TriggerList"})
+		map[schema.GroupVersionResource]string{triggerGVR: "TriggerList", chainGVR: "ChainList"})
 	for _, o := range objs {
 		if _, err := dynClient.Resource(triggerGVR).Namespace("roundtable").Create(context.Background(),
 			&unstructured.Unstructured{Object: o}, metav1.CreateOptions{}); err != nil {

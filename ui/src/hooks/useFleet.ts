@@ -74,6 +74,8 @@ export interface KnightIsolation {
 }
 
 export interface Knight {
+  /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
+  table?: string
   name: string
   domain: string
   status: 'online' | 'offline' | 'starting' | 'busy' | 'scaled-to-zero'

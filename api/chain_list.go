@@ -238,8 +238,12 @@ func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc 
 
 		knights := getKnightInfoMap(r.Context(), namespace)
 		all := make([]ChainSummary, 0, len(list.Items))
+		filter := tableFilter(r)
 		for _, item := range list.Items {
 			c := parseChainResource(item.Object, knights)
+			if !tableMatches(filter, c.RoundTableRef) {
+				continue
+			}
 			joinChainInFlight(&c, running)
 			all = append(all, c)
 		}

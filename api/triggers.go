@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -64,6 +65,9 @@ type TriggerSummary struct {
 	MaxActive         int    `json:"maxActive,omitempty"`
 	Suspended         bool   `json:"suspended"`
 	RoundTableRef     string `json:"roundTableRef,omitempty"`
+	// Table is the target chain's roundTableRef (else the trigger's own),
+	// "none" when neither is set (#273).
+	Table string `json:"table"`
 
 	LastFiredAt     *string `json:"lastFiredAt,omitempty"`
 	LastScheduledAt *string `json:"lastScheduledAt,omitempty"`
@@ -124,6 +128,7 @@ func parseTriggerResource(obj map[string]interface{}) TriggerSummary {
 		MaxActive:         getInt(getNestedMap(spec, "concurrency"), "maxActive"),
 		Suspended:         getBool(spec, "suspend"),
 		RoundTableRef:     getRefName(spec, "roundTableRef"),
+		Table:             tableOrNone(getRefName(spec, "roundTableRef")),
 		LastFiredAt:       optStr(getStr(status, "lastFiredAt")),
 		LastScheduledAt:   optStr(getStr(status, "lastScheduledAt")),
 		NextScheduledAt:   optStr(getStr(status, "nextScheduledAt")),
@@ -182,9 +187,16 @@ func triggersHandler(namespace string) http.HandlerFunc {
 			jsonError(w, "Failed to list triggers", http.StatusInternalServerError)
 			return
 		}
+		chainTables := chainTableMap(r.Context(), namespace)
+		filter := tableFilter(r)
 		out := []TriggerSummary{}
 		for _, item := range list.Items {
-			out = append(out, parseTriggerResource(item.Object))
+			t := parseTriggerResource(item.Object)
+			applyTriggerTable(&t, chainTables)
+			if !tableMatches(filter, t.Table) {
+				continue
+			}
+			out = append(out, t)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
@@ -214,8 +226,33 @@ func triggerDetailHandler(namespace string) http.HandlerFunc {
 			return
 		}
 		t := parseTriggerResource(obj.Object)
+		applyTriggerTable(&t, chainTableMap(r.Context(), namespace))
 		setSpanTable(r.Context(), t.RoundTableRef)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(t)
+	}
+}
+
+// chainTableMap maps chain name to its roundTableRef. Best effort: empty on
+// error.
+func chainTableMap(ctx context.Context, namespace string) map[string]string {
+	out := map[string]string{}
+	if dynClient == nil {
+		return out
+	}
+	list, err := dynClient.Resource(chainGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return out
+	}
+	for _, item := range list.Items {
+		out[item.GetName()] = getRefName(getNestedMap(item.Object, "spec"), "roundTableRef")
+	}
+	return out
+}
+
+// applyTriggerTable sets the trigger's table from its target chain.
+func applyTriggerTable(t *TriggerSummary, chainTables map[string]string) {
+	if ref := chainTables[t.TargetChain]; ref != "" {
+		t.Table = ref
 	}
 }

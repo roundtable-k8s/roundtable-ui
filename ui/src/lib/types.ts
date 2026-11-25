@@ -144,6 +144,8 @@ export interface ChainLoop {
 }
 
 export interface Chain {
+  /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
+  table?: string
   name: string
   namespace: string
   phase: string

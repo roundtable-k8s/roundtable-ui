@@ -29,6 +29,8 @@ export interface ChainStatus {
 }
 
 export interface Mission {
+  /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
+  table?: string
   name: string
   namespace: string
   phase: string

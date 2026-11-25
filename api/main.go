@@ -94,6 +94,8 @@ type KnightStatus struct {
 	// NATSPrefix is the subject prefix the knight listens on, i.e. its
 	// RoundTable's prefix (#239). Empty when it cannot be derived.
 	NATSPrefix string `json:"natsPrefix,omitempty"`
+	// Table is the RoundTable the knight belongs to, "none" when unset (#273).
+	Table string `json:"table"`
 
 	// Pods lists every replica of the knight (#182). Empty when scaled to
 	// zero or not yet scheduled.
@@ -454,7 +456,7 @@ func main() {
 	api.HandleFunc("/cards", cardsHandler(cards)).Methods("GET")
 
 	// In-flight tasks across all knight pods (#199)
-	api.HandleFunc("/running", runningHandler(running)).Methods("GET")
+	api.HandleFunc("/running", runningHandler(running, namespace)).Methods("GET")
 
 	// WebSocket for real-time NATS events
 	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards))
@@ -569,6 +571,7 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 
 	return KnightStatus{
 		NATSPrefix:         natsPrefix,
+		Table:              tableOrNone(knightTableName(cr)),
 		Name:               cr.GetName(),
 		Domain:             getStr(spec, "domain"),
 		Status:             podStatus,
@@ -609,10 +612,14 @@ func fleetHandler(namespace string) http.HandlerFunc {
 		podsByName := knightPodsByName(r.Context(), namespace)
 		metrics := listPodMetrics(r.Context(), namespace)
 		tableDefaults := tableDefaultsByName(r.Context(), namespace)
+		filter := tableFilter(r)
 
 		knights := make([]KnightStatus, 0, len(crList.Items))
 		for i := range crList.Items {
 			cr := &crList.Items[i]
+			if !tableMatches(filter, knightTableName(cr)) {
+				continue
+			}
 			pods := podsByName[cr.GetName()]
 			// Preferred pod for the legacy single-pod fields: a ready one
 			// first, so rollouts show the new pod.
@@ -1442,10 +1449,12 @@ type ChainSummary struct {
 	TimeoutSeconds int           `json:"timeoutSeconds,omitempty"`
 	OutputKnight   string        `json:"outputKnightRef,omitempty"`
 	RoundTableRef  string        `json:"roundTableRef,omitempty"`
-	MissionRef     string        `json:"missionRef,omitempty"`
-	Suspend        bool          `json:"suspend,omitempty"`
-	RunsCompleted  int           `json:"runsCompleted,omitempty"`
-	RunsFailed     int           `json:"runsFailed,omitempty"`
+	// Table is roundTableRef, "none" when empty (#273).
+	Table         string `json:"table"`
+	MissionRef    string `json:"missionRef,omitempty"`
+	Suspend       bool   `json:"suspend,omitempty"`
+	RunsCompleted int    `json:"runsCompleted,omitempty"`
+	RunsFailed    int    `json:"runsFailed,omitempty"`
 	// RunID identifies the current (or most recent) chain run (#227).
 	RunID string `json:"runId,omitempty"`
 	// Invokable is true when the Chain carries ai.roundtable.io/invokable=true,
@@ -1557,6 +1566,7 @@ func parseChainResource(obj map[string]interface{}, knights map[string]knightInf
 	chain.TimeoutSeconds = getInt(spec, "timeoutSeconds")
 	chain.OutputKnight = getRefName(spec, "outputKnightRef")
 	chain.RoundTableRef = getRefName(spec, "roundTableRef")
+	chain.Table = tableOrNone(chain.RoundTableRef)
 	chain.MissionRef = getRefName(spec, "missionRef")
 	chain.Suspend = getBool(spec, "suspend")
 	chain.Invokable = getNestedMap(metadata, "labels")["ai.roundtable.io/invokable"] == "true"
@@ -1711,19 +1721,21 @@ type MissionChainStatusDTO struct {
 
 // MissionSummary is the API response for mission list
 type MissionSummary struct {
-	Name             string                   `json:"name"`
-	Namespace        string                   `json:"namespace"`
-	Phase            string                   `json:"phase"`
-	Objective        string                   `json:"objective"`
-	StartedAt        *string                  `json:"startedAt"`
-	ExpiresAt        *string                  `json:"expiresAt"`
-	Knights          []string                 `json:"knights"`
-	Chains           []string                 `json:"chains"`
-	CostBudgetUSD    string                   `json:"costBudgetUSD"`
-	TotalCost        string                   `json:"totalCost"`
-	TTLSeconds       int                      `json:"ttlSeconds"`
-	TimeoutSeconds   int                      `json:"timeoutSeconds"`
-	RoundTableRef    string                   `json:"roundTableRef"`
+	Name           string   `json:"name"`
+	Namespace      string   `json:"namespace"`
+	Phase          string   `json:"phase"`
+	Objective      string   `json:"objective"`
+	StartedAt      *string  `json:"startedAt"`
+	ExpiresAt      *string  `json:"expiresAt"`
+	Knights        []string `json:"knights"`
+	Chains         []string `json:"chains"`
+	CostBudgetUSD  string   `json:"costBudgetUSD"`
+	TotalCost      string   `json:"totalCost"`
+	TTLSeconds     int      `json:"ttlSeconds"`
+	TimeoutSeconds int      `json:"timeoutSeconds"`
+	RoundTableRef  string   `json:"roundTableRef"`
+	// Table is roundTableRef, "none" when empty (#273).
+	Table            string                   `json:"table"`
 	MetaMission      bool                     `json:"metaMission"`
 	PlanningResult   *PlanningResult          `json:"planningResult,omitempty"`
 	SuccessCriteria  string                   `json:"successCriteria,omitempty"`
@@ -1757,8 +1769,12 @@ func missionsHandler(namespace string) http.HandlerFunc {
 
 		chains := missionChainIndex(r.Context(), dynClient, namespace)
 		missions := []MissionSummary{}
+		filter := tableFilter(r)
 		for _, item := range list.Items {
 			m := parseMissionResource(item.Object)
+			if !tableMatches(filter, m.RoundTableRef) {
+				continue
+			}
 			applyMissionNotional(&m, chains)
 			missions = append(missions, m)
 		}
@@ -1945,6 +1961,7 @@ func parseMissionResource(obj map[string]interface{}) MissionSummary {
 		TTLSeconds:       getInt(spec, "ttlSeconds"),
 		TimeoutSeconds:   getInt(spec, "timeoutSeconds"),
 		RoundTableRef:    getRefName(spec, "roundTableRef"),
+		Table:            tableOrNone(getRefName(spec, "roundTableRef")),
 		MetaMission:      getBool(spec, "metaMission"),
 		SuccessCriteria:  getStr(spec, "successCriteria"),
 		Briefing:         getStr(spec, "briefing"),
