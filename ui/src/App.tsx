@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare, Zap } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
@@ -11,6 +11,8 @@ const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.Fle
 const TasksPage = lazy(() => import('./pages/Tasks').then(m => ({ default: m.TasksPage })))
 const BriefingsPage = lazy(() => import('./pages/Briefings').then(m => ({ default: m.BriefingsPage })))
 const LivePage = lazy(() => import('./pages/Live').then(m => ({ default: m.LivePage })))
+const TriggersPage = lazy(() => import('./pages/Triggers').then(m => ({ default: m.TriggersPage })))
+const TriggerDetailPage = lazy(() => import('./pages/Triggers').then(m => ({ default: m.TriggerDetailPage })))
 const ChainsPage = lazy(() => import('./pages/Chains').then(m => ({ default: m.ChainsPage })))
 const SessionsPage = lazy(() => import('./pages/Sessions').then(m => ({ default: m.SessionsPage })))
 const DashboardPage = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.DashboardPage })))
@@ -46,6 +48,7 @@ const navItems = [
   { path: '/failed', icon: Skull, label: 'Failed & lost' },
   { path: '/flow', icon: GitGraph, label: 'Message Flow' },
   { path: '/chains', icon: Link2, label: 'Chains' },
+  { path: '/triggers', icon: Zap, label: 'Triggers' },
   { path: '/costs', icon: DollarSign, label: 'Cost Details' },
   { path: '/sessions', icon: TreePine, label: 'Sessions' },
   { path: '/architecture', icon: Network, label: 'Architecture' },
@@ -145,6 +148,8 @@ export default function App() {
             <Route path="/flow" element={<LivePage />} />
             <Route path="/chronicles" element={<BriefingsPage />} />
             <Route path="/chains" element={<ChainsPage />} />
+            <Route path="/triggers" element={<TriggersPage />} />
+            <Route path="/triggers/:namespace/:name" element={<TriggerDetailPage />} />
             <Route path="/costs" element={<CostDashboardPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/architecture" element={<ArchitecturePage />} />
