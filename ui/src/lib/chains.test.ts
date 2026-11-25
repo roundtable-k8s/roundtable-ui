@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyChainUpdate, elapsedLabel, fanOutCounts, heartbeatLabel, loopLabel, loopRounds,
-  parseChainUpdate, runningHref, skipReasonText, sortedItems,
+  parseChainUpdate, runningHref, scheduleSummary, skipReasonText, sortedItems, sortScheduledFirst,
 } from './chains'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from './types'
@@ -76,5 +76,26 @@ describe('chain WS updates', () => {
     expect(applyChainUpdate(chains, u).map(c => c.name)).toEqual(['pr-pipeline'])
     expect(parseChainUpdate(null)).toBeNull()
     expect(parseChainUpdate({ phase: 'x' })).toBeNull()
+  })
+})
+
+describe('scheduled chains', () => {
+  const mk = (name: string, extra: Partial<Chain> = {}) => ({ name, namespace: 'n', phase: '', ...extra } as Chain)
+  it('sorts scheduled chains first, soonest next run first', () => {
+    const out = sortScheduledFirst([
+      mk('plain'),
+      mk('late', { schedule: '0 1 * * *', nextScheduledAt: '2026-11-27T01:00:00Z' }),
+      mk('soon', { schedule: '0 1 * * *', nextScheduledAt: '2026-11-26T01:00:00Z' }),
+    ])
+    expect(out.map(c => c.name)).toEqual(['soon', 'late', 'plain'])
+  })
+  it('summarises next and last runs', () => {
+    const c = mk('a', { schedule: '0 11 * * *', timeZone: 'UTC', nextScheduledAt: '2026-11-26T11:00:00Z', lastScheduledAt: '2026-11-25T11:00:00Z' })
+    const s = scheduleSummary(c, () => 'in 14h', () => '3h ago')
+    expect(s).toContain('next in 14h (')
+    expect(s).toContain('UTC)')
+    expect(s).toContain('last ran 3h ago')
+    expect(scheduleSummary({ ...c, suspend: true }, () => 'x', () => 'y')).toMatch(/^suspended/)
+    expect(scheduleSummary(mk('p'), () => 'x', () => 'y')).toBe('')
   })
 })

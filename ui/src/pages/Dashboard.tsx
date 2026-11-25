@@ -10,7 +10,7 @@ import { countByStatus } from '../lib/running'
 import { getKnightConfig, KNIGHT_NAMES } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState } from '../components/ui'
-import { formatCost, formatTimestamp } from '../lib/format'
+import { formatCost, formatTimestamp, until } from '../lib/format'
 
 import type { Chain } from '../lib/types'
 
@@ -315,6 +315,9 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                 <div key={chain.name} className="flex items-center justify-between py-2 border-b border-roundtable-steel/30 last:border-0">
                   <span className="text-sm text-gray-300">{chain.name}</span>
                   <div className="flex items-center gap-2">
+                    {chain.schedule && !chain.suspend && chain.nextScheduledAt && (
+                      <span className="text-xs text-gray-500">next {until(chain.nextScheduledAt)}</span>
+                    )}
                     <span className="text-xs text-gray-500">{(chain.steps || []).length} steps</span>
                     <PhaseBadge phase={chain.phase || 'Pending'} />
                   </div>

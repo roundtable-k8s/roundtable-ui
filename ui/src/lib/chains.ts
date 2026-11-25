@@ -168,3 +168,40 @@ export function runGroupSummary(g: ChainRunGroup): string {
   if (g.lastStartTime) parts.push(`last ${formatRelativeTime(g.lastStartTime)}`)
   return `${g.template}: ${parts.join(', ')}`
 }
+
+/** Scheduled chains first (soonest next run first); others keep their order. */
+export function sortScheduledFirst(chains: Chain[]): Chain[] {
+  const when = (c: Chain) => (c.nextScheduledAt ? new Date(c.nextScheduledAt).getTime() : Infinity)
+  return chains
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const sa = a.c.schedule ? 0 : 1
+      const sb = b.c.schedule ? 0 : 1
+      if (sa !== sb) return sa - sb
+      if (sa === 0 && when(a.c) !== when(b.c)) return when(a.c) < when(b.c) ? -1 : 1
+      return a.i - b.i
+    })
+    .map(x => x.c)
+}
+
+/** "11:00 UTC" for a next run, in the browser's locale and the chain's zone. */
+export function nextRunClock(c: Chain): string {
+  if (!c.nextScheduledAt) return ''
+  const zone = c.timeZone || 'UTC'
+  try {
+    const t = new Date(c.nextScheduledAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: zone })
+    return `${t} ${zone}`
+  } catch {
+    return zone
+  }
+}
+
+/** One-line schedule status: "next in 14h (11:00 UTC) · last ran 3h ago". */
+export function scheduleSummary(c: Chain, until: (iso?: string) => string, ago: (iso: string | null) => string): string {
+  if (!c.schedule) return ''
+  const parts: string[] = []
+  if (c.suspend) parts.push('suspended')
+  else if (c.nextScheduledAt) parts.push(`next ${until(c.nextScheduledAt)} (${nextRunClock(c)})`)
+  if (c.lastScheduledAt) parts.push(`last ran ${ago(c.lastScheduledAt)}`)
+  return parts.join(' · ')
+}

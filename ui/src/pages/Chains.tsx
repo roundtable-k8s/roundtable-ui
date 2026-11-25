@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, Externa
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
-import { formatDuration } from '../lib/format'
+import { formatDuration, formatRelativeTime, until } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainRunGroup, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
 import { RunNow } from '../components/RunNow'
@@ -14,7 +14,7 @@ import { tokensText } from '../lib/cost'
 import { useWebSocket } from '../hooks/useWebSocket'
 import {
   appendPage, applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
-  parseChainUpdate, runGroupSummary, runningHref, skipReasonText, sortedItems, upsertNewestFirst, type ChainUpdate,
+  parseChainUpdate, runGroupSummary, runningHref, scheduleSummary, skipReasonText, sortScheduledFirst, sortedItems, upsertNewestFirst, type ChainUpdate,
 } from '../lib/chains'
 
 /** Slow fallback poll, only while the live feed is disconnected. */
@@ -510,7 +510,20 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
           </span>
         )}
         {chain.schedule && (
-          <span className="text-xs text-gray-500 font-mono">{chain.schedule}</span>
+          <span data-testid="scheduled-badge" className="text-xs font-medium px-2 py-0.5 rounded-full border bg-roundtable-gold/10 text-roundtable-gold border-roundtable-gold/30">
+            Scheduled
+          </span>
+        )}
+        {chain.schedule && (
+          <span className="text-xs text-gray-500 font-mono">
+            {chain.schedule}{chain.timeZone ? ` ${chain.timeZone}` : ''}
+          </span>
+        )}
+        {chain.schedule && (
+          <span data-testid="schedule-summary" className="text-xs text-gray-400">
+            {scheduleSummary(chain, until, formatRelativeTime)}
+            {chain.runsCompleted ? ` · ${chain.runsCompleted} runs` : ''}
+          </span>
         )}
         {chain.timeoutSeconds && (
           <span className="text-xs text-gray-500">⏱ {chain.timeoutSeconds}s timeout</span>
@@ -856,7 +869,7 @@ export function ChainsPage() {
       )}
 
       <div className="space-y-3">
-        {shownChains.map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
+        {sortScheduledFirst(shownChains).map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
       </div>
 
       {shownGroups.length > 0 && (

@@ -1450,11 +1450,15 @@ type ChainSummary struct {
 	OutputKnight   string        `json:"outputKnightRef,omitempty"`
 	RoundTableRef  string        `json:"roundTableRef,omitempty"`
 	// Table is roundTableRef, "none" when empty (#273).
-	Table         string `json:"table"`
-	MissionRef    string `json:"missionRef,omitempty"`
-	Suspend       bool   `json:"suspend,omitempty"`
-	RunsCompleted int    `json:"runsCompleted,omitempty"`
-	RunsFailed    int    `json:"runsFailed,omitempty"`
+	Table      string `json:"table"`
+	MissionRef string `json:"missionRef,omitempty"`
+	Suspend    bool   `json:"suspend,omitempty"`
+	// Scheduled-chain fields (#276); omitted for unscheduled chains.
+	TimeZone        string `json:"timeZone,omitempty"`
+	NextScheduledAt string `json:"nextScheduledAt,omitempty"`
+	LastScheduledAt string `json:"lastScheduledAt,omitempty"`
+	RunsCompleted   int    `json:"runsCompleted,omitempty"`
+	RunsFailed      int    `json:"runsFailed,omitempty"`
 	// RunID identifies the current (or most recent) chain run (#227).
 	RunID string `json:"runId,omitempty"`
 	// Invokable is true when the Chain carries ai.roundtable.io/invokable=true,
@@ -1560,6 +1564,11 @@ func parseChainResource(obj map[string]interface{}, knights map[string]knightInf
 
 	// Schedule from spec (plain cron string in CRD)
 	chain.Schedule = getStr(spec, "schedule")
+	if chain.Schedule != "" {
+		chain.TimeZone = getStr(spec, "timeZone")
+		chain.NextScheduledAt = getStr(status, "nextScheduledAt")
+		chain.LastScheduledAt = getStr(status, "lastScheduledAt")
+	}
 
 	// Spec metadata the Chains page renders (description, refs, suspension…)
 	chain.Description = getStr(spec, "description")

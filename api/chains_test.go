@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -360,6 +361,37 @@ func TestChainDetailHandler_InFlightJoin(t *testing.T) {
 		}
 		if items[3].InFlight != nil {
 			t.Errorf("%s: item 9 joined without a registry entry", path)
+		}
+	}
+}
+
+func TestParseChainResource_Scheduled(t *testing.T) {
+	obj := map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "morning-briefing-phase1"},
+		"spec":     map[string]interface{}{"schedule": "0 11 * * *", "timeZone": "UTC", "suspend": true},
+		"status": map[string]interface{}{
+			"nextScheduledAt": "2026-11-26T11:00:00Z",
+			"lastScheduledAt": "2026-11-25T11:00:00Z",
+			"runsCompleted":   int64(3),
+		},
+	}
+	c := parseChainResource(obj, nil)
+	if c.TimeZone != "UTC" || c.NextScheduledAt != "2026-11-26T11:00:00Z" || c.LastScheduledAt != "2026-11-25T11:00:00Z" || !c.Suspend || c.RunsCompleted != 3 {
+		t.Errorf("scheduled = %+v", c)
+	}
+	b, _ := json.Marshal(c)
+	if !strings.Contains(string(b), `"nextScheduledAt":"2026-11-26T11:00:00Z"`) {
+		t.Errorf("json missing nextScheduledAt: %s", b)
+	}
+
+	plain := parseChainResource(map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "x"},
+		"spec":     map[string]interface{}{},
+	}, nil)
+	b, _ = json.Marshal(plain)
+	for _, k := range []string{"timeZone", "nextScheduledAt", "lastScheduledAt"} {
+		if strings.Contains(string(b), k) {
+			t.Errorf("unscheduled chain should omit %s: %s", k, b)
 		}
 	}
 }
