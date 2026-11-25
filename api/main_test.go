@@ -772,6 +772,35 @@ func TestMissionCreateHandler(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
+		{
+			name: "meta-mission without planner uses table planner",
+			requestBody: map[string]interface{}{
+				"name":        "meta-no-planner",
+				"objective":   "Plan it",
+				"metaMission": true,
+			},
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name: "meta-mission with planner options only",
+			requestBody: map[string]interface{}{
+				"name":        "meta-opts-only",
+				"objective":   "Plan it",
+				"metaMission": true,
+				"planner":     map[string]interface{}{"maxChains": 3},
+			},
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name: "meta-mission with invalid planner knightRef",
+			requestBody: map[string]interface{}{
+				"name":        "meta-bad-planner",
+				"objective":   "Plan it",
+				"metaMission": true,
+				"planner":     map[string]interface{}{"knightRef": map[string]interface{}{"name": "../bad"}},
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {
