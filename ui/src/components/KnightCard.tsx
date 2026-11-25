@@ -6,6 +6,7 @@ import { ReplicaDots } from './ReplicaDots'
 import { phaseColor, KNIGHT_STATUS_DOT } from '../lib/status'
 import { cardLoad, type CardEntry } from '../lib/cards'
 import { sanitizeText } from '../lib/untrusted'
+import { IsolationBadge } from './IsolationBadge'
 
 interface KnightActivity {
   recent: number
@@ -124,6 +125,7 @@ export function KnightCard({ knight, onClick, activity, card }: KnightCardProps)
             </span>
           )}
           {card && !suspended && <CardStateBadge card={card} fallbackMax={knight.concurrency} />}
+          {knight.isolation && <IsolationBadge isolation={knight.isolation} />}
         </div>
       </div>
 
