@@ -7,6 +7,7 @@ import (
 
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -463,12 +464,7 @@ func main() {
 	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards))
 
 	// Config endpoint to expose fleet prefix to frontend (#60)
-	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"fleetPrefix": fleetPrefix,
-		})
-	}).Methods("GET")
+	api.HandleFunc("/config", configHandler(fleetPrefix, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
 
 	// Health
 	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +826,44 @@ func deriveIntrospectPrefix(obj *unstructured.Unstructured) (string, error) {
 	}
 
 	return "", fmt.Errorf("could not derive NATS prefix from knight %s subjects", knightName)
+}
+
+// validTraceID is a W3C trace ID: 32 hex characters.
+var validTraceID = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
+
+// traceTemplate returns the trace viewer URL template when it is an http(s)
+// URL containing {traceId}; otherwise "" (with a warning when it was set).
+func traceTemplate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || !strings.Contains(raw, "{traceId}") {
+		slog.Warn("TRACE_URL_TEMPLATE ignored: need an http(s) URL containing {traceId}")
+		return ""
+	}
+	return raw
+}
+
+// configHandler serves GET /api/config.
+func configHandler(fleetPrefix, traceURLTemplate string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]string{"fleetPrefix": fleetPrefix}
+		if traceURLTemplate != "" {
+			resp["traceUrlTemplate"] = traceURLTemplate
+		}
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// statusTraceID reads status.traceID, accepting only 32 hex characters.
+func statusTraceID(status map[string]interface{}) string {
+	if id := getStr(status, "traceID"); validTraceID.MatchString(id) {
+		return id
+	}
+	return ""
 }
 
 func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
@@ -1471,6 +1505,8 @@ type ChainSummary struct {
 	RunsFailed      int    `json:"runsFailed,omitempty"`
 	// RunID identifies the current (or most recent) chain run (#227).
 	RunID string `json:"runId,omitempty"`
+	// TraceID is status.traceID (32 hex characters) for trace deep links (#287).
+	TraceID string `json:"traceId,omitempty"`
 	// Invokable is true when the Chain carries ai.roundtable.io/invokable=true,
 	// so the gateway can run it (#247).
 	Invokable bool `json:"invokable,omitempty"`
@@ -1595,6 +1631,7 @@ func parseChainResource(obj map[string]interface{}, knights map[string]knightInf
 	chain.RunsCompleted = getInt(status, "runsCompleted")
 	chain.RunsFailed = getInt(status, "runsFailed")
 	chain.RunID = getStr(status, "runId")
+	chain.TraceID = statusTraceID(status)
 
 	// Timing (CRD fields: startedAt, completedAt)
 	if t := getStr(status, "startedAt"); t != "" {
@@ -1766,6 +1803,7 @@ type MissionSummary struct {
 	ChainStatuses    []MissionChainStatusDTO  `json:"chainStatuses,omitempty"`
 	ResultsConfigMap string                   `json:"resultsConfigMap,omitempty"`
 	CompletedAt      *string                  `json:"completedAt,omitempty"`
+	TraceID          string                   `json:"traceId,omitempty"`
 	// Tokens is the token use of the mission's chains; NotionalCostUSD the
 	// part of totalCost spent by subscription-billed knights (#270).
 	Tokens          *TokenTotals `json:"tokens,omitempty"`
@@ -2067,6 +2105,7 @@ func parseMissionResource(obj map[string]interface{}) MissionSummary {
 		mission.CompletedAt = &t
 	}
 	mission.Tokens = getTokens(status, "tokens")
+	mission.TraceID = statusTraceID(status)
 
 	// Parse planning result
 	if pr := getNestedMap(status, "planningResult"); pr != nil {

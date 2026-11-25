@@ -101,12 +101,7 @@ func setupTestRouter() *mux.Router {
 	api.HandleFunc("/roundtables", roundTablesHandler(namespace)).Methods("GET")
 	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
 
-	api.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"fleetPrefix": fleetPrefix,
-		})
-	}).Methods("GET")
+	api.HandleFunc("/config", configHandler(fleetPrefix, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
 
 	return r
 }
@@ -2027,5 +2022,46 @@ func TestBriefingListMissingDirs(t *testing.T) {
 	h(w, httptest.NewRequest("GET", "/api/briefings", nil))
 	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != "[]" {
 		t.Fatalf("got %d %q", w.Code, w.Body.String())
+	}
+}
+
+func TestConfigTraceURLTemplate(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"unset", "", ""},
+		{"valid", "https://t.example/trace/{traceId}", "https://t.example/trace/{traceId}"},
+		{"javascript", "javascript:alert({traceId})", ""},
+		{"no placeholder", "https://t.example/trace", ""},
+		{"ftp", "ftp://t.example/{traceId}", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			configHandler("fleet-a", traceTemplate(c.in))(w, httptest.NewRequest("GET", "/api/config", nil))
+			var resp map[string]string
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			got, ok := resp["traceUrlTemplate"]
+			if got != c.want || (c.want == "") == ok {
+				t.Errorf("traceUrlTemplate = %q (present %v), want %q", got, ok, c.want)
+			}
+			if resp["fleetPrefix"] != "fleet-a" {
+				t.Errorf("fleetPrefix lost: %v", resp)
+			}
+		})
+	}
+}
+
+func TestStatusTraceIDPassThrough(t *testing.T) {
+	id := "0af7651916cd43dd8448eb211c80319c"
+	for _, c := range []struct{ id, want string }{{id, id}, {"nothex", ""}, {id + "00", ""}, {"", ""}} {
+		status := map[string]interface{}{"traceID": c.id}
+		obj := map[string]interface{}{"status": status, "metadata": map[string]interface{}{"name": "x"}}
+		if got := parseChainResource(obj, nil).TraceID; got != c.want {
+			t.Errorf("chain traceId(%q) = %q, want %q", c.id, got, c.want)
+		}
+		if got := parseMissionResource(obj).TraceID; got != c.want {
+			t.Errorf("mission traceId(%q) = %q, want %q", c.id, got, c.want)
+		}
 	}
 }

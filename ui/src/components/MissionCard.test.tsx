@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { apiGet } from '../lib/api'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MissionCard } from './MissionCard'
@@ -53,5 +54,22 @@ describe('MissionCard cost', () => {
     const total = screen.getByLabelText('mission cost')
     expect(total).toHaveTextContent('Cost—')
     expect(total).toHaveTextContent('Tokens—')
+  })
+})
+
+describe('MissionCard trace link', () => {
+  const id = '0af7651916cd43dd8448eb211c80319c'
+  it('links to the trace when configured', async () => {
+    vi.mocked(apiGet).mockImplementation((url: string) =>
+      url === '/api/config' ? Promise.resolve({ traceUrlTemplate: 'https://t.example/trace/{traceId}' }) : Promise.reject(new Error('none')))
+    render(<MissionCard mission={mission({ traceId: id })} />)
+    expect(await screen.findByRole('link', { name: /View trace/ })).toHaveAttribute('href', `https://t.example/trace/${id}`)
+  })
+  it('shows no link without a trace id', async () => {
+    vi.mocked(apiGet).mockImplementation((url: string) =>
+      url === '/api/config' ? Promise.resolve({ traceUrlTemplate: 'https://t.example/trace/{traceId}' }) : Promise.reject(new Error('none')))
+    render(<MissionCard mission={mission()} />)
+    await Promise.resolve()
+    expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
   })
 })

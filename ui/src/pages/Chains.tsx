@@ -7,6 +7,7 @@ import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '
 import { formatDuration, formatRelativeTime, until } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainRunGroup, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
+import { TraceLink } from '../components/TraceLink'
 import { RunNow } from '../components/RunNow'
 import { CostTag } from '../components/CostTag'
 import { RunCostTable } from '../components/RunCostTable'
@@ -622,6 +623,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
               </div>
             )}
           </div>
+          {view.traceId && <div className="mb-2"><TraceLink traceId={view.traceId} /></div>}
           {chain.invokable && <RunNow chain={chain.name} namespace={chain.namespace} />}
           {chain.runTemplate && !TERMINAL_PHASES.includes(chain.phase) && <CancelRun chain={chain} />}
           <StepDAG steps={steps} currentStep={view.currentStep} />

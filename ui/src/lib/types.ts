@@ -165,6 +165,8 @@ export interface Chain {
   lastScheduledAt?: string
   runsCompleted?: number
   runsFailed?: number
+  /** status.traceID of the current run (32 hex characters). */
+  traceId?: string
   /** Carries ai.roundtable.io/invokable=true: the gateway can run it. */
   invokable?: boolean
   /** Cost of the current (or most recent) run: the sum of its steps'. */
