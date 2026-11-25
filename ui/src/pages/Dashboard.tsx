@@ -49,6 +49,8 @@ async function fetchSessionCosts(names: string[]): Promise<Record<string, number
   return perKnight
 }
 
+export const DASHBOARD_CHAINS_URL = '/api/chains?limit=500'
+
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
   const { knights } = useFleet()
   const { events, connected } = useWebSocket()
@@ -59,7 +61,9 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week')
 
   useEffect(() => {
-    apiGet<Chain[]>('/api/chains').then(setChains).catch(() => {})
+    // The list is paginated (default 100, #275); ask for the maximum so no
+    // chain is dropped. Items are slim, which is all this panel needs.
+    apiGet<Chain[]>(DASHBOARD_CHAINS_URL).then(setChains).catch(() => {})
   }, [])
 
   // Fetch cumulative session costs once the fleet list arrives (reuses the

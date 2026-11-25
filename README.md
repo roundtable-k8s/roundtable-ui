@@ -339,8 +339,9 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/tasks/dispatch/{taskId}` — Task status and output (`GET /v1/tasks/{taskId}`)
 
 ### Chain Orchestration
-- `GET /api/chains` — List all chains
-- `GET /api/chains/{name}` — Get chain details
+- `GET /api/chains` — List chains: slim (chain-level phase, timings, cost and tokens; steps carry only `name` and `phase`), running first then newest first. Query: `limit` (default 100, max 500), `offset`, `phase` (comma-separated), `template` (run copies of a template, from the `ai.roundtable.io/run-template` annotation, exposed as `runTemplate`), `copies` (`include` | `exclude` | `only`), `full=true` (the full payload; every chain in list order unless `limit`/`offset` is given). `X-Total-Count` is the number of matching chains
+- `GET /api/chain-groups` — Run copies per template: `{template, runs, phases, lastStartTime, templateExists}`
+- `GET /api/chains/{name}` — Get chain details (step results, fan-out items, loop rounds; same shape as the `chain` WebSocket push)
 - `POST /api/chains/{name}/run` — Run now through the gateway (`POST /v1/chains/{name}/runs`, `waitSeconds: 0`). Optional body `{input}`; only Chains labelled `ai.roundtable.io/invokable: "true"` can be run (chain summaries carry `invokable`). 503 when `GATEWAY_URL` is unset; rate limited (429)
 - `GET /api/chains/runs/{namespace}/{run}` — Run status (`GET /v1/runs/{namespace}/{run}`)
 - `GET /api/chains/{name}/steps/{step}/output` — Get step output from NATS KV

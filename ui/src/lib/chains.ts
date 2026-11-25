@@ -2,7 +2,8 @@
  * Chain view helpers: fan-out progress, loop rounds, skip reasons and the
  * `chain` WebSocket message (envelope `op` + ChainSummary `data`).
  */
-import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopRound, ChainStep, ChainTaskLive } from './types'
+import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopRound, ChainRunGroup, ChainStep, ChainTaskLive } from './types'
+import { formatRelativeTime } from './format'
 
 export interface FanOutCounts {
   total: number
@@ -128,4 +129,42 @@ export function applyChainUpdate(chains: Chain[], u: ChainUpdate): Chain[] {
   const next = chains.slice()
   next[i] = u.chain
   return next
+}
+
+/** Insert or replace a chain, putting new ones first (run copies are newest first). */
+export function upsertNewestFirst(chains: Chain[], chain: Chain): Chain[] {
+  const key = chainKey(chain)
+  const i = chains.findIndex(c => chainKey(c) === key)
+  if (i < 0) return [chain, ...chains]
+  const next = chains.slice()
+  next[i] = chain
+  return next
+}
+
+/** Merge a page of chains into a list, replacing known ones, keeping order. */
+export function appendPage(chains: Chain[], page: Chain[]): Chain[] {
+  const seen = new Set(chains.map(chainKey))
+  return [...chains, ...page.filter(c => !seen.has(chainKey(c)))]
+}
+
+const PHASE_RANK = ['Running', 'StepRunning', 'Pending', 'Succeeded', 'PartiallySucceeded', 'Failed']
+
+/** "PartiallySucceeded" → "partially succeeded" */
+export function phaseWords(phase: string): string {
+  return phase.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+}
+
+/** "pr-pipeline: 150 runs, 148 succeeded, 1 partially succeeded, last 33m ago" */
+export function runGroupSummary(g: ChainRunGroup): string {
+  const rank = (p: string) => {
+    const i = PHASE_RANK.indexOf(p)
+    return i < 0 ? PHASE_RANK.length : i
+  }
+  const phases = Object.entries(g.phases || {})
+    .filter(([, n]) => n > 0)
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([p, n]) => `${n} ${phaseWords(p)}`)
+  const parts = [`${g.runs} run${g.runs === 1 ? '' : 's'}`, ...phases]
+  if (g.lastStartTime) parts.push(`last ${formatRelativeTime(g.lastStartTime)}`)
+  return `${g.template}: ${parts.join(', ')}`
 }

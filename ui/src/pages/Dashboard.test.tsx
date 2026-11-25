@@ -56,7 +56,7 @@ vi.mock('../hooks/useRunning', () => ({ useRunning: () => runningState.current }
 
 vi.mock('../lib/api', () => ({
   apiGet: vi.fn((url: string) => {
-    if (url === '/api/chains') {
+    if (url === '/api/chains?limit=500') {
       return Promise.resolve([
         {
           name: 'test-chain',

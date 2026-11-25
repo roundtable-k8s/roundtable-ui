@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { ChainsPage, FALLBACK_POLL_MS } from './Chains'
+import { ChainsPage, CHAINS_LIST_URL, CHAIN_GROUPS_URL, FALLBACK_POLL_MS, GROUP_PAGE_SIZE, GROUP_REFRESH_MS } from './Chains'
 import { apiGet, apiPost } from '../lib/api'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from '../lib/types'
@@ -30,6 +30,9 @@ vi.mock('../hooks/useWebSocket', () => ({
 
 const mockApiGet = vi.mocked(apiGet)
 
+/** Calls of the top-level chain list (the page also asks for groups and the focused chain). */
+const listCalls = () => mockApiGet.mock.calls.filter(c => c[0] === CHAINS_LIST_URL).length
+
 function emitChain(chain: Partial<Chain>, op = 'upsert') {
   act(() => listeners.get('chain')?.forEach(fn => fn(chain, { type: 'chain', op, data: chain })))
 }
@@ -47,7 +50,7 @@ beforeEach(() => {
   listeners.clear()
   mockApiGet.mockReset()
   mockApiGet.mockImplementation((url: string) =>
-    url === '/api/chains' ? Promise.resolve([fanOutChain(), prPipelineChain()]) : Promise.reject(new Error('no KV')))
+    url === CHAINS_LIST_URL ? Promise.resolve([fanOutChain(), prPipelineChain()]) : Promise.reject(new Error('no KV')))
 })
 
 afterEach(() => { vi.useRealTimers() })
@@ -108,7 +111,7 @@ describe('ChainsPage live updates', () => {
     renderPage('/chains?chain=pr-pipeline')
     const step = await screen.findByRole('region', { name: 'step review-fix' })
     expect(step).toHaveTextContent('round 2/5')
-    expect(mockApiGet).toHaveBeenCalledTimes(1)
+    expect(listCalls()).toBe(1)
 
     const next = prPipelineChain()
     next.steps![1].loop!.iteration = 3
@@ -121,13 +124,15 @@ describe('ChainsPage live updates', () => {
     emitChain({ name: 'pr-pipeline', namespace: 'roundtable' }, 'delete')
     expect(screen.queryByText('pr-pipeline')).toBeNull()
     expect(screen.getByText('doc-sweep')).toBeInTheDocument()
-    expect(mockApiGet).toHaveBeenCalledTimes(1)
+    expect(listCalls()).toBe(1)
     expect(screen.getByText('Live')).toBeInTheDocument()
   })
 
   it('replays updates that arrive while the list is loading', async () => {
     let resolve!: (v: Chain[]) => void
-    mockApiGet.mockImplementation(() => new Promise(r => { resolve = r as (v: Chain[]) => void }))
+    mockApiGet.mockImplementation((url: string) => url === CHAINS_LIST_URL
+      ? new Promise(r => { resolve = r as (v: Chain[]) => void })
+      : Promise.reject(new Error('not found')))
     renderPage('/chains?chain=pr-pipeline')
     emitChain({ ...prPipelineChain(), phase: 'Succeeded' })
     await act(async () => { resolve([fanOutChain(), prPipelineChain()]) })
@@ -139,18 +144,18 @@ describe('ChainsPage live updates', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     connected = false
     renderPage('/chains')
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(listCalls()).toBe(1))
     expect(screen.getByText(/Live feed disconnected — polling every 30s/)).toBeInTheDocument()
     await act(async () => { vi.advanceTimersByTime(FALLBACK_POLL_MS) })
-    expect(mockApiGet).toHaveBeenCalledTimes(2)
+    expect(listCalls()).toBe(2)
   })
 
   it('does not poll while connected', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     renderPage('/chains')
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(listCalls()).toBe(1))
     await act(async () => { vi.advanceTimersByTime(FALLBACK_POLL_MS * 3) })
-    expect(mockApiGet).toHaveBeenCalledTimes(1)
+    expect(listCalls()).toBe(1)
   })
 })
 
@@ -159,7 +164,7 @@ describe('ChainsPage live updates', () => {
 describe('ChainsPage with real API payloads', () => {
   it('shows pod, elapsed, heartbeat, output size and max parallel for a running fan-out item', async () => {
     mockApiGet.mockImplementation((url: string) =>
-      url === '/api/chains' ? Promise.resolve([apiFanout, apiLoop]) : Promise.reject(new Error('no KV')))
+      url === CHAINS_LIST_URL ? Promise.resolve([apiFanout, apiLoop]) : Promise.reject(new Error('no KV')))
     renderPage('/chains?chain=fanout-scan')
     const step = await screen.findByRole('region', { name: 'step scan' })
     expect(step).toHaveTextContent('max 2 parallel')
@@ -172,7 +177,7 @@ describe('ChainsPage with real API payloads', () => {
 
   it('shows the pod of a running loop body step', async () => {
     mockApiGet.mockImplementation((url: string) =>
-      url === '/api/chains' ? Promise.resolve([apiFanout, apiLoop]) : Promise.reject(new Error('no KV')))
+      url === CHAINS_LIST_URL ? Promise.resolve([apiFanout, apiLoop]) : Promise.reject(new Error('no KV')))
     renderPage('/chains?chain=pr-pipeline-roundtable-ui-187')
     const step = await screen.findByRole('region', { name: 'step fixloop' })
     expect(step).toHaveTextContent('galahad-abc-1')
@@ -182,7 +187,7 @@ describe('ChainsPage with real API payloads', () => {
 describe('ChainsPage cost', () => {
   it('shows cost and tokens per step and a run total equal to their sum, marking notional cost', async () => {
     mockApiGet.mockImplementation((url: string) =>
-      url === '/api/chains' ? Promise.resolve([apiCost]) : Promise.reject(new Error('no KV')))
+      url === CHAINS_LIST_URL ? Promise.resolve([apiCost]) : Promise.reject(new Error('no KV')))
     renderPage('/chains?chain=cost-run')
     const table = await screen.findByRole('table', { name: 'cost-run cost' })
     const rows = within(table).getAllByRole('row')
@@ -210,7 +215,7 @@ describe('ChainsPage cost', () => {
 
   it('shows cost and tokens in the step detail', async () => {
     mockApiGet.mockImplementation((url: string) =>
-      url === '/api/chains' ? Promise.resolve([apiCost]) : Promise.reject(new Error('no KV')))
+      url === CHAINS_LIST_URL ? Promise.resolve([apiCost]) : Promise.reject(new Error('no KV')))
     renderPage('/chains?chain=cost-run')
     await screen.findByRole('table', { name: 'cost-run cost' })
     const buttons = screen.getAllByRole('button').filter(b => b.textContent?.trim().endsWith('plan'))
@@ -230,7 +235,7 @@ describe('ChainsPage cost', () => {
 describe('ChainsPage run now', () => {
   it('shows Run now only for chains the gateway can run, posts the input and links to the run', async () => {
     mockApiGet.mockImplementation((url: string) =>
-      url === '/api/chains'
+      url === CHAINS_LIST_URL
         ? Promise.resolve([{ ...fanOutChain(), invokable: true }, { ...prPipelineChain(), name: 'closed-chain' }])
         : Promise.reject(new Error('no KV')))
     vi.mocked(apiPost).mockResolvedValue({ run: 'doc-sweep-x1', namespace: 'roundtable', phase: 'Pending', done: false })
@@ -248,11 +253,143 @@ describe('ChainsPage run now', () => {
 
   it('shows the error when the run cannot be started', async () => {
     mockApiGet.mockImplementation((url: string) =>
-      url === '/api/chains' ? Promise.resolve([{ ...fanOutChain(), invokable: true }]) : Promise.reject(new Error('no KV')))
+      url === CHAINS_LIST_URL ? Promise.resolve([{ ...fanOutChain(), invokable: true }]) : Promise.reject(new Error('no KV')))
     vi.mocked(apiPost).mockRejectedValue(new Error('Gateway not configured'))
     renderPage('/chains?chain=doc-sweep')
     const box = await screen.findByTestId('run-now')
     await userEvent.click(within(box).getByRole('button', { name: /run now/i }))
     expect((await within(box).findByRole('alert')).textContent).toContain('Gateway not configured')
+  })
+})
+
+// #275: the list is slim and excludes run copies, which are grouped by template.
+describe('ChainsPage run copies grouped by template', () => {
+  const ago = (sec: number) => new Date(Date.now() - sec * 1000).toISOString()
+  const slim = (c: Chain): Chain => ({
+    ...c, slim: true, steps: (c.steps || []).map(s => ({ name: s.name, phase: s.phase }) as Chain['steps'] extends (infer T)[] | null ? T : never),
+  })
+  const template = (): Chain => slim({ ...prPipelineChain(), phase: 'Succeeded', startTime: ago(7200), completionTime: ago(7000) })
+  const scheduled = (): Chain => slim({ ...fanOutChain(), name: 'morning-briefing', schedule: '0 6 * * *', phase: 'Succeeded' })
+  const copy = (i: number, phase = 'Succeeded'): Chain => slim({
+    ...prPipelineChain(), name: `pr-pipeline-roundtable-${i}`, runTemplate: 'pr-pipeline', phase,
+    startTime: ago(2000 + i * 60), completionTime: phase === 'Running' ? null : ago(1900 + i * 60),
+  })
+  const group = {
+    template: 'pr-pipeline', runs: 150, templateExists: true, lastStartTime: ago(33 * 60 + 5),
+    phases: { Succeeded: 148, PartiallySucceeded: 1, Failed: 1 },
+  }
+
+  /** Routes the page's GETs; run pages are served from `copies` by offset/limit. */
+  function mockFleet(opts: { copies?: Chain[]; details?: Record<string, Chain> } = {}) {
+    const copies = opts.copies ?? Array.from({ length: 150 }, (_, i) => copy(i))
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === CHAINS_LIST_URL) return Promise.resolve([template(), scheduled()])
+      if (url === CHAIN_GROUPS_URL) return Promise.resolve([group])
+      const runs = url.match(/^\/api\/chains\?template=pr-pipeline&offset=(\d+)&limit=(\d+)$/)
+      if (runs) return Promise.resolve(copies.slice(Number(runs[1]), Number(runs[1]) + Number(runs[2])))
+      const detail = url.match(/^\/api\/chains\/([^/?]+)$/)
+      if (detail && opts.details?.[decodeURIComponent(detail[1])]) return Promise.resolve(opts.details[decodeURIComponent(detail[1])])
+      return Promise.reject(new Error('not found'))
+    })
+  }
+  const groupRow = () => screen.getByRole('button', { name: /^pr-pipeline: 150 runs/ })
+  const runCalls = () => mockApiGet.mock.calls.map(c => c[0] as string).filter(u => u.startsWith('/api/chains?template='))
+
+  it('shows templates and scheduled chains first and the copies as one collapsed row', async () => {
+    mockFleet()
+    renderPage('/chains')
+    const row = await screen.findByRole('button', { name: /^pr-pipeline: 150 runs/ })
+    expect(row).toHaveTextContent('pr-pipeline: 150 runs, 148 succeeded, 1 partially succeeded, 1 failed, last 33m ago')
+    expect(row).toHaveAttribute('aria-expanded', 'false')
+
+    // Template and scheduled chain come before the group; no copy is rendered.
+    const templateCard = screen.getByRole('button', { name: /^pr-pipeline\s*Succeeded/ })
+    expect(screen.getByText('morning-briefing')).toBeInTheDocument()
+    expect(templateCard.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText(/pr-pipeline-roundtable-/)).toBeNull()
+    expect(runCalls()).toEqual([])
+  })
+
+  it('expands to the newest runs and loads more on demand', async () => {
+    mockFleet()
+    renderPage('/chains')
+    await userEvent.click(await screen.findByRole('button', { name: /^pr-pipeline: 150 runs/ }))
+    expect(groupRow()).toHaveAttribute('aria-expanded', 'true')
+    const region = screen.getByRole('region', { name: 'runs of pr-pipeline' })
+    await within(region).findByText('pr-pipeline-roundtable-0')
+    expect(within(region).getAllByText(/^pr-pipeline-roundtable-\d+$/)).toHaveLength(GROUP_PAGE_SIZE)
+    expect(runCalls()).toEqual([`/api/chains?template=pr-pipeline&offset=0&limit=${GROUP_PAGE_SIZE}`])
+
+    await userEvent.click(within(region).getByRole('button', { name: 'Load more (130 more)' }))
+    await within(region).findByText('pr-pipeline-roundtable-39')
+    expect(within(region).getAllByText(/^pr-pipeline-roundtable-\d+$/)).toHaveLength(2 * GROUP_PAGE_SIZE)
+    expect(runCalls()[1]).toBe(`/api/chains?template=pr-pipeline&offset=${GROUP_PAGE_SIZE}&limit=${GROUP_PAGE_SIZE}`)
+    expect(within(region).getByRole('button', { name: 'Load more (110 more)' })).toBeInTheDocument()
+
+    // Collapsing hides the runs again.
+    await userEvent.click(groupRow())
+    expect(within(region).queryByText('pr-pipeline-roundtable-0')).toBeNull()
+  }, 20_000)
+
+  it('fetches step results only when a chain is expanded', async () => {
+    const full = { ...prPipelineChain(), name: 'pr-pipeline-roundtable-0', runTemplate: 'pr-pipeline' }
+    mockFleet({ details: { 'pr-pipeline-roundtable-0': full } })
+    renderPage('/chains')
+    await userEvent.click(await screen.findByRole('button', { name: /^pr-pipeline: 150 runs/ }))
+    const card = await screen.findByRole('button', { name: /^pr-pipeline-roundtable-0(?!\d)/ })
+    expect(mockApiGet.mock.calls.some(c => c[0] === '/api/chains/pr-pipeline-roundtable-0')).toBe(false)
+
+    await userEvent.click(card)
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/api/chains/pr-pipeline-roundtable-0', expect.anything()))
+    const step = await screen.findByRole('region', { name: 'step review-fix' })
+    expect(step).toHaveTextContent('round 2/5')
+    const buttons = screen.getAllByRole('button').filter(b => b.textContent?.trim().endsWith('implement'))
+    await userEvent.click(buttons[buttons.length - 1])
+    expect(screen.getByText('PR #1')).toBeInTheDocument()
+  })
+
+  it('shows an error when the chain detail cannot be loaded', async () => {
+    mockFleet()
+    renderPage('/chains')
+    await userEvent.click(await screen.findByRole('button', { name: /^morning-briefing/ }))
+    expect(await screen.findByText(/Failed to load chain: not found/)).toBeInTheDocument()
+  })
+
+  it('opens the group of a deep-linked run copy with that run expanded', async () => {
+    const full = { ...prPipelineChain(), name: 'pr-pipeline-roundtable-140', runTemplate: 'pr-pipeline' }
+    mockFleet({ details: { 'pr-pipeline-roundtable-140': full } })
+    renderPage('/chains?chain=pr-pipeline-roundtable-140')
+    await waitFor(() => expect(groupRow()).toHaveAttribute('aria-expanded', 'true'))
+    // Not in the first page of runs, but shown (and expanded) anyway.
+    const region = screen.getByRole('region', { name: 'runs of pr-pipeline' })
+    await within(region).findByText('pr-pipeline-roundtable-0')
+    expect(within(region).getByText('pr-pipeline-roundtable-140')).toBeInTheDocument()
+    expect(await within(region).findByRole('region', { name: 'step review-fix' })).toHaveTextContent('round 2/5')
+  })
+
+  it('applies live updates of run copies to their group, not the top-level list, and refreshes the counts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockFleet({ copies: [copy(0), copy(1)] })
+    renderPage('/chains')
+    await userEvent.click(await screen.findByRole('button', { name: /^pr-pipeline: 150 runs/ }))
+    const region = screen.getByRole('region', { name: 'runs of pr-pipeline' })
+    await within(region).findByText('pr-pipeline-roundtable-1')
+    const groupCalls = () => mockApiGet.mock.calls.filter(c => c[0] === CHAIN_GROUPS_URL).length
+    const before = groupCalls()
+
+    emitChain({ ...prPipelineChain(), name: 'pr-pipeline-roundtable-new', runTemplate: 'pr-pipeline', phase: 'Running' })
+    const names = within(region).getAllByText(/^pr-pipeline-roundtable-/).map(e => e.textContent)
+    expect(names).toEqual(['pr-pipeline-roundtable-new', 'pr-pipeline-roundtable-0', 'pr-pipeline-roundtable-1'])
+    // Not added to the top-level list.
+    expect(screen.getAllByText('pr-pipeline-roundtable-new')).toHaveLength(1)
+
+    emitChain({ name: 'pr-pipeline-roundtable-0', namespace: 'roundtable' }, 'delete')
+    expect(within(region).queryByText('pr-pipeline-roundtable-0')).toBeNull()
+
+    // Group counts are refreshed once for the burst.
+    expect(groupCalls()).toBe(before)
+    await act(async () => { vi.advanceTimersByTime(GROUP_REFRESH_MS) })
+    expect(groupCalls()).toBe(before + 1)
+    expect(listCalls()).toBe(1)
   })
 })

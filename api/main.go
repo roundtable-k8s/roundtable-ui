@@ -425,6 +425,7 @@ func main() {
 
 	// Chain endpoints
 	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
+	api.HandleFunc("/chain-groups", chainGroupsHandler(namespace)).Methods("GET")
 	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, running)).Methods("GET")
 	api.HandleFunc("/triggers", triggersHandler(namespace)).Methods("GET")
 	api.HandleFunc("/triggers/{namespace}/{name}", triggerDetailHandler(namespace)).Methods("GET")
@@ -1450,6 +1451,12 @@ type ChainSummary struct {
 	// Invokable is true when the Chain carries ai.roundtable.io/invokable=true,
 	// so the gateway can run it (#247).
 	Invokable bool `json:"invokable,omitempty"`
+	// RunTemplate names the template Chain this one is a run copy of
+	// (annotation ai.roundtable.io/run-template, #275).
+	RunTemplate string `json:"runTemplate,omitempty"`
+	// Slim is true in the GET /api/chains list, where step results are
+	// omitted; GET /api/chains/{name} and WS pushes carry them (#275).
+	Slim bool `json:"slim,omitempty"`
 
 	// Cost of the current (or most recent) run (#270): USD and tokens, and
 	// the part of the cost that is notional (subscription-billed knights).
@@ -1500,33 +1507,6 @@ type StepSummary struct {
 	CostUSD      string       `json:"costUSD,omitempty"`
 	Tokens       *TokenTotals `json:"tokens,omitempty"`
 	CostNotional bool         `json:"costNotional,omitempty"`
-}
-
-func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if dynClient == nil {
-			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
-			return
-		}
-
-		list, err := dynClient.Resource(chainGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
-		if err != nil {
-			slog.Error("Chain list error", "error", err)
-			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
-			return
-		}
-
-		knights := getKnightInfoMap(r.Context(), namespace)
-		chains := []ChainSummary{}
-		for _, item := range list.Items {
-			c := parseChainResource(item.Object, knights)
-			joinChainInFlight(&c, running)
-			chains = append(chains, c)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(chains)
-	}
 }
 
 func chainDetailHandler(namespace string, running *runningRegistry) http.HandlerFunc {
@@ -1580,6 +1560,7 @@ func parseChainResource(obj map[string]interface{}, knights map[string]knightInf
 	chain.MissionRef = getRefName(spec, "missionRef")
 	chain.Suspend = getBool(spec, "suspend")
 	chain.Invokable = getNestedMap(metadata, "labels")["ai.roundtable.io/invokable"] == "true"
+	chain.RunTemplate = chainRunTemplate(metadata)
 
 	// Scheduled-run counters from status
 	chain.RunsCompleted = getInt(status, "runsCompleted")

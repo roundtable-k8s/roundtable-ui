@@ -338,14 +338,14 @@ func TestChainDetailHandler_InFlightJoin(t *testing.T) {
 	r.HandleFunc("/api/chains/{name}", chainDetailHandler("roundtable", reg))
 	r.HandleFunc("/api/chains", chainsHandler("roundtable", reg))
 
-	for _, path := range []string{"/api/chains/fanout-scan", "/api/chains"} {
+	for _, path := range []string{"/api/chains/fanout-scan", "/api/chains?full=true"} {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 		if w.Code != http.StatusOK {
 			t.Fatalf("%s: status %d: %s", path, w.Code, w.Body.String())
 		}
 		var c ChainSummary
-		if path == "/api/chains" {
+		if path == "/api/chains?full=true" {
 			var list []ChainSummary
 			if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list) != 1 {
 				t.Fatalf("list: %v %s", err, w.Body.String())

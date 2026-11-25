@@ -5,7 +5,7 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
 import { formatDuration } from '../lib/format'
-import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainStep } from '../lib/types'
+import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainRunGroup, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
 import { RunNow } from '../components/RunNow'
 import { CostTag } from '../components/CostTag'
@@ -13,12 +13,28 @@ import { RunCostTable } from '../components/RunCostTable'
 import { tokensText } from '../lib/cost'
 import { useWebSocket } from '../hooks/useWebSocket'
 import {
-  applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
-  parseChainUpdate, runningHref, skipReasonText, sortedItems, type ChainUpdate,
+  appendPage, applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
+  parseChainUpdate, runGroupSummary, runningHref, skipReasonText, sortedItems, upsertNewestFirst, type ChainUpdate,
 } from '../lib/chains'
 
 /** Slow fallback poll, only while the live feed is disconnected. */
 export const FALLBACK_POLL_MS = 30_000
+
+/**
+ * Templates, scheduled and standalone chains: everything that is not a run
+ * copy. Run copies are summarised by /api/chain-groups and loaded per
+ * template on expand (#275).
+ */
+export const CHAINS_LIST_URL = '/api/chains?copies=exclude&limit=500'
+export const CHAIN_GROUPS_URL = '/api/chain-groups'
+/** Run copies loaded per "load more". */
+export const GROUP_PAGE_SIZE = 20
+/** Run copy changes refresh the group counts at most this often. */
+export const GROUP_REFRESH_MS = 3_000
+
+export const chainDetailUrl = (name: string) => `/api/chains/${encodeURIComponent(name)}`
+export const groupRunsUrl = (template: string, offset: number, limit: number) =>
+  `/api/chains?template=${encodeURIComponent(template)}&offset=${offset}&limit=${limit}`
 
 /** Assign each step a column (x) based on topological order of dependencies */
 function layoutSteps(steps: ChainStep[]): Map<string, { col: number; row: number }> {
@@ -434,6 +450,33 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
   )
 }
 
+/**
+ * The full chain for an expanded card. List items are slim (no step detail),
+ * so the chain is fetched from /api/chains/{name} when expanded and again
+ * whenever the slim list item changes. A WS push carries the full chain and
+ * is used as is.
+ */
+function useChainDetail(chain: Chain, expanded: boolean): { view: Chain | null; error: string } {
+  const [detail, setDetail] = useState<Chain | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!expanded || !chain.slim) return
+    const controller = new AbortController()
+    apiGet<Chain>(chainDetailUrl(chain.name), { signal: controller.signal })
+      .then(d => {
+        if (controller.signal.aborted) return
+        setDetail(d)
+        setError('')
+      })
+      .catch(e => {
+        if (e?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load chain')
+      })
+    return () => controller.abort()
+  }, [expanded, chain])
+  if (!chain.slim) return { view: chain, error: '' }
+  return { view: detail && detail.name === chain.name ? detail : null, error }
+}
+
 function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean }) {
   const [expanded, setExpanded] = useState(focused)
   const cardRef = useRef<HTMLDivElement>(null)
@@ -443,9 +486,11 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
     cardRef.current?.scrollIntoView?.({ block: 'start' })
   }, [focused])
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
+  const { view, error: detailError } = useChainDetail(chain, expanded)
+  const steps = view?.steps || []
 
   const activeStep = selectedStep
-    ? (chain.steps || []).find(s => s.name === selectedStep) || null
+    ? steps.find(s => s.name === selectedStep) || null
     : null
 
   return (
@@ -479,7 +524,14 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
           {formatDuration(chain.startTime, chain.completionTime)}
         </span>
       </button>
-      {expanded && (
+      {expanded && !view && (
+        <div className="px-5 py-3 border-t border-roundtable-steel/50 text-xs">
+          {detailError
+            ? <span className="text-red-400">Failed to load chain: {detailError}</span>
+            : <span className="text-gray-500">Loading chain…</span>}
+        </div>
+      )}
+      {expanded && view && (
         <div className="px-5 pb-4 border-t border-roundtable-steel/50">
           {/* Description */}
           {chain.description && (
@@ -522,12 +574,12 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
             )}
           </div>
           {chain.invokable && <RunNow chain={chain.name} namespace={chain.namespace} />}
-          <StepDAG steps={chain.steps || []} currentStep={chain.currentStep} />
-          <StepProgress steps={chain.steps || []} />
-          {(chain.steps || []).length > 0 && <RunCostTable chain={chain} />}
+          <StepDAG steps={steps} currentStep={view.currentStep} />
+          <StepProgress steps={steps} />
+          {steps.length > 0 && <RunCostTable chain={view} />}
           {/* Step list for drill-down (#49) */}
           <div className="mt-3 flex flex-wrap gap-2">
-            {(chain.steps || []).map(step => {
+            {steps.map(step => {
               const cfg = getKnightConfig(step.knight)
               return (
                 <button key={step.name}
@@ -549,12 +601,117 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
   )
 }
 
+/**
+ * The run copies of one template as one collapsed row ("pr-pipeline: 150
+ * runs, 148 succeeded, …"). Expanding loads the newest copies a page at a
+ * time; live updates of loaded copies are applied in place.
+ */
+function RunGroup({ group, focusChain, focusDetail, refreshToken }: {
+  group: ChainRunGroup
+  focusChain: string
+  focusDetail: Chain | null
+  refreshToken: number
+}) {
+  const focusHere = focusDetail?.runTemplate === group.template
+  const [open, setOpen] = useState(focusHere)
+  useEffect(() => { if (focusHere) setOpen(true) }, [focusHere])
+  const [runs, setRuns] = useState<Chain[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const { subscribeTopic } = useWebSocket()
+  const runsRef = useRef(runs)
+  runsRef.current = runs
+  const loadedRef = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const load = useCallback((offset: number, limit: number) => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setLoading(true)
+    apiGet<Chain[]>(groupRunsUrl(group.template, offset, limit), { signal: controller.signal })
+      .then(page => {
+        if (controller.signal.aborted) return
+        setRuns(prev => (offset === 0 ? page || [] : appendPage(prev, page || [])))
+        loadedRef.current = true
+        setLoaded(true)
+        setError('')
+      })
+      .catch(e => {
+        if (e?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load runs')
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+  }, [group.template])
+
+  // (Re)load the newest copies on open and on every page refresh.
+  useEffect(() => {
+    if (!open) return
+    load(0, Math.max(GROUP_PAGE_SIZE, runsRef.current.length))
+  }, [open, refreshToken, load])
+  useEffect(() => () => { abortRef.current?.abort() }, [])
+
+  // Live updates of this template's copies, once a page is loaded.
+  useEffect(() => subscribeTopic('chain', (data, msg) => {
+    if (!loadedRef.current) return
+    const u = parseChainUpdate(data, msg)
+    if (!u) return
+    if (u.op === 'delete') setRuns(prev => applyChainUpdate(prev, u))
+    else if (u.chain.runTemplate === group.template) setRuns(prev => upsertNewestFirst(prev, u.chain))
+  }), [subscribeTopic, group.template])
+
+  const shown = focusHere && focusDetail && !runs.some(r => r.name === focusDetail.name)
+    ? [focusDetail, ...runs]
+    : runs
+  const remaining = Math.max(0, group.runs - runs.length)
+
+  return (
+    <section aria-label={`runs of ${group.template}`} className="bg-roundtable-slate border border-roundtable-steel rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-roundtable-steel/30 transition-colors"
+      >
+        {open
+          ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+        <Repeat className="w-4 h-4 text-roundtable-gold flex-shrink-0" />
+        <span className="text-sm text-gray-200">{runGroupSummary(group)}</span>
+        {!group.templateExists && <span className="text-xs text-gray-500">(template deleted)</span>}
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          {error && <p className="text-xs text-red-400 px-2">Failed to load runs: {error}</p>}
+          {!loaded && !error && shown.length === 0 && <p className="text-xs text-gray-500 px-2">Loading runs…</p>}
+          {shown.map(c => (
+            <ChainCard key={`${c.namespace}/${c.name}`} chain={c} focused={c.name === focusChain} />
+          ))}
+          {loaded && remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => load(runs.length, GROUP_PAGE_SIZE)}
+              disabled={loading}
+              className="text-xs px-3 py-1.5 rounded-lg border border-roundtable-steel text-gray-300 hover:text-white hover:border-gray-500 disabled:opacity-50"
+            >
+              {loading ? 'Loading…' : `Load more (${remaining} more)`}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function ChainsPage() {
   // ?chain=<name> deep link (e.g. from the Running page) expands that chain
   const [searchParams] = useSearchParams()
   const focusChain = searchParams.get('chain') || ''
   const { connected, subscribeTopic } = useWebSocket()
   const [chains, setChains] = useState<Chain[]>([])
+  const [groups, setGroups] = useState<ChainRunGroup[]>([])
+  const [focusDetail, setFocusDetail] = useState<Chain | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -562,6 +719,12 @@ export function ChainsPage() {
   // Live updates that arrive while a list fetch is in flight; replayed on
   // top of the (possibly older) snapshot so they aren't lost.
   const pending = useRef<ChainUpdate[] | null>(null)
+
+  const fetchGroups = useCallback(() => {
+    apiGet<ChainRunGroup[]>(CHAIN_GROUPS_URL)
+      .then(g => setGroups(g || []))
+      .catch(() => { /* keep the last known groups */ })
+  }, [])
 
   const fetchChains = useCallback(() => {
     // Abort any in-flight request (#39)
@@ -572,7 +735,9 @@ export function ChainsPage() {
     pending.current = replay
 
     setLoading(true)
-    apiGet<Chain[]>('/api/chains', { signal: controller.signal })
+    setRefreshToken(t => t + 1)
+    fetchGroups()
+    apiGet<Chain[]>(CHAINS_LIST_URL, { signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return
         setChains(replay.reduce(applyChainUpdate, data || []))
@@ -587,15 +752,32 @@ export function ChainsPage() {
         if (pending.current === replay) pending.current = null
         setLoading(false)
       })
-  }, [])
+  }, [fetchGroups])
 
-  // Live `chain` WS messages (add/update/delete of a Chain)
+  // A run copy changed: refresh the group counts, coalescing bursts.
+  const groupsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleGroups = useCallback(() => {
+    if (groupsTimer.current) return
+    groupsTimer.current = setTimeout(() => {
+      groupsTimer.current = null
+      fetchGroups()
+    }, GROUP_REFRESH_MS)
+  }, [fetchGroups])
+  useEffect(() => () => { if (groupsTimer.current) clearTimeout(groupsTimer.current) }, [])
+
+  // Live `chain` WS messages (add/update/delete of a Chain). Run copies are
+  // handled by their RunGroup; here they only refresh the group counts.
   useEffect(() => subscribeTopic('chain', (data, msg) => {
     const u = parseChainUpdate(data, msg)
     if (!u) return
+    if (u.op === 'upsert' && u.chain.runTemplate) {
+      scheduleGroups()
+      return
+    }
+    if (u.op === 'delete') scheduleGroups()
     pending.current?.push(u)
     setChains(prev => applyChainUpdate(prev, u))
-  }), [subscribeTopic])
+  }), [subscribeTopic, scheduleGroups])
 
   // Fetch on mount and re-sync on every (re)connect, so changes missed
   // while the feed was down are picked up.
@@ -604,6 +786,18 @@ export function ChainsPage() {
     if (!mounted.current || connected) fetchChains()
     mounted.current = true
   }, [connected, fetchChains])
+
+  // A deep-linked chain may be a run copy (not in the list): fetch it so its
+  // group opens with it, or show it on its own.
+  useEffect(() => {
+    setFocusDetail(null)
+    if (!focusChain) return
+    const controller = new AbortController()
+    apiGet<Chain>(chainDetailUrl(focusChain), { signal: controller.signal })
+      .then(c => { if (!controller.signal.aborted && c?.name) setFocusDetail(c) })
+      .catch(() => { /* not found: nothing to focus */ })
+    return () => controller.abort()
+  }, [focusChain])
 
   // Slow fallback poll only while the live feed is down; paused when hidden (#22)
   useEffect(() => {
@@ -620,6 +814,19 @@ export function ChainsPage() {
 
   // Cleanup abort on unmount
   useEffect(() => () => { abortRef.current?.abort() }, [])
+
+  // A focused chain that is neither listed nor a run copy (e.g. just created)
+  // is shown first; a focused run copy whose group is not known yet gets one.
+  const shownChains = useMemo(() => {
+    if (!focusDetail || focusDetail.runTemplate || chains.some(c => c.name === focusDetail.name)) return chains
+    return [focusDetail, ...chains]
+  }, [chains, focusDetail])
+  const shownGroups = useMemo(() => {
+    const t = focusDetail?.runTemplate
+    if (!t || groups.some(g => g.template === t)) return groups
+    const phase = focusDetail.phase || 'Pending'
+    return [{ template: t, runs: 1, phases: { [phase]: 1 }, lastStartTime: focusDetail.startTime, templateExists: chains.some(c => c.name === t) }, ...groups]
+  }, [groups, focusDetail, chains])
 
   return (
     <div>
@@ -644,13 +851,24 @@ export function ChainsPage() {
         </div>
       )}
 
-      {chains.length === 0 && !loading && (
+      {shownChains.length === 0 && shownGroups.length === 0 && !loading && (
         <EmptyState icon={Link} title="No chain executions found." />
       )}
 
       <div className="space-y-3">
-        {chains.map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
+        {shownChains.map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
       </div>
+
+      {shownGroups.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">Runs by template</h2>
+          <div className="space-y-3">
+            {shownGroups.map(g => (
+              <RunGroup key={g.template} group={g} focusChain={focusChain} focusDetail={focusDetail} refreshToken={refreshToken} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
