@@ -29,6 +29,8 @@ export interface Trigger {
   namespace: string
   source: TriggerSource
   targetChain: string
+  /** What the trigger starts; absent on older API servers, meaning chain. */
+  targetKind?: 'chain' | 'knight' | 'mission'
   /** spec.target.knight.name for a knight target. */
   targetKnight?: string
   /** What a firing sends: the knight task, mission objective or chain input (unrendered template). */

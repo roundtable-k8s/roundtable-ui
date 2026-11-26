@@ -176,15 +176,15 @@ func TestParseTriggerTask(t *testing.T) {
 		return map[string]interface{}{"metadata": map[string]interface{}{"name": "x", "namespace": "roundtable"}, "spec": s}
 	}
 	knight := parseTriggerResource(spec(map[string]interface{}{"knight": map[string]interface{}{"name": "galahad", "task": "Scan the cluster\nthen report"}}, ""))
-	if knight.TargetKnight != "galahad" || knight.Task != "Scan the cluster\nthen report" || knight.TargetChain != "" {
+	if knight.TargetKnight != "galahad" || knight.Task != "Scan the cluster\nthen report" || knight.TargetChain != "" || knight.TargetKind != "knight" {
 		t.Errorf("knight target: %+v", knight)
 	}
 	mission := parseTriggerResource(spec(map[string]interface{}{"mission": map[string]interface{}{"objective": "Ship it"}}, ""))
-	if mission.Task != "Ship it" || mission.TargetKnight != "" {
+	if mission.Task != "Ship it" || mission.TargetKnight != "" || mission.TargetKind != "mission" {
 		t.Errorf("mission target: %+v", mission)
 	}
 	chain := parseTriggerResource(spec(map[string]interface{}{"chainRef": map[string]interface{}{"name": "digest"}}, "Digest for today"))
-	if chain.Task != "Digest for today" || chain.TargetChain != "digest" {
+	if chain.Task != "Digest for today" || chain.TargetChain != "digest" || chain.TargetKind != "chain" {
 		t.Errorf("chain target: %+v", chain)
 	}
 }

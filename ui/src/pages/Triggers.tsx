@@ -20,6 +20,21 @@ function ReadyBadge({ t }: { t: Trigger }) {
   return <span className={`rounded-full border px-2 py-0.5 text-xs ${cls}`}>{label}</span>
 }
 
+function TargetCell({ t }: { t: Trigger }) {
+  if (t.targetKind === 'knight') {
+    return <Link to={`/fleet?knight=${encodeURIComponent(t.targetKnight ?? '')}`} className="text-gray-200 hover:underline">knight {t.targetKnight}</Link>
+  }
+  if (t.targetKind === 'mission') {
+    return <Link to="/missions" className="text-gray-200 hover:underline">mission</Link>
+  }
+  return <Link to={chainLink(t.targetChain)} className="text-gray-200 hover:underline">{t.targetChain}</Link>
+}
+
+function RunRef({ run, kind }: { run: string; kind?: Trigger['targetKind'] }) {
+  if (kind === 'knight' || kind === 'mission') return <span className="font-mono text-gray-200">{run}</span>
+  return <Link to={chainLink(run)} className="font-mono text-roundtable-gold hover:underline">{run}</Link>
+}
+
 function when(iso?: string): string {
   return iso ? formatRelativeTime(iso) : '—'
 }
@@ -50,7 +65,7 @@ export function TriggersTable({ triggers, showTable = false }: { triggers: Trigg
           <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
             <th className="px-4 py-3 font-medium">Trigger</th>
             <th className="px-4 py-3 font-medium">Source</th>
-            <th className="px-4 py-3 font-medium">Target chain</th>
+            <th className="px-4 py-3 font-medium">Target</th>
             <th className="px-4 py-3 font-medium">Last fired</th>
             <th className="px-4 py-3 font-medium">Next scheduled</th>
             <th className="px-4 py-3 font-medium text-right">Active runs</th>
@@ -69,7 +84,7 @@ export function TriggersTable({ triggers, showTable = false }: { triggers: Trigg
                 <span className="font-mono text-xs text-gray-400">{t.source.detail}</span>
               </td>
               <td className="px-4 py-3">
-                <Link to={chainLink(t.targetChain)} className="text-gray-200 hover:underline">{t.targetChain}</Link>
+                <TargetCell t={t} />
               </td>
               <td className="px-4 py-3 text-gray-300">{when(t.lastFiredAt)}</td>
               <td className="px-4 py-3 text-gray-300">{until(t.nextScheduledAt)}</td>
@@ -108,8 +123,8 @@ export function TriggerDetail({ trigger: t }: { trigger: Trigger }) {
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-roundtable-slate border border-roundtable-steel rounded-xl p-4">
         <dt className="text-gray-400">Source</dt>
         <dd className="text-gray-200"><span className="font-mono">{t.source.detail}</span> <span className="text-gray-500">({t.source.type})</span></dd>
-        <dt className="text-gray-400">Target chain</dt>
-        <dd><Link to={chainLink(t.targetChain)} className="text-roundtable-gold hover:underline">{t.targetChain}</Link></dd>
+        <dt className="text-gray-400">Target</dt>
+        <dd><TargetCell t={t} /></dd>
         <dt className="text-gray-400">Concurrency</dt>
         <dd className="text-gray-200">{t.concurrencyPolicy}{t.maxActive ? ` (max ${t.maxActive} active)` : ''}</dd>
         <dt className="text-gray-400">State</dt>
@@ -125,7 +140,7 @@ export function TriggerDetail({ trigger: t }: { trigger: Trigger }) {
         {t.activeRuns.length === 0 ? <p className="text-sm text-gray-500">No runs in flight.</p> : (
           <ul className="text-sm space-y-1">
             {t.activeRuns.map(r => (
-              <li key={r}><Link to={chainLink(r)} className="font-mono text-roundtable-gold hover:underline">{r}</Link></li>
+              <li key={r}><RunRef run={r} kind={t.targetKind} /></li>
             ))}
           </ul>
         )}
@@ -152,7 +167,7 @@ export function TriggerDetail({ trigger: t }: { trigger: Trigger }) {
                       {f.skipReason
                         ? <span className="text-amber-300">Skipped: {f.skipReason}</span>
                         : f.run
-                          ? <Link to={chainLink(f.run)} className="font-mono text-roundtable-gold hover:underline">{f.run}</Link>
+                          ? <RunRef run={f.run} kind={t.targetKind} />
                           : <span className="text-gray-500">—</span>}
                     </td>
                   </tr>
