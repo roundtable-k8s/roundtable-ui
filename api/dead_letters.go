@@ -75,15 +75,22 @@ func (g *gatewayClient) bearer(reload bool) string {
 
 // do calls the gateway and returns its status and body.
 func (g *gatewayClient) do(ctx context.Context, method, path string, query url.Values, body []byte) (int, []byte, error) {
-	status, b, err := g.doOnce(ctx, method, path, query, body, g.bearer(false))
-	if err == nil && status == http.StatusUnauthorized && g.tokenFile != "" {
-		// The token may have been rotated: re-read the file and retry once.
-		status, b, err = g.doOnce(ctx, method, path, query, body, g.bearer(true))
-	}
+	status, b, _, err := g.doKeyed(ctx, method, path, query, body, "")
 	return status, b, err
 }
 
-func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query url.Values, body []byte, token string) (int, []byte, error) {
+// doKeyed is do with an optional Idempotency-Key for the gateway; it also
+// returns the gateway's response headers.
+func (g *gatewayClient) doKeyed(ctx context.Context, method, path string, query url.Values, body []byte, idemKey string) (int, []byte, http.Header, error) {
+	status, b, hdr, err := g.doOnce(ctx, method, path, query, body, g.bearer(false), idemKey)
+	if err == nil && status == http.StatusUnauthorized && g.tokenFile != "" {
+		// The token may have been rotated: re-read the file and retry once.
+		status, b, hdr, err = g.doOnce(ctx, method, path, query, body, g.bearer(true), idemKey)
+	}
+	return status, b, hdr, err
+}
+
+func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query url.Values, body []byte, token, idemKey string) (int, []byte, http.Header, error) {
 	u := g.baseURL + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -94,7 +101,7 @@ func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query u
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
@@ -103,26 +110,58 @@ func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query u
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	if idemKey != "" {
+		req.Header.Set("Idempotency-Key", idemKey)
+	}
 	resp, err := g.http.Do(req)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, gatewayMaxBody))
-	return resp.StatusCode, b, err
+	return resp.StatusCode, b, resp.Header, err
+}
+
+// idempotencyKey reads the caller's Idempotency-Key header. ok is false (and a
+// 400 has been written) when the value is empty after trim, longer than 255
+// or not printable ASCII. An absent header yields "", true.
+func idempotencyKey(w http.ResponseWriter, r *http.Request) (string, bool) {
+	vals := r.Header.Values("Idempotency-Key")
+	if len(vals) == 0 {
+		return "", true
+	}
+	k := strings.TrimSpace(vals[0])
+	valid := k != "" && len(k) <= 255
+	for i := 0; valid && i < len(k); i++ {
+		valid = k[i] >= 0x20 && k[i] <= 0x7e
+	}
+	if !valid {
+		jsonError(w, "Invalid Idempotency-Key (1-255 printable ASCII characters)", http.StatusBadRequest)
+		return "", false
+	}
+	return k, true
 }
 
 // relay writes the gateway's status and JSON body back to the client.
 func (g *gatewayClient) relay(w http.ResponseWriter, r *http.Request, method, path string, query url.Values, body []byte) {
+	g.relayKeyed(w, r, method, path, query, body, "")
+}
+
+// relayKeyed is relay that forwards idemKey as the gateway's Idempotency-Key
+// and copies the gateway's Idempotent-Replay header back to the client.
+func (g *gatewayClient) relayKeyed(w http.ResponseWriter, r *http.Request, method, path string, query url.Values, body []byte, idemKey string) {
 	if g.baseURL == "" {
 		jsonError(w, "Gateway not configured (set GATEWAY_URL)", http.StatusServiceUnavailable)
 		return
 	}
-	status, b, err := g.do(r.Context(), method, path, query, body)
+	status, b, hdr, err := g.doKeyed(r.Context(), method, path, query, body, idemKey)
 	if err != nil {
 		slog.Error("gateway request failed", "path", path, "error", err)
 		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
 		return
+	}
+	if v := hdr.Get("Idempotent-Replay"); v != "" {
+		w.Header().Set("Idempotent-Replay", v)
 	}
 	writeGatewayResponse(w, status, b)
 }

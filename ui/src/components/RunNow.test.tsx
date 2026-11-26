@@ -21,7 +21,7 @@ describe('RunNow', () => {
     apiPost.mockResolvedValue({ run: 'scan-abc', namespace: 'ns1', phase: 'Running' })
     renderIt()
     await click()
-    expect(apiPost).toHaveBeenCalledWith('/api/chains/nightly%20scan/run', { namespace: 'ns1' })
+    expect(apiPost).toHaveBeenCalledWith('/api/chains/nightly%20scan/run', { namespace: 'ns1' }, { headers: { 'Idempotency-Key': expect.any(String) } })
     expect(screen.getByText('scan-abc')).toHaveAttribute('href', '/chains?chain=scan-abc')
     expect(screen.getByTestId('run-phase')).toHaveTextContent('Running')
   })
@@ -31,7 +31,7 @@ describe('RunNow', () => {
     renderIt()
     fireEvent.change(screen.getByLabelText('Input for nightly scan'), { target: { value: 'hello' } })
     await click()
-    expect(apiPost).toHaveBeenCalledWith(expect.any(String), { namespace: 'ns1', input: 'hello' })
+    expect(apiPost).toHaveBeenCalledWith(expect.any(String), { namespace: 'ns1', input: 'hello' }, expect.anything())
   })
 
   it('polls the run until it is done, then stops', async () => {
@@ -61,5 +61,28 @@ describe('RunNow', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('chain is not invokable')
     expect(screen.queryByTestId('run-phase')).toBeNull()
     expect(screen.getByRole('button', { name: 'Run now' })).toBeEnabled()
+  })
+
+  it('reuses the key for a retry after a 5xx and uses a new one after success', async () => {
+    apiPost.mockRejectedValueOnce(Object.assign(new Error('bad gateway'), { status: 502 }))
+      .mockResolvedValue({ run: 'r1', namespace: 'ns1' })
+    renderIt()
+    await click()
+    await click()
+    await click()
+    const keys = apiPost.mock.calls.map((c) => c[2].headers['Idempotency-Key'])
+    expect(keys).toHaveLength(3)
+    expect(keys[1]).toBe(keys[0])
+    expect(keys[2]).not.toBe(keys[0])
+  })
+
+  it('sends no second request while one is in flight', async () => {
+    apiPost.mockReturnValue(new Promise(() => {}))
+    renderIt()
+    const btn = screen.getByRole('button', { name: /Run now/ })
+    await act(async () => { fireEvent.click(btn) })
+    expect(btn).toBeDisabled()
+    await act(async () => { fireEvent.click(btn) })
+    expect(apiPost).toHaveBeenCalledTimes(1)
   })
 })

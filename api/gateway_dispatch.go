@@ -55,6 +55,10 @@ func taskDispatchHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid namespace", http.StatusBadRequest)
 			return
 		}
+		key, ok := idempotencyKey(w, r)
+		if !ok {
+			return
+		}
 		body, _ := json.Marshal(map[string]interface{}{
 			"task":           req.Task,
 			"model":          req.Model,
@@ -62,7 +66,7 @@ func taskDispatchHandler(g *gatewayClient) http.HandlerFunc {
 			"namespace":      req.Namespace,
 			"timeoutSeconds": 0,
 		})
-		g.relay(w, r, http.MethodPost, "/v1/knights/"+url.PathEscape(req.Knight)+"/invoke", nil, body)
+		g.relayKeyed(w, r, http.MethodPost, "/v1/knights/"+url.PathEscape(req.Knight)+"/invoke", nil, body, key)
 	}
 }
 
@@ -100,12 +104,16 @@ func chainRunHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid namespace", http.StatusBadRequest)
 			return
 		}
+		key, ok := idempotencyKey(w, r)
+		if !ok {
+			return
+		}
 		body, _ := json.Marshal(map[string]interface{}{
 			"input":       req.Input,
 			"namespace":   req.Namespace,
 			"waitSeconds": 0,
 		})
-		g.relay(w, r, http.MethodPost, "/v1/chains/"+url.PathEscape(name)+"/runs", nil, body)
+		g.relayKeyed(w, r, http.MethodPost, "/v1/chains/"+url.PathEscape(name)+"/runs", nil, body, key)
 	}
 }
 

@@ -55,6 +55,10 @@ func chatSendHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid namespace", http.StatusBadRequest)
 			return
 		}
+		key, ok := idempotencyKey(w, r)
+		if !ok {
+			return
+		}
 		body := map[string]interface{}{"task": req.Message, "timeoutSeconds": 0}
 		if req.Namespace != "" {
 			body["namespace"] = req.Namespace
@@ -66,7 +70,7 @@ func chatSendHandler(g *gatewayClient) http.HandlerFunc {
 			body["runId"] = req.RunID
 		}
 		b, _ := json.Marshal(body)
-		g.relay(w, r, http.MethodPost, "/v1/knights/"+url.PathEscape(knight)+"/invoke", nil, b)
+		g.relayKeyed(w, r, http.MethodPost, "/v1/knights/"+url.PathEscape(knight)+"/invoke", nil, b, key)
 	}
 }
 

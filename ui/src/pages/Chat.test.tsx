@@ -35,7 +35,7 @@ describe('ChatPage', () => {
     await userEvent.type(await screen.findByLabelText('Message'), 'hello <b>there</b>')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
-    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'hello <b>there</b>' })
+    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'hello <b>there</b>' }, { headers: { 'Idempotency-Key': expect.any(String) } })
     expect(await screen.findByRole('status')).toHaveTextContent('galahad is working')
     // Message is rendered as inert text, not HTML.
     expect(screen.getByText('hello <b>there</b>')).toBeInTheDocument()
@@ -62,7 +62,7 @@ describe('ChatPage', () => {
     render(<MemoryRouter initialEntries={['/chat?knight=galahad&run=run-9']}><ChatPage /></MemoryRouter>)
     await userEvent.type(await screen.findByLabelText('Message'), 'again')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
-    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'again', runId: 'run-9' })
+    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'again', runId: 'run-9' }, expect.anything())
   })
 
   it('shows a failed turn and send errors', async () => {
@@ -71,6 +71,18 @@ describe('ChatPage', () => {
     await userEvent.type(await screen.findByLabelText('Message'), 'x')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
     expect(await screen.findByText(/Gateway not configured/)).toBeInTheDocument()
+  })
+
+  it('keeps the key when a failed send is retried', async () => {
+    apiPost.mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 503 }))
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    expect(await screen.findByText(/boom/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2))
+    const keys = apiPost.mock.calls.map((c) => c[2].headers['Idempotency-Key'])
+    expect(keys[1]).toBe(keys[0])
   })
 
   it('opens the activity panel for a turn', async () => {

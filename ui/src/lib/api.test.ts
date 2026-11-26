@@ -82,6 +82,14 @@ describe('request shape', () => {
     expect(new Headers(fetchMock.mock.calls[1][1].headers).has('Content-Type')).toBe(false)
   })
 
+  it('sends extra headers given to apiPost', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(res(200, '{}')))
+    await apiPost('/x', { a: 1 }, { headers: { 'Idempotency-Key': 'abc' } })
+    const h = new Headers(fetchMock.mock.calls[0][1].headers)
+    expect(h.get('Idempotency-Key')).toBe('abc')
+    expect(h.get('Content-Type')).toBe('application/json')
+  })
+
   it('keeps a caller-provided content-type', async () => {
     fetchMock.mockResolvedValue(res(200, ''))
     await apiFetch('/x', { method: 'POST', body: 'a=1', headers: { 'Content-Type': 'text/plain' } })

@@ -188,3 +188,23 @@ func TestChatForwardsNamespace(t *testing.T) {
 		t.Errorf("invalid namespace reached the gateway: %v", f.calls)
 	}
 }
+
+func TestChatIdempotencyKey(t *testing.T) {
+	f := &fakeGateway{handler: func(c gwCall, w http.ResponseWriter) {
+		w.Header().Set("Idempotent-Replay", "true")
+		w.WriteHeader(http.StatusAccepted)
+		io.WriteString(w, `{"taskId":"t1","runId":"run-1"}`)
+	}}
+	srv := f.server(t)
+	r := chatRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+
+	w := doReqKey(r, "/api/chat/galahad", `{"message":"hi"}`, map[string]string{"Idempotency-Key": "abc"})
+	if w.Code != 202 || w.Header().Get("Idempotent-Replay") != "true" || f.calls[0].idem != "abc" {
+		t.Fatalf("got %d %v calls=%+v", w.Code, w.Header(), f.calls)
+	}
+	n := len(f.calls)
+	w = doReqKey(r, "/api/chat/galahad", `{"message":"hi"}`, map[string]string{"Idempotency-Key": strings.Repeat("a", 256)})
+	if w.Code != http.StatusBadRequest || len(f.calls) != n {
+		t.Fatalf("invalid key: got %d, calls %d", w.Code, len(f.calls))
+	}
+}

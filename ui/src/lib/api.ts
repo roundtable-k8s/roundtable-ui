@@ -65,8 +65,8 @@ export async function apiGetText(url: string): Promise<string> {
 }
 
 /** POST a JSON body and parse the JSON response. Throws ApiError on non-2xx. */
-export async function apiPost<T>(url: string, body: unknown): Promise<T> {
-  const res = await apiFetch(url, { method: 'POST', body: JSON.stringify(body) })
+export async function apiPost<T>(url: string, body: unknown, opts?: { headers?: Record<string, string> }): Promise<T> {
+  const res = await apiFetch(url, { method: 'POST', body: JSON.stringify(body), headers: opts?.headers })
   if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<T>
 }

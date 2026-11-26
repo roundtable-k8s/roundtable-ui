@@ -274,7 +274,7 @@ describe('ChainsPage run now', () => {
 
     await userEvent.type(within(box).getByRole('textbox'), 'topic: nats')
     await userEvent.click(within(box).getByRole('button', { name: /run now/i }))
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chains/doc-sweep/run', { namespace: 'roundtable', input: 'topic: nats' }))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chains/doc-sweep/run', { namespace: 'roundtable', input: 'topic: nats' }, { headers: { 'Idempotency-Key': expect.any(String) } }))
     const link = await within(box).findByRole('link', { name: 'doc-sweep-x1' })
     expect(link.getAttribute('href')).toBe('/chains?chain=doc-sweep-x1')
   })

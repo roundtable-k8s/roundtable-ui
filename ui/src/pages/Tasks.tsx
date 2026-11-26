@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { Scroll, Clock } from 'lucide-react'
 import { apiGet, apiPost } from '../lib/api'
+import { SubmissionKey } from '../lib/submissionKey'
 import { getKnightConfig } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
 import { useWebSocket } from '../hooks/useWebSocket'
@@ -64,6 +65,7 @@ export function TasksPage() {
   const [knight, setKnight] = useState('')
   const [task, setTask] = useState('')
   const [dispatching, setDispatching] = useState(false)
+  const submission = useRef(new SubmissionKey())
   const [results, setResults] = useState<DispatchedTask[]>([])
   // Every RoundTable the API covers (#239), for the history filter
   const [tables, setTables] = useState<TableInfo[]>([])
@@ -114,15 +116,18 @@ export function TasksPage() {
   )
 
   const dispatch = async () => {
-    if (!task.trim() || !selected) return
+    if (!task.trim() || !selected || dispatching) return
     setDispatching(true)
 
     try {
-      const data = await apiPost<GatewayTask>('/api/tasks/dispatch', {
+      const body = {
         knight,
         task,
         ...(selected.namespace ? { namespace: selected.namespace } : {}),
-      })
+      }
+      const key = submission.current.next(JSON.stringify(body))
+      const data = await apiPost<GatewayTask>('/api/tasks/dispatch', body, { headers: { 'Idempotency-Key': key } })
+      submission.current.settle()
       setResults((prev) => [mergeTask({
         taskId: data.taskId,
         knight,
@@ -133,6 +138,7 @@ export function TasksPage() {
       }, data), ...prev])
       setTask('')
     } catch (e) {
+      submission.current.settle(e)
       addToast(`Dispatch failed: ${e instanceof Error ? e.message : 'unknown error'}`, 'error')
     } finally {
       setDispatching(false)
