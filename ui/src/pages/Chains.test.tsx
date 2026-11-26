@@ -454,3 +454,27 @@ describe('ChainsPage cancel run', () => {
     confirm.mockRestore()
   })
 })
+
+describe('ChainsPage trace link', () => {
+  const id = '0af7651916cd43dd8448eb211c80319c'
+  const withConfig = (traceId?: string) =>
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([{ ...fanOutChain(), traceId }, prPipelineChain()])
+        : url === '/api/config' ? Promise.resolve({ traceUrlTemplate: 'https://t.example/trace/{traceId}' })
+        : Promise.reject(new Error('no KV')))
+
+  it('links the expanded chain run to its trace', async () => {
+    withConfig(id)
+    renderPage('/chains?chain=doc-sweep')
+    const a = await screen.findByRole('link', { name: /View trace/ })
+    expect(a).toHaveAttribute('href', `https://t.example/trace/${id}`)
+    expect(a).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('shows no link when the chain has no trace id', async () => {
+    withConfig(undefined)
+    renderPage('/chains?chain=doc-sweep')
+    await screen.findByRole('region', { name: 'step review-each' })
+    expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  })
+})

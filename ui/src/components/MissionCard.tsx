@@ -8,6 +8,7 @@ import { getKnightConfig } from '../lib/knights'
 import { formatRelativeTime, formatDuration, formatCost } from '../lib/format'
 import { phaseColor } from '../lib/status'
 import { Spinner, TableBadge } from './ui'
+import { TraceLink } from './TraceLink'
 import { CostTag } from './CostTag'
 import { tokensText } from '../lib/cost'
 
@@ -160,6 +161,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
           </div>
         )}
       </div>
+      {mission.traceId && <div className="mt-2 text-xs"><TraceLink traceId={mission.traceId} /></div>}
       <div className="flex items-center justify-between text-xs mt-2" aria-label="mission cost">
         <div className="flex items-center gap-1 text-gray-500">
           <DollarSign className="w-3 h-3" />

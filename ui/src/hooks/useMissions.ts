@@ -52,6 +52,8 @@ export interface Mission {
   knightStatuses?: KnightStatus[]
   chainStatuses?: ChainStatus[]
   completedAt?: string
+  /** status.traceID (32 hex characters). */
+  traceId?: string
   successCriteria?: string
   briefing?: string
   /** Token use of the mission's chains. */
