@@ -58,6 +58,8 @@ type TriggerCondition struct {
 type TriggerSummary struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
+	// TargetKind is chain, knight or mission.
+	TargetKind string `json:"targetKind"`
 
 	Source      TriggerSource `json:"source"`
 	TargetChain string        `json:"targetChain"`
@@ -144,10 +146,13 @@ func parseTriggerResource(obj map[string]interface{}) TriggerSummary {
 		Ready:             "unknown",
 	}
 	target := getNestedMap(spec, "target")
+	t.TargetKind = "chain"
 	if k := getNestedMap(target, "knight"); k != nil {
 		t.TargetKnight = getStr(k, "name")
 		t.Task = getStr(k, "task")
+		t.TargetKind = "knight"
 	} else if m := getNestedMap(target, "mission"); m != nil {
+		t.TargetKind = "mission"
 		t.Task = getStr(m, "objective")
 	} else {
 		t.Task = getStr(spec, "input")

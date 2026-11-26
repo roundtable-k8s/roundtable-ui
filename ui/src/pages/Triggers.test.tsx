@@ -48,6 +48,21 @@ describe('TriggersPage', () => {
     expect(within(rows[0]).getByRole('link', { name: 'nightly' })).toHaveAttribute('href', '/triggers/roundtable/nightly')
   })
 
+  it('labels knight and mission targets without an empty chain link', async () => {
+    mockApiGet.mockResolvedValue([
+      trig({ name: 'k', targetChain: '', targetKind: 'knight', targetKnight: 'galahad' }),
+      trig({ name: 'm', targetChain: '', targetKind: 'mission' }),
+    ])
+    render(<MemoryRouter><TriggersPage /></MemoryRouter>)
+    const rows = (await screen.findAllByRole('row')).slice(1)
+    expect(within(rows[0]).getByRole('link', { name: 'knight galahad' })).toHaveAttribute('href', '/fleet?knight=galahad')
+    expect(within(rows[1]).getByRole('link', { name: 'mission' })).toHaveAttribute('href', '/missions')
+    for (const l of screen.getAllByRole('link')) {
+      expect(l.textContent).not.toBe('')
+      expect(l.getAttribute('href')).not.toBe('/chains?chain=')
+    }
+  })
+
   it('shows an error banner when loading fails', async () => {
     mockApiGet.mockImplementation((url: string) => (url ? Promise.reject(new Error('boom')) : Promise.resolve([])))
     render(<MemoryRouter><TriggersPage /></MemoryRouter>)
