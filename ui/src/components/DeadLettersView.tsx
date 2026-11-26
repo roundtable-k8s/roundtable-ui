@@ -144,8 +144,8 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
       )}
 
       {selected && (
-        <Drawer onClose={() => setSelected(null)}>
-          <div className="p-6 space-y-4" role="dialog" aria-label={`Dead letter ${selected.taskId}`}>
+        <Drawer onClose={() => setSelected(null)} label={`Dead letter ${selected.taskId}`}>
+          <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white break-all">{selected.taskId}</h2>
               <button type="button" onClick={() => setSelected(null)} className="text-gray-400 hover:text-white">Close</button>

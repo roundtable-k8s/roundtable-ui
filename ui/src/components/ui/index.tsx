@@ -4,7 +4,7 @@
  * collapsibles, overlays, progress bars) with drifting styles — this is
  * the one copy.
  */
-import { useState, type ReactNode, type ComponentType } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode, type ComponentType, type RefObject } from 'react'
 import { RefreshCw, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { phaseColor } from '../../lib/status'
 
@@ -164,24 +164,90 @@ export function Collapsible({ title, defaultOpen = false, children }: {
   )
 }
 
-/** Centered modal with dimmed backdrop. Closes only via the X button —
- *  backdrop clicks are ignored so stray clicks can't discard form state. */
-export function Modal({ onClose, title, icon, children }: {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** Dialog keyboard behaviour: focus moves in on open and returns to the opener
+ *  on close, Tab stays inside, Escape calls onClose unless disabled. */
+function useDialogBehavior(ref: RefObject<HTMLElement | null>, onClose: () => void, closeOnEscape: boolean) {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const escRef = useRef(closeOnEscape)
+  escRef.current = closeOnEscape
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
+    const el = ref.current
+    if (el && !el.contains(document.activeElement)) {
+      const first = el.querySelector<HTMLElement>(FOCUSABLE)
+      ;(first ?? el).focus()
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (escRef.current) {
+          e.stopPropagation()
+          onCloseRef.current()
+        }
+        return
+      }
+      if (e.key !== 'Tab' || !ref.current) return
+      const items = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE))
+      if (items.length === 0) {
+        e.preventDefault()
+        ref.current.focus()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || active === ref.current)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      } else if (!ref.current.contains(active)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      if (opener && opener.isConnected) opener.focus()
+    }
+  }, [ref])
+}
+
+/** Centered modal with dimmed backdrop. Closes via the X button or Escape
+ *  (unless closeOnEscape is false) — backdrop clicks are ignored so stray
+ *  clicks can't discard form state. */
+export function Modal({ onClose, title, icon, children, closeOnEscape = true }: {
   onClose: () => void
   title: ReactNode
   icon?: ReactNode
   children: ReactNode
+  closeOnEscape?: boolean
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  useDialogBehavior(ref, onClose, closeOnEscape)
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-roundtable-slate border border-roundtable-steel rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto focus:outline-none"
+      >
         <div className="flex items-center justify-between p-6 border-b border-roundtable-steel">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <h2 id={titleId} className="text-xl font-bold text-white flex items-center gap-2">
             {icon}
             {title}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white">
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
         {children}
@@ -190,16 +256,27 @@ export function Modal({ onClose, title, icon, children }: {
   )
 }
 
-/** Right-side slide-over panel with dimmed backdrop. */
-export function Drawer({ onClose, children, widthClass = 'w-full max-w-xl' }: {
+/** Right-side slide-over panel with dimmed backdrop. Closes on backdrop click or Escape. */
+export function Drawer({ onClose, children, label, widthClass = 'w-full max-w-xl' }: {
   onClose: () => void
   children: ReactNode
+  /** Accessible name of the dialog. */
+  label?: string
   widthClass?: string
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogBehavior(ref, onClose, true)
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className={`fixed right-0 top-0 h-full ${widthClass} bg-roundtable-slate border-l border-roundtable-steel z-50 overflow-y-auto`}>
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        className={`fixed right-0 top-0 h-full ${widthClass} bg-roundtable-slate border-l border-roundtable-steel z-50 overflow-y-auto focus:outline-none`}
+      >
         {children}
       </div>
     </>

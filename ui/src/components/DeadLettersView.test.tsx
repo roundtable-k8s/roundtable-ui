@@ -50,6 +50,15 @@ describe('DeadLettersView', () => {
     expect(link).toHaveAttribute('href', '/running?task=t1-r2')
   })
 
+  it('closes the retry confirmation on Escape without retrying', async () => {
+    const { onRetry } = setup([chain])
+    await userEvent.click(screen.getByRole('button', { name: 'Retry outside the chain' }))
+    expect(screen.getByRole('dialog', { name: 'Retry outside the chain?' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onRetry).not.toHaveBeenCalled()
+  })
+
   it('asks for confirmation before retrying a chain step outside the chain, with force', async () => {
     const { onRetry } = setup([chain])
     await userEvent.click(screen.getByRole('button', { name: 'Retry outside the chain' }))
