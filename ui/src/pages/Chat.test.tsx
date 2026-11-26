@@ -106,7 +106,7 @@ describe('ChatPage', () => {
     await userEvent.selectOptions(screen.getByLabelText('Knight'), 'b/galahad')
     await userEvent.type(await screen.findByLabelText('Message'), 'hi')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
-    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'hi', namespace: 'b' })
+    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'hi', namespace: 'b' }, { headers: { 'Idempotency-Key': expect.any(String) } })
   })
 
   it('lists knights from the gateway', async () => {
