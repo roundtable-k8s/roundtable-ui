@@ -42,12 +42,19 @@ export function sortedItems(f: ChainFanOut): ChainItem[] {
   return [...(f.items || [])].sort((a, b) => rank(a.phase) - rank(b.phase) || a.index - b.index)
 }
 
+/** Chain phases the operator never leaves (ChainPhase: Succeeded, Failed, PartiallySucceeded). */
+export const TERMINAL_PHASES: readonly string[] = ['Succeeded', 'Failed', 'PartiallySucceeded']
+
+export function isTerminalPhase(phase: string | undefined): boolean {
+  return !!phase && TERMINAL_PHASES.includes(phase)
+}
+
 /** Human-readable reason for a skipped step. */
 export function skipReasonText(step: Pick<ChainStep, 'skipReason' | 'when' | 'skipMessage'>): string {
   if (step.skipMessage) return step.skipMessage
   switch (step.skipReason) {
     case 'WhenFalse':
-      return step.when ? `when condition was false: ${step.when}` : 'when condition was false'
+      return step.when ? `when evaluated to false: ${step.when}` : 'when evaluated to false'
     case 'ChainFailed':
       return 'the chain failed before this step ran'
     case undefined:

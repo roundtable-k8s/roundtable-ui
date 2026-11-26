@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyChainUpdate, elapsedLabel, fanOutCounts, heartbeatLabel, loopLabel, loopRounds, roundFailed,
-  parseChainUpdate, runningHref, scheduleSummary, skipReasonText, sortedItems, sortScheduledFirst,
+  isTerminalPhase, parseChainUpdate, runningHref, scheduleSummary, skipReasonText, sortedItems, sortScheduledFirst,
 } from './chains'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from './types'
@@ -26,11 +26,11 @@ it('sortedItems puts running first, then failed, then finished', () => {
 
 describe('skipReasonText', () => {
   it('explains when-skips with the expression', () => {
-    expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1' })).toBe('when condition was false: x == 1')
+    expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1' })).toBe('when evaluated to false: x == 1')
   })
   it('prefers the API skipMessage when present', () => {
     expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1', skipMessage: 'api says so' })).toBe('api says so')
-    expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1', skipMessage: '' })).toBe('when condition was false: x == 1')
+    expect(skipReasonText({ skipReason: 'WhenFalse', when: 'x == 1', skipMessage: '' })).toBe('when evaluated to false: x == 1')
   })
   it('does not repeat "skipped" for the real API chain-failed message', () => {
     const text = skipReasonText({ skipReason: 'ChainFailed', skipMessage: 'the chain failed before this step ran' })
@@ -104,4 +104,9 @@ describe('scheduled chains', () => {
     expect(scheduleSummary({ ...c, suspend: true }, () => 'x', () => 'y')).toMatch(/^suspended/)
     expect(scheduleSummary(mk('p'), () => 'x', () => 'y')).toBe('')
   })
+})
+
+describe('isTerminalPhase', () => {
+  it.each(['Succeeded', 'Failed', 'PartiallySucceeded'])('%s is terminal', p => expect(isTerminalPhase(p)).toBe(true))
+  it.each(['Idle', 'Running', 'Suspended', 'Completed', 'Cancelled', 'TimedOut', '', undefined])('%s is not terminal', p => expect(isTerminalPhase(p)).toBe(false))
 })
