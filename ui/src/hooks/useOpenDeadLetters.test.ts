@@ -14,7 +14,7 @@ describe('useOpenDeadLetters', () => {
     await waitFor(() => expect(alpha.result.current.count).toBe(1))
     const none = renderHook(() => useOpenDeadLetters('none'))
     await waitFor(() => expect(none.result.current.count).toBe(1))
-    expect(apiGet).toHaveBeenCalledWith('/api/dead-letters?state=open')
+    expect(apiGet).toHaveBeenCalledWith('/api/dead-letters?state=open', expect.objectContaining({ signal: expect.anything() }))
   })
 
   it('flags a capped list and exposes the real total when reported', async () => {
@@ -43,5 +43,23 @@ describe('useOpenDeadLetters', () => {
     const { result } = renderHook(() => useOpenDeadLetters('', 20))
     await waitFor(() => expect(result.current.count).toBe(1))
     expect(result.current.error).toBeUndefined()
+  })
+})
+
+describe('useOpenDeadLetters polling', () => {
+  it('makes no requests on a hidden tab and refetches once when visible', async () => {
+    vi.useFakeTimers()
+    apiGet.mockReset()
+    apiGet.mockResolvedValue({ deadLetters: [] })
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+    renderHook(() => useOpenDeadLetters(''))
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(apiGet).not.toHaveBeenCalled()
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(apiGet).toHaveBeenCalledTimes(1)
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    vi.useRealTimers()
   })
 })

@@ -75,7 +75,7 @@ describe('TasksPage', () => {
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
     await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('succeeded'), { timeout: 5000 })
-    expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1')
+    expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1', expect.anything())
     expect(screen.getByTestId('dispatch-output').textContent).toBe('page fixed')
   })
 })

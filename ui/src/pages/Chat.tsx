@@ -1,3 +1,4 @@
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MessageSquare, Send, Activity } from 'lucide-react'
@@ -44,12 +45,10 @@ export function ChatPage() {
 
   // Poll every pending turn until the gateway reports a final status.
   const pendingIds = turns.filter((t) => t.taskId && !isFinalStatus(t.status)).map((t) => t.taskId).join(',')
-  useEffect(() => {
-    if (!pendingIds) return
-    const ids = pendingIds.split(',')
-    const timer = setInterval(() => {
-      for (const id of ids) {
-        apiGet<ChatTask>(`/api/chat/tasks/${encodeURIComponent(id)}`)
+  useVisibleInterval(
+    (signal) =>
+      Promise.all(pendingIds.split(',').map((id) =>
+        apiGet<ChatTask>(`/api/chat/tasks/${encodeURIComponent(id)}`, { signal })
           .then((t) => setTurns((ts) => ts.map((x) => (x.taskId === id ? mergeTurn(x, t) : x))))
           .catch((e: unknown) => {
             // A missing task will never finish; stop polling and unblock Send.
@@ -57,11 +56,12 @@ export function ChatPage() {
               setTurns((ts) => ts.map((x) => (x.taskId === id ? { ...x, status: 'failed', error: 'Task not found on the gateway' } : x)))
             }
             // other errors are transient: next tick retries
-          })
-      }
-    }, POLL_MS)
-    return () => clearInterval(timer)
-  }, [pendingIds])
+          }),
+      )),
+    POLL_MS,
+    !!pendingIds,
+    { key: pendingIds },
+  )
 
   async function send() {
     const text = message.trim()

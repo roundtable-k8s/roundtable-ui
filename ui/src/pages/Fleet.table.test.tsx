@@ -30,7 +30,7 @@ describe('Fleet table filter', () => {
   it('selecting personal hides roundtable-dev knights', async () => {
     render(<MemoryRouter initialEntries={['/fleet?table=personal']}><FleetPage /></MemoryRouter>)
     await waitFor(() => expect(names()).toEqual(['galahad']))
-    expect(mockApiGet).toHaveBeenCalledWith('/api/fleet?table=personal')
+    expect(mockApiGet).toHaveBeenCalledWith('/api/fleet?table=personal', expect.anything())
     expect(screen.queryByTestId('table-badge')).toBeNull()
   })
 

@@ -1,3 +1,4 @@
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { Play } from 'lucide-react'
@@ -28,15 +29,15 @@ export function RunNow({ chain, namespace }: { chain: string; namespace: string 
   // Follow the run until it finishes
   const runName = run && !run.done ? run.run : ''
   const runNs = run?.namespace ?? namespace
-  useEffect(() => {
-    if (!runName) return
-    const timer = setInterval(() => {
-      apiGet<ChainRun>(`/api/chains/runs/${encodeURIComponent(runNs)}/${encodeURIComponent(runName)}`)
+  useVisibleInterval(
+    (signal) =>
+      apiGet<ChainRun>(`/api/chains/runs/${encodeURIComponent(runNs)}/${encodeURIComponent(runName)}`, { signal })
         .then((r) => setRun((prev) => (prev && prev.run === r.run ? { ...prev, ...r } : prev)))
-        .catch(() => {})
-    }, POLL_MS)
-    return () => clearInterval(timer)
-  }, [runName, runNs])
+        .catch(() => {}),
+    POLL_MS,
+    !!runName,
+    { key: `${runNs}/${runName}` },
+  )
 
   const start = async () => {
     setStarting(true)

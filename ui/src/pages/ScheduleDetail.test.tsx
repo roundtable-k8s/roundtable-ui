@@ -73,7 +73,7 @@ describe('ScheduleDetailPage', () => {
     expect(summary).toHaveTextContent('at 07:00 on Monday to Friday')
 
     const history = await screen.findByRole('region', { name: 'run history' })
-    expect(mockApiGet).toHaveBeenCalledWith('/api/schedules/roundtable/morning-digest/runs?limit=50')
+    expect(mockApiGet).toHaveBeenCalledWith('/api/schedules/roundtable/morning-digest/runs?limit=50', expect.anything())
     const rows = within(history).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('Succeeded')

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useVisibleInterval } from './useVisibleInterval'
 import { inTable } from '../lib/tables'
 import { apiGet } from '../lib/api'
 import { DEAD_LETTERS_URL, type DeadLetter } from '../lib/deadLetters'
@@ -20,22 +21,20 @@ export interface OpenDeadLetters {
 /** Open dead letters, polled for the nav badge. `error` is set when the last poll failed (the count is then unknown). */
 export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLetters {
   const [state, setState] = useState<OpenDeadLetters>({ count: 0, capped: false })
-  useEffect(() => {
-    let alive = true
-    const poll = () =>
-      apiGet<{ deadLetters?: DeadLetter[]; total?: number }>(`${DEAD_LETTERS_URL}?state=open`)
+  useVisibleInterval(
+    (signal) =>
+      apiGet<{ deadLetters?: DeadLetter[]; total?: number }>(`${DEAD_LETTERS_URL}?state=open`, { signal })
         .then((d) => {
-          if (!alive) return
           const all = d.deadLetters ?? []
           const count = all.filter((x) => inTable(table, x.table)).length
           const capped = all.length >= DEAD_LETTER_CAP || (typeof d.total === 'number' && d.total > all.length)
           setState({ count, capped, total: !table && typeof d.total === 'number' ? d.total : undefined })
         })
-        .catch(() => { if (alive) setState((prev) => ({ ...prev, error: true })) })
-    poll()
-    const id = setInterval(poll, intervalMs)
-    return () => { alive = false; clearInterval(id) }
-  }, [table, intervalMs])
+        .catch(() => { if (!signal.aborted) setState((prev) => ({ ...prev, error: true })) }),
+    intervalMs,
+    true,
+    { immediate: true, key: table },
+  )
   return state
 }
 

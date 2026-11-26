@@ -50,8 +50,8 @@ describe('QueuesPage', () => {
     mockApi([], [])
     render(<MemoryRouter><QueuesPage /></MemoryRouter>)
     expect(await screen.findByText('No knight queues found.')).toBeInTheDocument()
-    expect(mockApiGet).toHaveBeenCalledWith('/api/queues')
-    expect(mockApiGet).toHaveBeenCalledWith('/api/queues/history?since=1h')
+    expect(mockApiGet).toHaveBeenCalledWith('/api/queues', expect.anything())
+    expect(mockApiGet).toHaveBeenCalledWith('/api/queues/history?since=1h', expect.anything())
   })
 
   it('shows a backlog: 8 pending, oldest wait and the scale-up in the sparkline', async () => {
@@ -133,7 +133,7 @@ describe('QueuesPage table filter', () => {
     render(<MemoryRouter initialEntries={['/queues?table=personal']}><QueuesPage /></MemoryRouter>)
     expect(await screen.findByTestId('queue-row-galahad')).toBeInTheDocument()
     expect(screen.queryByTestId('queue-row-rt-ui')).toBeNull()
-    expect(mockApiGet).toHaveBeenCalledWith('/api/queues?table=personal')
+    expect(mockApiGet).toHaveBeenCalledWith('/api/queues?table=personal', expect.anything())
     expect(screen.queryByTestId('table-badge')).toBeNull()
   })
 
