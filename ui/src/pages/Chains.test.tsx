@@ -3,7 +3,7 @@ import { render, screen, within, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChainsPage, CHAINS_LIST_URL, CHAIN_GROUPS_URL, FALLBACK_POLL_MS, GROUP_PAGE_SIZE, GROUP_REFRESH_MS } from './Chains'
-import { apiGet, apiPost } from '../lib/api'
+import { apiGet, apiPost, apiFetch } from '../lib/api'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from '../lib/types'
 import apiFanout from '../test/fixtures/api/fanout.json'
@@ -11,7 +11,7 @@ import apiLoop from '../test/fixtures/api/pr-pipeline-loop.json'
 import apiCost from '../test/fixtures/api/cost.json'
 import type { TopicListener } from '../hooks/useWebSocket'
 
-vi.mock('../lib/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
+vi.mock('../lib/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn(), apiFetch: vi.fn() }))
 
 let connected = true
 const listeners = new Map<string, Set<TopicListener>>()
@@ -504,5 +504,25 @@ describe('ChainsPage trace link', () => {
     renderPage('/chains?chain=doc-sweep')
     await screen.findByRole('region', { name: 'step review-each' })
     expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  })
+})
+
+describe('ChainsPage truncated list', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ ...fanOutChain(), name: `c-${i}` }))
+
+  it('says "showing 500 of N" when the API holds more chains than the page', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve(many(500)) : Promise.reject(new Error('no KV')))
+    vi.mocked(apiFetch).mockResolvedValue(new Response('[]', { headers: { 'X-Total-Count': '731' } }))
+    renderPage('/chains')
+    expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
+  })
+
+  it('shows no note when the page is not full', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve(many(3)) : Promise.reject(new Error('no KV')))
+    renderPage('/chains')
+    await screen.findByText('c-0')
+    expect(screen.queryByTestId('chains-truncated')).toBeNull()
   })
 })

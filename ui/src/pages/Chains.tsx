@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from '../lib/api'
+import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, ExternalLink, Square } from 'lucide-react'
 import { UntrustedText } from '../components/UntrustedText'
@@ -29,7 +30,7 @@ export const FALLBACK_POLL_MS = 30_000
  * copy. Run copies are summarised by /api/chain-groups and loaded per
  * template on expand (#275).
  */
-export const CHAINS_LIST_URL = '/api/chains?copies=exclude&limit=500'
+export const CHAINS_LIST_URL = `/api/chains?copies=exclude&limit=${CHAIN_LIST_LIMIT}`
 export const CHAIN_GROUPS_URL = '/api/chain-groups'
 /** Run copies loaded per "load more". */
 export const GROUP_PAGE_SIZE = 20
@@ -774,6 +775,7 @@ export function ChainsPage() {
   const { table } = useTableFilter()
   const { connected, subscribeTopic } = useWebSocket()
   const [chains, setChains] = useState<Chain[]>([])
+  const [listTotal, setListTotal] = useState<number | null>(null)
   const [groups, setGroups] = useState<ChainRunGroup[]>([])
   const [focusDetail, setFocusDetail] = useState<Chain | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -807,6 +809,10 @@ export function ChainsPage() {
         if (controller.signal.aborted) return
         setChains(replay.reduce(applyChainUpdate, data || []))
         setError('')
+        // A full page means the list may be cut short: ask for the real total.
+        if ((data || []).length >= CHAIN_LIST_LIMIT) {
+          fetchChainTotal(withTable(CHAINS_LIST_URL, table)).then(n => { if (!controller.signal.aborted) setListTotal(n) })
+        } else setListTotal(null)
       })
       .catch((e) => {
         // Keep the last good list on transient failures — surface the error instead
@@ -916,6 +922,12 @@ export function ChainsPage() {
         <div className="mb-6">
           <ErrorBanner>Failed to refresh chains: {error} — showing last known state</ErrorBanner>
         </div>
+      )}
+
+      {truncationNote(chains.length, listTotal) && (
+        <p className="mb-3 text-xs text-yellow-400" data-testid="chains-truncated">
+          {truncationNote(chains.length, listTotal)} chains — the rest are not listed or searchable here.
+        </p>
       )}
 
       {shownChains.length === 0 && shownGroups.length === 0 && !loading && (

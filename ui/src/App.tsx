@@ -8,7 +8,7 @@ import { useTaskNotifications } from './hooks/useTaskNotifications'
 import { useTableFilter } from './hooks/useTableFilter'
 import { useTables } from './hooks/useTables'
 import { TableSelect } from './components/ui'
-import { useOpenDeadLetters } from './hooks/useOpenDeadLetters'
+import { useOpenDeadLetters, deadLetterBadge } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
 const TasksPage = lazy(() => import('./pages/Tasks').then(m => ({ default: m.TasksPage })))
@@ -65,6 +65,7 @@ export default function App() {
   const { table, setTable } = useTableFilter()
   const tables = useTables()
   const openDeadLetters = useOpenDeadLetters(table)
+  const deadBadge = deadLetterBadge(openDeadLetters)
 
   // Close sidebar on navigation (mobile)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
@@ -120,9 +121,9 @@ export default function App() {
               >
                 <Icon className="w-5 h-5" />
                 <span className="font-medium">{label}</span>
-                {path === '/failed' && openDeadLetters > 0 && (
-                  <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400" aria-label={`${openDeadLetters} open`}>
-                    {openDeadLetters}
+                {path === '/failed' && openDeadLetters.count > 0 && (
+                  <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400" aria-label={deadBadge.title} title={deadBadge.title}>
+                    {deadBadge.text}
                   </span>
                 )}
               </Link>
