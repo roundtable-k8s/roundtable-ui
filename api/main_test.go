@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -749,6 +750,9 @@ func TestMissionCreateHandler(t *testing.T) {
 		name           string
 		requestBody    map[string]interface{}
 		expectedStatus int
+		// checkSpec, when set, inspects the spec of the Mission read back
+		// from the dynamic client after a 201.
+		checkSpec func(t *testing.T, spec map[string]interface{})
 	}{
 		{
 			name: "valid mission creation",
@@ -777,6 +781,11 @@ func TestMissionCreateHandler(t *testing.T) {
 				"metaMission": true,
 			},
 			expectedStatus: http.StatusCreated,
+			checkSpec: func(t *testing.T, spec map[string]interface{}) {
+				if _, has := spec["planner"]; has {
+					t.Errorf("spec.planner should be absent when the request has none, got %v", spec["planner"])
+				}
+			},
 		},
 		{
 			name: "meta-mission with planner options only",
@@ -787,6 +796,18 @@ func TestMissionCreateHandler(t *testing.T) {
 				"planner":     map[string]interface{}{"maxChains": 3},
 			},
 			expectedStatus: http.StatusCreated,
+			checkSpec: func(t *testing.T, spec map[string]interface{}) {
+				planner, _ := spec["planner"].(map[string]interface{})
+				if planner == nil {
+					t.Fatalf("spec.planner missing: %v", spec)
+				}
+				if _, has := planner["knightRef"]; has {
+					t.Errorf("spec.planner.knightRef should be absent, got %v", planner["knightRef"])
+				}
+				if planner["maxChains"] != float64(3) {
+					t.Errorf("spec.planner.maxChains = %v, want 3", planner["maxChains"])
+				}
+			},
 		},
 		{
 			name: "meta-mission with invalid planner knightRef",
@@ -811,6 +832,20 @@ func TestMissionCreateHandler(t *testing.T) {
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+			if tt.checkSpec != nil && w.Code == http.StatusCreated {
+				var created struct {
+					Name string `json:"name"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+					t.Fatalf("parse response: %v", err)
+				}
+				obj, err := dynClient.Resource(missionGVR).Namespace("test-namespace").Get(context.Background(), created.Name, metav1.GetOptions{})
+				if err != nil {
+					t.Fatalf("read back mission %q: %v", created.Name, err)
+				}
+				spec, _ := obj.Object["spec"].(map[string]interface{})
+				tt.checkSpec(t, spec)
 			}
 		})
 	}

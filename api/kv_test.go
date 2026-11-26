@@ -72,7 +72,7 @@ func TestChainStepOutputHandler(t *testing.T) {
 		t.Fatalf("found: status %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `"out":"ok"`) || strings.Contains(body, "hunter2hunter2") {
+	if !strings.Contains(body, `"out":"ok"`) || strings.Contains(body, "hunter2hunter2") || !strings.Contains(body, redactedMarker) {
 		t.Errorf("expected redacted body, got %s", body)
 	}
 	if rec := kvRequest(chainStepOutputHandler(), pat, "/api/chains/c1/steps/zz/output"); rec.Code != 404 {
@@ -98,6 +98,23 @@ func TestKVHandlersMissingBucketNotCreated(t *testing.T) {
 	for _, b := range []string{"mission-results", "chain-outputs"} {
 		if bucketExists(t, jsc, b) {
 			t.Errorf("bucket %s was created by a GET", b)
+		}
+	}
+}
+
+// TestKVRoutesAreGone asserts that no API route matches the removed /api/kv
+// paths in the router setupTestRouter builds. Production answers unmatched
+// paths with the SPA fallback (200 index.html, no /api guard), so this test
+// checks route matching, not the HTTP response.
+func TestKVRoutesAreGone(t *testing.T) {
+	router := setupTestRouter()
+	for _, path := range []string{"/api/kv/anything", "/api/kv/buckets", "/api/kv/buckets/mission-results"} {
+		for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPost} {
+			req := httptest.NewRequest(method, path, nil)
+			var m mux.RouteMatch
+			if router.Match(req, &m) {
+				t.Errorf("%s %s matched route %v; the /api/kv routes were removed", method, path, m.Route.GetName())
+			}
 		}
 	}
 }
