@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -118,6 +119,9 @@ func newTracedGatewayRouter(g *gatewayClient) *mux.Router {
 	r.Use(tracingMiddleware)
 	r.HandleFunc("/api/tasks/dispatch", func(w http.ResponseWriter, req *http.Request) {
 		g.relay(w, req, http.MethodPost, "/v1/knights/galahad/invoke", nil, []byte(`{}`))
+	}).Methods("POST")
+	r.HandleFunc("/api/runs/{ns}/{run}/cancel", func(w http.ResponseWriter, req *http.Request) {
+		g.relay(w, req, http.MethodPost, "/v1/runs/ns/run-SECRETID/cancel", url.Values{"table": {"SECRETQ"}}, []byte(`{}`))
 	}).Methods("POST")
 	r.HandleFunc("/api/chat/{taskId}/events", chatEventsHandler(g)).Methods("GET")
 	return r
@@ -237,5 +241,45 @@ func TestGatewayRouteTemplate(t *testing.T) {
 		if got := gatewayRouteTemplate(in); got != want {
 			t.Errorf("%s -> %s, want %s", in, got, want)
 		}
+	}
+}
+
+func assertNoSecrets(t *testing.T, sr *tracetest.SpanRecorder) {
+	t.Helper()
+	for _, s := range sr.Ended() {
+		if s.SpanKind().String() != "client" {
+			continue
+		}
+		all := s.Name()
+		for _, a := range s.Attributes() {
+			all += " " + string(a.Key) + "=" + a.Value.Emit()
+		}
+		for _, secret := range []string{"SECRETID", "SECRETQ", "secret-tok", "t-SECRET"} {
+			if strings.Contains(all, secret) {
+				t.Errorf("client span leaks %q: %s", secret, all)
+			}
+		}
+	}
+}
+
+func TestGatewayClientSpanHidesIDs(t *testing.T) {
+	sr := withRecorder(t)
+	var got []string
+	gw := traceparentGateway(t, &got)
+	g := &gatewayClient{baseURL: gw.URL, token: "secret-tok", http: newGatewayHTTPClient(http.DefaultTransport)}
+	r := newTracedGatewayRouter(g)
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/runs/ns/x/cancel", nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/chat/t-SECRET/events", nil))
+	assertNoSecrets(t, sr)
+	found := false
+	for _, s := range sr.Ended() {
+		for _, a := range s.Attributes() {
+			if a.Key == "url.full" && strings.HasSuffix(a.Value.AsString(), "/v1/runs/{namespace}/{name}/cancel") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("templated url.full not recorded")
 	}
 }

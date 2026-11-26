@@ -16,6 +16,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // validTaskID guards the task ID that is forwarded into a gateway URL path.
@@ -52,11 +54,23 @@ func newGatewayClientFromEnv() *gatewayClient {
 func newGatewayHTTPClient(rt http.RoundTripper) *http.Client {
 	return &http.Client{
 		Timeout: 30 * time.Second,
-		Transport: otelhttp.NewTransport(rt, otelhttp.WithSpanNameFormatter(
+		Transport: otelhttp.NewTransport(redactURLTransport{rt}, otelhttp.WithSpanNameFormatter(
 			func(_ string, r *http.Request) string {
 				return r.Method + " " + gatewayRouteTemplate(r.URL.Path)
 			})),
 	}
+}
+
+// redactURLTransport runs inside the otelhttp transport, where the client span
+// is already in the request context. otelhttp records the raw URL as url.full
+// (ids and query included); overwrite it with the templated path.
+type redactURLTransport struct{ rt http.RoundTripper }
+
+func (t redactURLTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if sp := trace.SpanFromContext(req.Context()); sp.IsRecording() {
+		sp.SetAttributes(attribute.String("url.full", req.URL.Scheme+"://"+req.URL.Host+gatewayRouteTemplate(req.URL.Path)))
+	}
+	return t.rt.RoundTrip(req)
 }
 
 // gatewayIDSegments maps a gateway collection to the number of id segments
