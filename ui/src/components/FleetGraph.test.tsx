@@ -4,11 +4,16 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { KnightNode } from './FleetGraph'
 
 const base = { label: 'galahad', emoji: '🛡', domain: 'security', color: '#fff', heat: 0, recentTasks: 0 }
+type KnightNodeProps = Parameters<typeof KnightNode>[0]
+const nodeProps = (status: string, busy: boolean): KnightNodeProps => ({
+  id: 'galahad', type: 'knight', data: { ...base, status, busy },
+  selected: false, dragging: false, draggable: false, selectable: false, deletable: false,
+  isConnectable: false, zIndex: 0, positionAbsoluteX: 0, positionAbsoluteY: 0,
+})
 const renderNode = (status: string, busy: boolean) =>
   render(
     <ReactFlowProvider>
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <KnightNode {...({ data: { ...base, status, busy } } as any)} />
+      <KnightNode {...nodeProps(status, busy)} />
     </ReactFlowProvider>,
   )
 

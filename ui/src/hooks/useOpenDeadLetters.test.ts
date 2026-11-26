@@ -48,8 +48,8 @@ describe('useOpenDeadLetters', () => {
 
 describe('useOpenDeadLetters polling', () => {
   afterEach(() => {
-    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
     vi.useRealTimers()
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
   })
 
   it('makes no requests on a hidden tab and refetches once when visible', async () => {

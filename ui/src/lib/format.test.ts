@@ -110,6 +110,14 @@ describe('timestamps', () => {
     expect(formatTimestampOrDate(old)).toBe(new Date(old).toLocaleString())
     expect(formatTimestampOrDate('nope')).toBe('nope')
   })
+  it('treats any time after local midnight as today, and just before it as not', () => {
+    const midnight = new Date(NOW)
+    midnight.setHours(0, 0, 0, 0)
+    const atMidnight = midnight.toISOString()
+    const before = new Date(midnight.getTime() - 1000).toISOString()
+    expect(formatTimestampOrDate(atMidnight)).toBe(new Date(atMidnight).toLocaleTimeString())
+    expect(formatTimestampOrDate(before)).toBe(new Date(before).toLocaleString())
+  })
 })
 
 describe('until', () => {
