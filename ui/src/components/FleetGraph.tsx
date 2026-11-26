@@ -47,7 +47,7 @@ interface KnightNodeData {
   [key: string]: unknown
 }
 
-function KnightNode({ data }: NodeProps<Node<KnightNodeData>>) {
+export function KnightNode({ data }: NodeProps<Node<KnightNodeData>>) {
   const heat = data.heat ?? 0
   const borderColor = data.status === 'online' ? heatColor(heat) : '#475569'
 

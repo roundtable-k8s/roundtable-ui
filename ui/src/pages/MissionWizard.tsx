@@ -378,8 +378,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
 
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label htmlFor="wiz-timeout" className="block text-xs text-gray-400 mb-1">Timeout (s)</label>
-                      <input id="wiz-timeout"
+                      <label htmlFor="wiz-planner-timeout" className="block text-xs text-gray-400 mb-1">Timeout (s)</label>
+                      <input id="wiz-planner-timeout"
                         type="number"
                         value={form.planner.timeout}
                         onChange={e => updatePlanner('timeout', parseInt(e.target.value) || 300)}

@@ -81,7 +81,7 @@ export function LivePage() {
   return (
     <div>
       {fleetError && (
-        <div className="mb-4" role="alert">
+        <div className="mb-4">
           <ErrorBanner>Failed to load fleet: {fleetError}</ErrorBanner>
         </div>
       )}
