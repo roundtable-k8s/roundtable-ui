@@ -19,9 +19,8 @@ export interface RoundTable {
     claimed: number
   }
   policies?: {
-    maxConcurrentTasks: number
     costBudgetUSD: string
-    maxKnights: number
+    maxConcurrentPlanTasks: number
     maxMissions: number
   }
   activeMissions?: number

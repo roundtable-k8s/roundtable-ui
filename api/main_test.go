@@ -1399,10 +1399,9 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 					"subjectPrefix": "fleet-b",
 				},
 				"policies": map[string]interface{}{
-					"maxConcurrentTasks": int64(100),
-					"costBudgetUSD":      "500.00",
-					"maxKnights":         int64(20),
-					"maxMissions":        int64(10),
+					"maxConcurrentPlanTasks": int64(6),
+					"costBudgetUSD":          "500.00",
+					"maxMissions":            int64(10),
 				},
 				"suspend":   false,
 				"ephemeral": false,
@@ -1494,16 +1493,12 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 		t.Fatal("expected policies to be present")
 	}
 
-	if rt.Policies.MaxConcurrentTasks != 100 {
-		t.Errorf("expected maxConcurrentTasks 100, got %d", rt.Policies.MaxConcurrentTasks)
+	if rt.Policies.MaxConcurrentPlanTasks != 6 {
+		t.Errorf("expected maxConcurrentPlanTasks 6, got %d", rt.Policies.MaxConcurrentPlanTasks)
 	}
 
 	if rt.Policies.CostBudgetUSD != "500.00" {
 		t.Errorf("expected costBudgetUSD '500.00', got '%s'", rt.Policies.CostBudgetUSD)
-	}
-
-	if rt.Policies.MaxKnights != 20 {
-		t.Errorf("expected maxKnights 20, got %d", rt.Policies.MaxKnights)
 	}
 
 	if rt.Policies.MaxMissions != 10 {

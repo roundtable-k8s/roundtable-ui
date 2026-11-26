@@ -2139,10 +2139,9 @@ type WarmPoolStatusDTO struct {
 
 // PoliciesDTO represents the policies spec fields from the CRD
 type PoliciesDTO struct {
-	MaxConcurrentTasks int    `json:"maxConcurrentTasks"`
-	CostBudgetUSD      string `json:"costBudgetUSD"`
-	MaxKnights         int    `json:"maxKnights"`
-	MaxMissions        int    `json:"maxMissions"`
+	CostBudgetUSD          string `json:"costBudgetUSD"`
+	MaxConcurrentPlanTasks int    `json:"maxConcurrentPlanTasks"`
+	MaxMissions            int    `json:"maxMissions"`
 }
 
 // RoundTableSummary is the API response for roundtable list
@@ -2273,10 +2272,9 @@ func parseRoundTableResource(obj map[string]interface{}) RoundTableSummary {
 	if policies := getNestedMap(spec, "policies"); policies != nil {
 		rt.CostBudgetUSD = getStr(policies, "costBudgetUSD")
 		rt.Policies = &PoliciesDTO{
-			MaxConcurrentTasks: getInt(policies, "maxConcurrentTasks"),
-			CostBudgetUSD:      getStr(policies, "costBudgetUSD"),
-			MaxKnights:         getInt(policies, "maxKnights"),
-			MaxMissions:        getInt(policies, "maxMissions"),
+			CostBudgetUSD:          getStr(policies, "costBudgetUSD"),
+			MaxConcurrentPlanTasks: getInt(policies, "maxConcurrentPlanTasks"),
+			MaxMissions:            getInt(policies, "maxMissions"),
 		}
 	}
 
