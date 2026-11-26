@@ -128,10 +128,10 @@ func TestResolveTables(t *testing.T) {
 }
 
 func TestTableFromRoundTableRejectsWildcardPrefix(t *testing.T) {
-	if _, ok := tableFromRoundTable(makeRoundTable("bad", "fleet.>", "a", "b")); ok {
+	if _, ok := tableFromRoundTable(context.Background(), makeRoundTable("bad", "fleet.>", "a", "b")); ok {
 		t.Error("wildcard prefix accepted")
 	}
-	tbl, ok := tableFromRoundTable(makeRoundTable("ok", "rt-dev", "t", "bad stream"))
+	tbl, ok := tableFromRoundTable(context.Background(), makeRoundTable("ok", "rt-dev", "t", "bad stream"))
 	if !ok || tbl.ResultsStream != "" || tbl.TasksStream != "t" {
 		t.Errorf("got %+v ok=%v", tbl, ok)
 	}

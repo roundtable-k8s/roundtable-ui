@@ -273,7 +273,7 @@ func TestWriteLogTail_ReadError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			writeLogTail(w, "galahad", "galahad-aaa-1", tt.r)
+			writeLogTail(context.Background(), w, "galahad", "galahad-aaa-1", tt.r)
 			if w.Code != tt.code {
 				t.Errorf("status %d, want %d", w.Code, tt.code)
 			}

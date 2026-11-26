@@ -304,17 +304,17 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		defer stream.Close()
 
 		// Redact the (size-capped) log tail before it leaves the API (#188).
-		writeLogTail(w, name, pod.Name, stream)
+		writeLogTail(r.Context(), w, name, pod.Name, stream)
 	}
 }
 
 // writeLogTail copies the size-capped, redacted log tail to w. A read error
 // is logged: with nothing read it is a 502, otherwise the partial tail is
 // returned with X-Logs-Truncated: true.
-func writeLogTail(w http.ResponseWriter, knight, pod string, stream io.Reader) {
+func writeLogTail(ctx context.Context, w http.ResponseWriter, knight, pod string, stream io.Reader) {
 	raw, readErr := io.ReadAll(io.LimitReader(stream, knightLogMaxBytes))
 	if readErr != nil {
-		slog.ErrorContext(context.Background(), "Log read error", "knight", knight, "pod", pod, "bytes", len(raw), "error", readErr)
+		slog.ErrorContext(ctx, "Log read error", "knight", knight, "pod", pod, "bytes", len(raw), "error", readErr)
 		if len(raw) == 0 {
 			jsonError(w, "Failed to read logs", http.StatusBadGateway)
 			return
