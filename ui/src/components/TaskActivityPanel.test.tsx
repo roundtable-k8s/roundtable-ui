@@ -54,6 +54,7 @@ beforeEach(() => {
 describe('TaskActivityPanel', () => {
   it('subscribes, renders the backlog then live events with header details', () => {
     renderPanel()
+    expect(screen.getByRole('dialog', { name: `Task activity ${T}` })).toBeInTheDocument()
     expect(send).toHaveBeenCalledWith({ subscribe: 'activity', taskId: T })
     push({ op: 'backlog', taskId: T, events: [
       ev(1, 'task.started'),

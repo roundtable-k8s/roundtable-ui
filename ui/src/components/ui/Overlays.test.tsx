@@ -74,3 +74,47 @@ describe('Drawer', () => {
     expect(screen.getByText('opener')).toHaveFocus()
   })
 })
+
+describe('nested dialogs', () => {
+  function Nested() {
+    const [drawer, setDrawer] = useState(false)
+    const [modal, setModal] = useState(false)
+    return (
+      <>
+        <button onClick={() => setDrawer(true)}>opener</button>
+        {drawer && (
+          <Drawer label="Details" onClose={() => setDrawer(false)}>
+            <button onClick={() => setModal(true)}>retry</button>
+          </Drawer>
+        )}
+        {modal && (
+          <Modal title="Confirm" onClose={() => setModal(false)}>
+            <button>cancel</button>
+            <button>go</button>
+          </Modal>
+        )}
+      </>
+    )
+  }
+
+  it('only the top dialog handles Escape and Tab, and focus returns to the drawer', async () => {
+    const user = userEvent.setup()
+    render(<Nested />)
+    await user.click(screen.getByText('opener'))
+    await user.click(screen.getByText('retry'))
+    const modal = screen.getByRole('dialog', { name: 'Confirm' })
+
+    const seen = new Set<string>()
+    for (let i = 0; i < 6; i++) {
+      await user.tab()
+      expect(modal.contains(document.activeElement)).toBe(true)
+      seen.add(document.activeElement?.textContent || (document.activeElement as HTMLElement).getAttribute('aria-label') || '')
+    }
+    expect(seen).toEqual(new Set(['Close', 'cancel', 'go']))
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Confirm' })).toBeNull()
+    expect(screen.getByRole('dialog', { name: 'Details' })).toBeInTheDocument()
+    expect(screen.getByText('retry')).toHaveFocus()
+  })
+})

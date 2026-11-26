@@ -164,6 +164,9 @@ export function Collapsible({ title, defaultOpen = false, children }: {
   )
 }
 
+/** Open dialogs, innermost last. Only the top one handles keyboard events. */
+const dialogStack: object[] = []
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /** Dialog keyboard behaviour: focus moves in on open and returns to the opener
@@ -181,7 +184,10 @@ function useDialogBehavior(ref: RefObject<HTMLElement | null>, onClose: () => vo
       const first = el.querySelector<HTMLElement>(FOCUSABLE)
       ;(first ?? el).focus()
     }
+    const token = {}
+    dialogStack.push(token)
     const onKeyDown = (e: KeyboardEvent) => {
+      if (dialogStack[dialogStack.length - 1] !== token) return
       if (e.key === 'Escape') {
         if (escRef.current) {
           e.stopPropagation()
@@ -213,6 +219,8 @@ function useDialogBehavior(ref: RefObject<HTMLElement | null>, onClose: () => vo
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
+      const i = dialogStack.indexOf(token)
+      if (i >= 0) dialogStack.splice(i, 1)
       if (opener && opener.isConnected) opener.focus()
     }
   }, [ref])
@@ -261,7 +269,7 @@ export function Drawer({ onClose, children, label, widthClass = 'w-full max-w-xl
   onClose: () => void
   children: ReactNode
   /** Accessible name of the dialog. */
-  label?: string
+  label: string
   widthClass?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
