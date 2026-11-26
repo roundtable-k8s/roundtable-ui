@@ -1,8 +1,9 @@
-import { apiGet, apiGetText } from '../lib/api'
-import { useState, useEffect } from 'react'
+import { apiGet, apiGetText, ApiError } from '../lib/api'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { BookOpen, Calendar, FileText, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { Spinner, EmptyState, PageHeader, ErrorBanner } from '../components/ui'
 import { SafeMarkdown } from '../components/SafeMarkdown'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 
 // Helper to format date in human-friendly format
 function formatDate(dateStr: string): string {
@@ -32,24 +33,24 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length
 }
 
-// Helper to navigate to next/previous day
-function navigateDay(currentDate: string, direction: 'prev' | 'next'): string {
-  const [year, month, day] = currentDate.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  date.setDate(date.getDate() + (direction === 'next' ? 1 : -1))
-  
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
+const LIST_REFRESH_MS = 60_000
 
 interface BriefingEntry {
   name: string
   dir: string
 }
 
+interface ContentError {
+  /** Only a 404 means "no briefing for this date"; other failures can be retried. */
+  notFound: boolean
+  message: string
+}
+
 const entryKey = (b: BriefingEntry) => `${b.dir}/${b.name}`
+
+// Newest first: the names are dates, so reverse alphabetical order is reverse chronological.
+const sortNewestFirst = (entries: BriefingEntry[]) =>
+  [...entries].sort((a, b) => a.name.localeCompare(b.name) || a.dir.localeCompare(b.dir)).reverse()
 
 export function BriefingsPage() {
   const [briefings, setBriefings] = useState<BriefingEntry[]>([])
@@ -58,54 +59,72 @@ export function BriefingsPage() {
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
   const [contentLoading, setContentLoading] = useState(false)
-  const [contentError, setContentError] = useState(false)
+  const [contentError, setContentError] = useState<ContentError | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const listLoaded = useRef(false)
 
-  useEffect(() => {
-    apiGet<BriefingEntry[]>('/api/briefings')
-      .then((data) => {
-        // Sort newest first
-        const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name) || a.dir.localeCompare(b.dir)).reverse()
-        setBriefings(sorted)
-        setLoading(false)
-        
-        // Auto-select the most recent briefing
-        if (sorted.length > 0) {
-          setSelected(sorted[0])
-        }
-      })
-      .catch((e) => {
-        setListError(e instanceof Error ? e.message : 'Unknown error')
-        setLoading(false)
-      })
+  const loadList = useCallback(async (signal: AbortSignal) => {
+    try {
+      const data = await apiGet<BriefingEntry[]>('/api/briefings', { signal })
+      if (signal.aborted) return
+      const sorted = sortNewestFirst(data)
+      listLoaded.current = true
+      setBriefings(sorted)
+      setListError(null)
+      // Keep the open briefing on refresh; auto-select the newest only when nothing is selected yet.
+      setSelected((prev) => prev ?? sorted[0] ?? null)
+    } catch (e) {
+      if (signal.aborted) return
+      // A failed refresh keeps the list on screen; only a failed first load is shown as an error.
+      if (!listLoaded.current) setListError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      if (!signal.aborted) setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
-    if (selected) {
-      setContentLoading(true)
-      setContentError(false)
-      setContent('')
-      
-      const date = selected.name.replace('.md', '')
-      const query = selected.dir ? `?dir=${encodeURIComponent(selected.dir)}` : ''
-      apiGetText(`/api/briefings/${date}${query}`)
-        .then((text) => {
-          setContent(text)
-          setContentLoading(false)
-        })
-        .catch(() => {
-          setContentError(true)
-          setContentLoading(false)
-        })
-    }
-  }, [selected])
+    const ctl = new AbortController()
+    loadList(ctl.signal)
+    return () => ctl.abort()
+  }, [loadList])
 
-  const handleNavigateDay = (direction: 'prev' | 'next') => {
+  // Pick up briefings written while the page is open.
+  useVisibleInterval((signal) => loadList(signal), LIST_REFRESH_MS)
+
+  // Keyed by value, not object identity: a list refresh must not refetch the open briefing.
+  const selectedKey = selected ? entryKey(selected) : ''
+
+  useEffect(() => {
     if (!selected) return
-    const currentDate = selected.name.replace('.md', '')
-    const newFileName = `${navigateDay(currentDate, direction)}.md`
-    // Prefer an existing entry; otherwise let the server search all dirs.
-    setSelected(briefings.find((b) => b.name === newFileName) ?? { name: newFileName, dir: '' })
-  }
+    const ctl = new AbortController()
+    setContentLoading(true)
+    setContentError(null)
+    setContent('')
+
+    const date = selected.name.replace('.md', '')
+    const query = selected.dir ? `?dir=${encodeURIComponent(selected.dir)}` : ''
+    apiGetText(`/api/briefings/${date}${query}`, { signal: ctl.signal })
+      .then((text) => {
+        // A late answer for a previous selection must not overwrite the current one.
+        if (ctl.signal.aborted) return
+        setContent(text)
+        setContentLoading(false)
+      })
+      .catch((e) => {
+        if (ctl.signal.aborted) return
+        setContentError({
+          notFound: e instanceof ApiError && e.status === 404,
+          message: e instanceof Error ? e.message : 'Unknown error',
+        })
+        setContentLoading(false)
+      })
+    return () => ctl.abort()
+  }, [selectedKey, retryCount])
+
+  // The list is newest first, so "older" is the next index and "newer" the previous one.
+  const selectedIndex = selected ? briefings.findIndex((b) => entryKey(b) === selectedKey) : -1
+  const older = selectedIndex >= 0 ? briefings[selectedIndex + 1] : undefined
+  const newer = selectedIndex > 0 ? briefings[selectedIndex - 1] : undefined
 
   const selectedDate = selected ? selected.name.replace('.md', '') : ''
   const wordCount = content ? countWords(content) : 0
@@ -165,9 +184,10 @@ export function BriefingsPage() {
               {/* Date navigation */}
               <div className="flex items-center gap-3 mb-4">
                 <button
-                  onClick={() => handleNavigateDay('prev')}
-                  className="p-2 rounded-lg hover:bg-roundtable-steel/50 text-gray-400 hover:text-white transition-colors"
-                  title="Previous day"
+                  onClick={() => older && setSelected(older)}
+                  disabled={!older}
+                  className="p-2 rounded-lg hover:bg-roundtable-steel/50 text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                  title="Older briefing"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -180,9 +200,10 @@ export function BriefingsPage() {
                 </div>
                 
                 <button
-                  onClick={() => handleNavigateDay('next')}
-                  className="p-2 rounded-lg hover:bg-roundtable-steel/50 text-gray-400 hover:text-white transition-colors"
-                  title="Next day"
+                  onClick={() => newer && setSelected(newer)}
+                  disabled={!newer}
+                  className="p-2 rounded-lg hover:bg-roundtable-steel/50 text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                  title="Newer briefing"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -209,12 +230,22 @@ export function BriefingsPage() {
                   <div className="flex items-center justify-center py-20">
                     <Spinner />
                   </div>
-                ) : contentError ? (
+                ) : contentError?.notFound ? (
                   <EmptyState
                     icon={FileText}
                     title="No briefing available for this date"
-                    sub="Try selecting another date from the archive"
+                    sub="Try selecting another briefing from the archive"
                   />
+                ) : contentError ? (
+                  <div className="space-y-4">
+                    <ErrorBanner>Failed to load briefing: {contentError.message}</ErrorBanner>
+                    <button
+                      onClick={() => setRetryCount((n) => n + 1)}
+                      className="px-3 py-1.5 rounded-lg text-sm bg-roundtable-steel/50 text-gray-300 hover:text-white transition-colors"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 ) : (
                   <div className="prose prose-invert prose-sm max-w-none 
                     prose-headings:text-white prose-headings:font-semibold
