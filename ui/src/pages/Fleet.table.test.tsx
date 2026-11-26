@@ -8,7 +8,9 @@ import type { Knight } from '../hooks/useFleet'
 vi.mock('../lib/api', () => ({ apiGet: vi.fn() }))
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
 vi.mock('../hooks/useCards', () => ({ useCards: () => ({ cards: new Map(), loading: false, unavailable: false }) }))
-vi.mock('../components/KnightDetailDrawer', () => ({ KnightDetailDrawer: () => null }))
+vi.mock('../components/KnightDetailDrawer', () => ({
+  KnightDetailDrawer: ({ knight }: { knight: Knight | null }) => (knight ? <div data-testid="drawer">{knight.name}</div> : null),
+}))
 
 const k = (name: string, table: string): Knight => ({
   table, name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h', image: 'i', skills: 1, nixTools: 1, labels: {},
@@ -38,5 +40,16 @@ describe('Fleet table filter', () => {
     render(<MemoryRouter initialEntries={['/fleet']}><FleetPage /></MemoryRouter>)
     await waitFor(() => expect(names()).toEqual(['galahad', 'rt-ui']))
     expect(screen.getAllByTestId('table-badge').map((b) => b.textContent)).toEqual(['personal', 'roundtable-dev'])
+  })
+
+  it('?table=&knight= opens the drawer when the table matches', async () => {
+    render(<MemoryRouter initialEntries={['/fleet?table=personal&knight=galahad']}><FleetPage /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByTestId('drawer').textContent).toBe('galahad'))
+  })
+
+  it('does not open a knight that belongs to another table', async () => {
+    render(<MemoryRouter initialEntries={['/fleet?table=personal&knight=rt-ui']}><FleetPage /></MemoryRouter>)
+    await waitFor(() => expect(names()).toEqual(['galahad']))
+    expect(screen.queryByTestId('drawer')).toBeNull()
   })
 })

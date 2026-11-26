@@ -24,6 +24,10 @@ describe('RoundTablesPage planner and breakdown', () => {
     expect(screen.getByRole('link', { name: 'dev-planner' })).toBeTruthy()
     expect(screen.getByTestId('breakdown-roundtable-dev').textContent).toBe('3 ready, 2 asleep, 0 suspended, 0 not ready')
   })
+  it('links the planner to its drawer on the fleet page', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: 'dev-planner' }).getAttribute('href')).toBe('/fleet?table=roundtable-dev&knight=dev-planner')
+  })
   it('shows "Planner: none" when disabled and defaults missing counts', () => {
     renderPage()
     expect(screen.getByText('Planner: none')).toBeTruthy()

@@ -20,8 +20,8 @@ vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }
 let cards: CardMap = new Map()
 vi.mock('../hooks/useCards', () => ({ useCards: () => ({ cards, loading: false, unavailable: false }) }))
 vi.mock('../components/KnightDetailDrawer', () => ({
-  KnightDetailDrawer: ({ knight }: { knight: Knight | null }) =>
-    knight ? <div data-testid="drawer">{`${knight.name}:${knight.restarts}`}</div> : null,
+  KnightDetailDrawer: ({ knight, onClose }: { knight: Knight | null; onClose: () => void }) =>
+    knight ? <div data-testid="drawer">{`${knight.name}:${knight.restarts}`}<button onClick={onClose}>close</button></div> : null,
 }))
 
 const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)
@@ -132,5 +132,57 @@ describe('Fleet detail drawer follows the live fleet', () => {
     knights = knights.filter((x) => x.name !== 'galahad')
     rerender(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(screen.queryByTestId('drawer')).not.toBeInTheDocument()
+  })
+})
+
+describe('Fleet name/status filter, paging and focus (#401)', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => k(`knight-${String(i).padStart(3, '0')}`, 'x'))
+
+  it('filters by name, case-insensitively', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    await user.type(screen.getByLabelText('Filter by name'), 'PAT')
+    expect(names()).toEqual(['patsy'])
+    expect(screen.getByTestId('fleet-count').textContent).toBe('1/3')
+  })
+
+  it('filters by status and sorts by status', async () => {
+    const user = userEvent.setup()
+    knights = [{ ...k('a', 'x'), status: 'offline' }, k('b', 'x'), { ...k('c', 'x'), status: 'scaled-to-zero' }]
+    render(<MemoryRouter initialEntries={['/fleet?sort=status']}><FleetPage /></MemoryRouter>)
+    expect(names()).toEqual(['b', 'c', 'a'])
+    await user.selectOptions(screen.getByLabelText('Filter by status'), 'scaled-to-zero')
+    expect(names()).toEqual(['c'])
+    expect(screen.getByTestId('fleet-count').textContent).toBe('1/3')
+  })
+
+  it('renders 60 cards and shows more on demand; a filter resets the page', async () => {
+    const user = userEvent.setup()
+    knights = many(150)
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(names()).toHaveLength(60)
+    await user.click(screen.getByRole('button', { name: 'Show 60 more (90 left)' }))
+    expect(names()).toHaveLength(120)
+    await user.click(screen.getByRole('button', { name: 'Show 60 more (30 left)' }))
+    expect(names()).toHaveLength(150)
+    expect(screen.queryByRole('button', { name: /Show 60 more/ })).toBeNull()
+    await user.click(screen.getByLabelText('Filter by name'))
+    await user.paste('knight-0')
+    expect(names()).toHaveLength(60)
+    expect(screen.getByTestId('fleet-count').textContent).toBe('100/150')
+  }, 30000)
+
+  it('?knight= opens the drawer once; closing removes the parameter', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/fleet?knight=kay']}><FleetPage /></MemoryRouter>)
+    expect(screen.getByTestId('drawer').textContent).toContain('kay')
+    await user.click(screen.getByText('close'))
+    expect(screen.queryByTestId('drawer')).toBeNull()
+  })
+
+  it('shows nothing special for an unknown ?knight=', () => {
+    render(<MemoryRouter initialEntries={['/fleet?knight=nobody']}><FleetPage /></MemoryRouter>)
+    expect(screen.queryByTestId('drawer')).toBeNull()
+    expect(names()).toHaveLength(3)
   })
 })
