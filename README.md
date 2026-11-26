@@ -359,10 +359,6 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/roundtables` — List all round tables
 - `GET /api/roundtables/{name}` — Get round table details
 
-### NATS KV Store
-- `GET /api/kv/{bucket}/keys` — List keys in KV bucket
-- `GET /api/kv/{bucket}/{key}` — Get value from KV store
-
 ### Briefings
 - `GET /api/briefings` — List available briefings across all `BRIEFINGS_DIRS` as `[{name, dir}]` (only `YYYY-MM-DD.md` files; missing directories are skipped, so the result may be `[]`)
 - `GET /api/briefings/{date}` — Get briefing for specific date (YYYY-MM-DD). Optional `?dir=` selects one configured directory (403 if it is not configured); otherwise directories are searched in order. The `X-Briefing-Dir` response header names the directory the briefing came from
