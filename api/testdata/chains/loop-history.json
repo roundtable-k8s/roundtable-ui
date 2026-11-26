@@ -1,0 +1,190 @@
+{
+  "apiVersion": "ai.roundtable.io/v1alpha1",
+  "kind": "Chain",
+  "metadata": {
+    "name": "pr-loop-history",
+    "namespace": "roundtable"
+  },
+  "spec": {
+    "roundTableRef": {
+      "name": "roundtable-dev"
+    },
+    "steps": [
+      {
+        "name": "implement",
+        "knightRef": {
+          "name": "rt-ui"
+        },
+        "task": "implement"
+      },
+      {
+        "name": "review",
+        "knightRef": {
+          "name": "rt-reviewer"
+        },
+        "task": "review",
+        "dependsOn": [
+          "implement"
+        ]
+      },
+      {
+        "name": "fixloop",
+        "dependsOn": [
+          "review"
+        ],
+        "loop": {
+          "from": "review",
+          "until": "last.output.contains(\"Verdict: ship it\")",
+          "maxIterations": 3,
+          "onExhausted": "continue",
+          "steps": [
+            {
+              "name": "fix",
+              "knightRef": {
+                "name": "rt-ui"
+              },
+              "task": "fix {{ .Loop.Last.Output }}"
+            },
+            {
+              "name": "rereview",
+              "knightRef": {
+                "name": "rt-reviewer"
+              },
+              "task": "review again"
+            }
+          ]
+        }
+      },
+      {
+        "name": "merge",
+        "knightRef": {
+          "name": "rt-ui"
+        },
+        "task": "merge",
+        "dependsOn": [
+          "fixloop"
+        ],
+        "when": "steps.fixloop.outcome == \"Converged\""
+      },
+      {
+        "name": "needs-human",
+        "knightRef": {
+          "name": "rt-ui"
+        },
+        "task": "label",
+        "dependsOn": [
+          "fixloop"
+        ],
+        "when": "steps.fixloop.outcome == \"Exhausted\""
+      }
+    ]
+  },
+  "status": {
+    "phase": "Running",
+    "runId": "1795548808",
+    "startedAt": "2026-11-24T11:00:00Z",
+    "stepStatuses": [
+      {
+        "name": "implement",
+        "phase": "Succeeded",
+        "taskId": "pr-1795548808-implement",
+        "output": "PR #230",
+        "startedAt": "2026-11-24T11:00:00Z",
+        "completedAt": "2026-11-24T11:20:00Z"
+      },
+      {
+        "name": "review",
+        "phase": "Succeeded",
+        "taskId": "pr-1795548808-review",
+        "output": "Verdict: needs fixes",
+        "startedAt": "2026-11-24T11:20:00Z",
+        "completedAt": "2026-11-24T11:30:00Z"
+      },
+      {
+        "name": "fixloop",
+        "phase": "Succeeded",
+        "startedAt": "2026-11-24T11:30:00Z",
+        "loop": {
+          "iteration": 3,
+          "maxIterations": 3,
+          "outcome": "Converged",
+          "steps": [
+            {
+              "name": "fix",
+              "iteration": 3,
+              "phase": "Succeeded",
+              "taskId": "t-fix-3",
+              "output": "patched",
+              "startedAt": "2026-11-24T12:10:00Z",
+              "completedAt": "2026-11-24T12:20:00Z"
+            },
+            {
+              "name": "rereview",
+              "iteration": 3,
+              "phase": "Succeeded",
+              "taskId": "t-rereview-3",
+              "output": "Verdict: ship it",
+              "startedAt": "2026-11-24T12:20:00Z",
+              "completedAt": "2026-11-24T12:25:00Z"
+            }
+          ],
+          "history": [
+            {
+              "round": 1,
+              "step": "fix",
+              "phase": "Failed",
+              "taskId": "t-fix-1",
+              "startedAt": "2026-11-24T11:30:00Z",
+              "finishedAt": "2026-11-24T11:40:00Z",
+              "error": "task timed out after 10m"
+            },
+            {
+              "round": 1,
+              "step": "rereview",
+              "phase": "Succeeded",
+              "taskId": "t-rereview-1",
+              "startedAt": "2026-11-24T11:40:00Z",
+              "finishedAt": "2026-11-24T11:45:00Z",
+              "outputSummary": "Verdict: needs fixes"
+            },
+            {
+              "round": 2,
+              "step": "fix",
+              "phase": "Succeeded",
+              "taskId": "t-fix-2",
+              "startedAt": "2026-11-24T11:45:00Z",
+              "finishedAt": "2026-11-24T11:55:00Z",
+              "outputSummary": "patched once"
+            },
+            {
+              "round": 2,
+              "step": "rereview",
+              "phase": "Succeeded",
+              "taskId": "t-rereview-2",
+              "startedAt": "2026-11-24T11:55:00Z",
+              "finishedAt": "2026-11-24T12:00:00Z",
+              "outputSummary": "Verdict: needs fixes"
+            },
+            {
+              "round": 3,
+              "step": "fix",
+              "phase": "Succeeded",
+              "taskId": "t-fix-3",
+              "startedAt": "2026-11-24T12:10:00Z",
+              "finishedAt": "2026-11-24T12:20:00Z",
+              "outputSummary": "patched"
+            }
+          ]
+        }
+      },
+      {
+        "name": "merge",
+        "phase": "Pending"
+      },
+      {
+        "name": "needs-human",
+        "phase": "Pending"
+      }
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 import { apiGet, apiPost } from '../lib/api'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, ExternalLink, Square } from 'lucide-react'
+import { UntrustedText } from '../components/UntrustedText'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
@@ -16,7 +17,7 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
 import {
-  appendPage, applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds,
+  appendPage, applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds, roundFailed,
   parseChainUpdate, runGroupSummary, runningHref, scheduleSummary, skipReasonText, sortScheduledFirst, sortedItems, upsertNewestFirst, type ChainUpdate,
 } from '../lib/chains'
 
@@ -294,12 +295,22 @@ function LoopBodySteps({ steps }: { steps: ChainLoopStep[] }) {
     <table className="w-full text-xs">
       <tbody>
         {steps.map(s => (
-          <tr key={s.name} className="border-t border-roundtable-steel/30">
-            <td className="px-2 py-1 text-gray-300">{s.name}</td>
-            <td className="px-2 py-1"><PhaseBadge phase={s.phase} /></td>
-            <LiveTaskCells t={s} />
-            <td className="px-2 py-1 text-red-400 max-w-xs truncate">{s.error ? sanitizeText(s.error) : ''}</td>
-          </tr>
+          <Fragment key={`${s.name}-${s.taskId ?? ''}`}>
+            <tr className="border-t border-roundtable-steel/30">
+              <td className="px-2 py-1 text-gray-300">{s.name}</td>
+              <td className="px-2 py-1"><PhaseBadge phase={s.phase} /></td>
+              <LiveTaskCells t={s} />
+              <td className="px-2 py-1 text-red-400 max-w-xs truncate">{s.error ? sanitizeText(s.error) : ''}</td>
+            </tr>
+            {(s.error || s.outputSummary) && (
+              <tr>
+                <td colSpan={8} className="px-2 pb-1">
+                  {s.error && <UntrustedText as="pre" text={s.error} className="whitespace-pre-wrap text-red-400" collapseAfter={1000} />}
+                  {s.outputSummary && <UntrustedText as="pre" text={s.outputSummary} className="whitespace-pre-wrap text-gray-400" collapseAfter={1000} />}
+                </td>
+              </tr>
+            )}
+          </Fragment>
         ))}
       </tbody>
     </table>
@@ -327,6 +338,7 @@ export function LoopRounds({ loop }: { loop: ChainLoop }) {
             {past.map(r => (
               <li key={r.iteration} aria-label={`round ${r.iteration}`}>
                 <span className="text-xs text-gray-400">Round {r.iteration}</span>
+                {roundFailed(r) && <span className="ml-2 text-xs text-red-400 font-semibold">failed</span>}
                 <LoopBodySteps steps={r.steps} />
               </li>
             ))}
