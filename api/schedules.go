@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"sigs.k8s.io/yaml"
 )
 
 // Schedules (#300, part of #281) are Triggers with a schedule source. The
@@ -184,11 +185,18 @@ func scheduleRunResultHandler(g *gatewayClient) http.HandlerFunc {
 
 // scheduleManifestHandler proxies GET /v1/schedules/{namespace}/{name}/manifest.
 // A success is YAML and is passed through as application/yaml; an error is
-// relayed as JSON like every other route.
+// relayed as JSON like every other route. With ?format=json the manifest is
+// converted to JSON: the edit form (#302) starts from it, so a schedule it
+// does not change keeps every field the manifest has.
 func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, ok := schedulePath(w, r)
 		if !ok {
+			return
+		}
+		format := r.URL.Query().Get("format")
+		if format != "" && format != "yaml" && format != "json" {
+			jsonError(w, "format must be yaml or json", http.StatusBadRequest)
 			return
 		}
 		if g.baseURL == "" {
@@ -203,6 +211,19 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 		}
 		if status != http.StatusOK {
 			writeGatewayError(w, status, b)
+			return
+		}
+		if format == "json" {
+			j, err := yaml.YAMLToJSON(b)
+			if err != nil {
+				slog.Error("gateway manifest is not YAML", "path", p+"/manifest", "error", err)
+				jsonError(w, "Gateway returned an invalid manifest", http.StatusBadGateway)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(j)
 			return
 		}
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")

@@ -1,0 +1,25 @@
+apiVersion: ai.roundtable.io/v1alpha1
+kind: Trigger
+metadata:
+  annotations:
+    ai.roundtable.io/caller: dashboard
+  labels:
+    app.kubernetes.io/managed-by: roundtable-gateway
+  name: weekly-review
+  namespace: roundtable
+spec:
+  concurrency:
+    policy: Allow
+  roundTableRef:
+    name: fleet-a
+  source:
+    schedule:
+      cron: 0 9 * * 1
+      timeZone: America/New_York
+  target:
+    mission:
+      costBudgetUSD: "5.00"
+      metaMission: true
+      objective: 'Review last week''s incidents: #1 priority is anything that paged
+        twice, then summarise the follow-ups that are still open and who owns them'
+  ttlSecondsAfterFinished: 86400

@@ -466,8 +466,9 @@ func main() {
 	// WebSocket for real-time NATS events
 	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards))
 
-	// Config endpoint to expose fleet prefix to frontend (#60)
-	api.HandleFunc("/config", configHandler(fleetPrefix, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
+	// Config endpoint to expose fleet prefix to frontend (#60) and the
+	// namespace the dashboard reads (the default for new schedules, #302)
+	api.HandleFunc("/config", configHandler(fleetPrefix, namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
 
 	// Health
 	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -850,10 +851,10 @@ func traceTemplate(raw string) string {
 }
 
 // configHandler serves GET /api/config.
-func configHandler(fleetPrefix, traceURLTemplate string) http.HandlerFunc {
+func configHandler(fleetPrefix, namespace, traceURLTemplate string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := map[string]string{"fleetPrefix": fleetPrefix}
+		resp := map[string]string{"fleetPrefix": fleetPrefix, "namespace": namespace}
 		if traceURLTemplate != "" {
 			resp["traceUrlTemplate"] = traceURLTemplate
 		}

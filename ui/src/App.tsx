@@ -16,6 +16,7 @@ const BriefingsPage = lazy(() => import('./pages/Briefings').then(m => ({ defaul
 const LivePage = lazy(() => import('./pages/Live').then(m => ({ default: m.LivePage })))
 const TriggersPage = lazy(() => import('./pages/Triggers').then(m => ({ default: m.TriggersPage })))
 const SchedulesPage = lazy(() => import('./pages/Schedules').then(m => ({ default: m.SchedulesPage })))
+const ScheduleFormPage = lazy(() => import('./pages/ScheduleForm').then(m => ({ default: m.ScheduleFormPage })))
 const TriggerDetailPage = lazy(() => import('./pages/Triggers').then(m => ({ default: m.TriggerDetailPage })))
 const ScheduleDetailPage = lazy(() => import('./pages/ScheduleDetail').then(m => ({ default: m.ScheduleDetailPage })))
 const ChainsPage = lazy(() => import('./pages/Chains').then(m => ({ default: m.ChainsPage })))
@@ -164,6 +165,8 @@ export default function App() {
             <Route path="/triggers/:namespace/:name" element={<TriggerDetailPage />} />
             <Route path="/schedules/:namespace/:name" element={<ScheduleDetailPage />} />
             <Route path="/schedules" element={<SchedulesPage />} />
+            <Route path="/schedules/new" element={<ScheduleFormPage />} />
+            <Route path="/schedules/:namespace/:name/edit" element={<ScheduleFormPage />} />
             <Route path="/costs" element={<CostDashboardPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/architecture" element={<ArchitecturePage />} />
