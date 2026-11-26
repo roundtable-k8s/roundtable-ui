@@ -8,6 +8,7 @@ export const isolated: KnightIsolation = {
   hostnameRulesEnforced: true,
   egress: {
     allowedHosts: ['api.anthropic.com', '*.github.com'],
+    allowedHostEntries: [{ host: 'api.anthropic.com' }, { host: '*.github.com' }],
     allowedPorts: [443],
     allowedServices: [{ name: 'nats', namespace: 'nats', ports: [4222] }],
     source: 'knight',

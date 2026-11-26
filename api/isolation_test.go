@@ -209,3 +209,29 @@ func TestFleetAndKnightHandlersIncludeIsolation(t *testing.T) {
 		t.Errorf("detail isolation = %+v", detail.Isolation)
 	}
 }
+
+func TestParseEgressHostEntries(t *testing.T) {
+	e := parseEgress(map[string]interface{}{
+		"allowedHosts": []interface{}{
+			"api.github.com",
+			map[string]interface{}{"host": "registry.example", "ports": []interface{}{int64(5000)}},
+			map[string]interface{}{"host": "bare.example"},
+			map[string]interface{}{"ports": []interface{}{int64(1)}},
+			int64(7),
+		},
+	}, "table")
+	if want := []string{"api.github.com", "registry.example", "bare.example"}; !reflect.DeepEqual(e.AllowedHosts, want) {
+		t.Errorf("hosts = %v, want %v", e.AllowedHosts, want)
+	}
+	want := []EgressHostInfo{
+		{Host: "api.github.com"},
+		{Host: "registry.example", Ports: []int32{5000}},
+		{Host: "bare.example", Ports: []int32{}},
+	}
+	if !reflect.DeepEqual(e.AllowedHostEntries, want) {
+		t.Errorf("entries = %+v, want %+v", e.AllowedHostEntries, want)
+	}
+	if e.Source != "table" {
+		t.Errorf("source = %q", e.Source)
+	}
+}

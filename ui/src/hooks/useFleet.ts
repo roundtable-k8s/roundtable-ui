@@ -52,8 +52,16 @@ export interface EgressService {
   ports: number[]
 }
 
+export interface EgressHost {
+  host: string
+  /** set when the host is allowed only on these ports */
+  ports?: number[]
+}
+
 export interface KnightEgress {
   allowedHosts: string[]
+  /** same hosts with their per-host ports; absent on older APIs */
+  allowedHostEntries?: EgressHost[]
   allowedPorts: number[]
   allowedServices: EgressService[]
   /** "knight" (spec.egress) or "table" (the RoundTable's default) */
