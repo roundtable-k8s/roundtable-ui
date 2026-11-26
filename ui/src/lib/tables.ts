@@ -10,12 +10,6 @@ export interface TableInfo {
   resultsStream?: string
 }
 
-/** The table a knight belongs to, matched on its NATS prefix. */
-export function tableForKnight(natsPrefix: string | undefined, tables: TableInfo[]): TableInfo | undefined {
-  if (!natsPrefix) return undefined
-  return tables.find((t) => t.prefix === natsPrefix)
-}
-
 /** The table that owns a subject (longest prefix wins). */
 export function tableForSubject(subject: string, tables: TableInfo[]): TableInfo | undefined {
   let best: TableInfo | undefined

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tableForKnight, tableForSubject, eventTable, taskRows, type TableInfo } from './tables'
+import { tableForSubject, eventTable, taskRows, type TableInfo } from './tables'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
 const tables: TableInfo[] = [
@@ -18,12 +18,6 @@ const events: NatsEvent[] = [
 ]
 
 describe('tables', () => {
-  it('matches a knight to its table by prefix', () => {
-    expect(tableForKnight('rt-dev', tables)?.name).toBe('roundtable-dev')
-    expect(tableForKnight('chelonian', tables)).toBeUndefined()
-    expect(tableForKnight(undefined, tables)).toBeUndefined()
-  })
-
   it('derives a table from a subject, longest prefix first', () => {
     const nested = [...tables, { name: 'sub', prefix: 'rt-dev.sub' }]
     expect(tableForSubject('rt-dev.sub.tasks.x.y', nested)?.name).toBe('sub')

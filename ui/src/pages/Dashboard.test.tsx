@@ -216,6 +216,36 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Command Center')).toBeInTheDocument()
   })
 
+  const fleetOf = (names: string[]) => ({
+    knights: names.map(name => ({
+      name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h',
+      image: '', skills: 0, nixTools: 0, labels: {}, phase: 'Ready',
+    })),
+    loading: false,
+    error: null,
+  }) as unknown as ReturnType<typeof useFleet>
+
+  it('lists fleet knights that are not in KNIGHT_CONFIG', () => {
+    const orig = vi.mocked(useFleet).getMockImplementation()!
+    vi.mocked(useFleet).mockImplementation(() => fleetOf(['rt-lead', 'merlin']))
+    renderDashboard()
+    expect(screen.getByText('merlin')).toBeInTheDocument()
+    expect(screen.getByText('rt-lead')).toBeInTheDocument()
+    expect(screen.getAllByText('online').length).toBe(2)
+    expect(screen.queryByText('galahad')).not.toBeInTheDocument()
+    vi.mocked(useFleet).mockImplementation(orig)
+  })
+
+  it('shows an empty state, not offline tiles, for an empty fleet', () => {
+    const orig = vi.mocked(useFleet).getMockImplementation()!
+    vi.mocked(useFleet).mockImplementation(() => fleetOf([]))
+    renderDashboard()
+    expect(screen.getByText('No knights found')).toBeInTheDocument()
+    expect(screen.queryByText('offline')).not.toBeInTheDocument()
+    expect(screen.queryByText('galahad')).not.toBeInTheDocument()
+    vi.mocked(useFleet).mockImplementation(orig)
+  })
+
   it('displays time range selector', async () => {
     renderDashboard({ defaultCostExpanded: true })
     await waitFor(() => {
