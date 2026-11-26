@@ -231,23 +231,25 @@ nix flake check    # verifies the tool versions and that knight-tools contains t
 
 ### Production Deployment
 
-The dashboard is deployed as part of the Round Table Helm chart:
+The dashboard is deployed as part of the Round Table operator chart. The chart is published only as an OCI artifact (there is no classic Helm repository, so no repository needs to be added). The dashboard is enabled by default.
 
 ```bash
-# Install/upgrade Round Table with dashboard enabled
-helm repo add roundtable https://roundtable-k8s.github.io/roundtable
-helm upgrade --install roundtable roundtable/roundtable \
+# Install/upgrade Round Table with the dashboard exposed through an ingress
+helm upgrade --install roundtable-operator oci://ghcr.io/roundtable-k8s/charts/roundtable-operator \
   --namespace roundtable \
   --create-namespace \
   --set dashboard.enabled=true \
   --set dashboard.ingress.enabled=true \
   --set dashboard.ingress.host=roundtable.example.com
 
-# Port-forward for local access
-kubectl port-forward -n roundtable svc/roundtable-dashboard 8080:8080
+# Port-forward for local access. The Service name follows the Helm release name
+# (<release>-dashboard) and listens on port 80.
+kubectl port-forward -n roundtable svc/roundtable-operator-dashboard 8080:80
 
 # Open browser to http://localhost:8080
 ```
+
+For NATS prerequisites, Flux `OCIRepository`/`HelmRelease` installs and a kind quickstart, see [`docs/install.md`](https://github.com/roundtable-k8s/roundtable/blob/main/docs/install.md) and [`docs/getting-started.md`](https://github.com/roundtable-k8s/roundtable/blob/main/docs/getting-started.md) in the roundtable repo.
 
 ## Configuration
 
