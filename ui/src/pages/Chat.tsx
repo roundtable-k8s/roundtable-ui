@@ -1,5 +1,5 @@
-import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useSearchParams } from 'react-router-dom'
 import { MessageSquare, Send, Activity } from 'lucide-react'
 import { apiGet, apiPost, ApiError } from '../lib/api'

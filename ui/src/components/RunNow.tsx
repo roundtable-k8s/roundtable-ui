@@ -1,5 +1,5 @@
+import { useState } from 'react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { Play } from 'lucide-react'
 import { apiGet, apiPost } from '../lib/api'

@@ -43,7 +43,7 @@ describe('RunNow', () => {
     expect(apiGet).not.toHaveBeenCalled()
 
     await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
-    expect(apiGet).toHaveBeenCalledWith('/api/chains/runs/ns2/r1')
+    expect(apiGet).toHaveBeenCalledWith('/api/chains/runs/ns2/r1', { signal: expect.any(AbortSignal) })
     expect(screen.getByTestId('run-phase')).toHaveTextContent('Running')
 
     await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
