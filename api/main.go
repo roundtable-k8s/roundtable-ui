@@ -562,24 +562,20 @@ func main() {
 	}
 	handler := cors.New(corsOpts).Handler(r)
 
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: handler,
-	}
+	srv := newHTTPServer(":"+port, handler)
+	srv.RegisterOnShutdown(beginWSShutdown)
 
-	// Graceful shutdown
+	// Graceful shutdown: main waits on done so the process exits only after
+	// Shutdown and the telemetry flush returned (or the budget expired).
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		slog.InfoContext(context.Background(), "Shutting down")
 		stopSampler()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		srv.Shutdown(ctx)
-		if err := otelShutdown(ctx); err != nil {
-			slog.WarnContext(ctx, "OpenTelemetry shutdown failed", "error", err)
-		}
+		gracefulShutdown(srv.Shutdown, otelShutdown, shutdownBudget)
 	}()
 
 	slog.InfoContext(context.Background(), "Round Table Dashboard API starting", "port", port)
@@ -587,6 +583,50 @@ func main() {
 		slog.ErrorContext(context.Background(), "Server error", "error", err)
 		os.Exit(1)
 	}
+	<-done
+}
+
+const shutdownBudget = 5 * time.Second
+
+// newHTTPServer builds the API server with slowloris protection. WriteTimeout
+// is deliberately unset: the WebSocket and the SSE chat proxy are long-lived
+// and a write deadline would cut them.
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+}
+
+// gracefulShutdown drains the server, then flushes telemetry, both within one
+// shared budget. It returns only after both steps returned.
+func gracefulShutdown(shutdown, flush func(context.Context) error, budget time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	if err := shutdown(ctx); err != nil {
+		slog.WarnContext(ctx, "HTTP shutdown incomplete", "error", err)
+	}
+	if err := flush(ctx); err != nil {
+		slog.WarnContext(ctx, "OpenTelemetry shutdown failed", "error", err)
+	}
+}
+
+// wsShutdown is closed when the server starts shutting down; WebSocket
+// handlers then send a 1001 close frame. Hijacked connections are not
+// tracked by http.Server.Shutdown, so they must be told explicitly.
+var (
+	wsShutdown     = make(chan struct{})
+	wsShutdownOnce sync.Once
+)
+
+func beginWSShutdown() { wsShutdownOnce.Do(func() { close(wsShutdown) }) }
+
+// closeGoingAway sends a 1001 close frame and closes the connection.
+func closeGoingAway(ws *wsWriter, conn interface{ Close() error }) {
+	ws.write(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"))
+	conn.Close()
 }
 
 // podIsReady reports whether the pod's first container is ready.
@@ -1473,6 +1513,15 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			return nil
 		})
+
+		// Clean 1001 close on server shutdown; clients reconnect with back-off.
+		go func() {
+			select {
+			case <-done:
+			case <-wsShutdown:
+				closeGoingAway(ws, conn)
+			}
+		}()
 
 		// Ping ticker to detect dead connections
 		ticker := time.NewTicker(30 * time.Second)

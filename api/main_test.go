@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/gorilla/mux"
 	corev1 "k8s.io/api/core/v1"
@@ -2122,5 +2125,57 @@ func TestStatusTraceIDPassThrough(t *testing.T) {
 		if got := parseMissionResource(obj).TraceID; got != c.want {
 			t.Errorf("mission traceId(%q) = %q, want %q", c.id, got, c.want)
 		}
+	}
+}
+
+func TestNewHTTPServerTimeouts(t *testing.T) {
+	srv := newHTTPServer(":0", http.NewServeMux())
+	if srv.ReadHeaderTimeout <= 0 || srv.IdleTimeout <= 0 {
+		t.Fatalf("timeouts must be set: %v %v", srv.ReadHeaderTimeout, srv.IdleTimeout)
+	}
+	if srv.WriteTimeout != 0 {
+		t.Fatal("WriteTimeout must stay unset (WebSocket/SSE are long-lived)")
+	}
+}
+
+func TestGracefulShutdownOrder(t *testing.T) {
+	var order []string
+	gracefulShutdown(
+		func(ctx context.Context) error { order = append(order, "shutdown"); return nil },
+		func(ctx context.Context) error {
+			if ctx.Err() != nil {
+				t.Error("shared context expired early")
+			}
+			order = append(order, "flush")
+			return errors.New("ignored")
+		},
+		time.Second,
+	)
+	if strings.Join(order, ",") != "shutdown,flush" {
+		t.Fatalf("order = %v", order)
+	}
+}
+
+type closeRecorderConn struct{ closed bool }
+
+func (c *closeRecorderConn) Close() error { c.closed = true; return nil }
+
+type recordingWSConn struct{ onWrite func(int, []byte) }
+
+func (r *recordingWSConn) SetWriteDeadline(time.Time) error { return nil }
+func (r *recordingWSConn) WriteMessage(mt int, d []byte) error {
+	r.onWrite(mt, d)
+	return nil
+}
+
+func TestCloseGoingAway(t *testing.T) {
+	var got []byte
+	var gotType int
+	rec := &recordingWSConn{onWrite: func(mt int, d []byte) { gotType, got = mt, d }}
+	ws := &wsWriter{conn: rec}
+	c := &closeRecorderConn{}
+	closeGoingAway(ws, c)
+	if !c.closed || gotType != websocket.CloseMessage || len(got) < 2 || int(got[0])<<8|int(got[1]) != websocket.CloseGoingAway {
+		t.Fatalf("closed=%v type=%d payload=%v", c.closed, gotType, got)
 	}
 }
