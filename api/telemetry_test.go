@@ -7,12 +7,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func newTracedRouter(h http.HandlerFunc) *mux.Router {
@@ -30,7 +33,9 @@ func withRecorder(t *testing.T) *tracetest.SpanRecorder {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	prev := otel.GetTracerProvider()
 	otel.SetTracerProvider(tp)
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	prevProp := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() { otel.SetTracerProvider(prev); otel.SetTextMapPropagator(prevProp) })
 	return sr
 }
 
@@ -105,5 +110,132 @@ func TestLogLineCarriesTraceID(t *testing.T) {
 	logger.Info("outside")
 	if bytes.Contains(buf.Bytes(), []byte("trace_id")) {
 		t.Error("trace_id must be absent without a span")
+	}
+}
+
+func newTracedGatewayRouter(g *gatewayClient) *mux.Router {
+	r := mux.NewRouter()
+	r.Use(tracingMiddleware)
+	r.HandleFunc("/api/tasks/dispatch", func(w http.ResponseWriter, req *http.Request) {
+		g.relay(w, req, http.MethodPost, "/v1/knights/galahad/invoke", nil, []byte(`{}`))
+	}).Methods("POST")
+	r.HandleFunc("/api/chat/{taskId}/events", chatEventsHandler(g)).Methods("GET")
+	return r
+}
+
+func traceparentGateway(t *testing.T, got *[]string) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*got = append(*got, r.Header.Get("traceparent"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func serverTraceID(t *testing.T, sr *tracetest.SpanRecorder) string {
+	for _, s := range sr.Ended() {
+		if s.SpanKind().String() == "server" {
+			return s.SpanContext().TraceID().String()
+		}
+	}
+	t.Fatal("no server span recorded")
+	return ""
+}
+
+func TestGatewayRelayPropagatesTraceparent(t *testing.T) {
+	sr := withRecorder(t)
+	var got []string
+	gw := traceparentGateway(t, &got)
+	g := &gatewayClient{baseURL: gw.URL, token: "secret-tok", http: newGatewayHTTPClient(http.DefaultTransport)}
+	rec := httptest.NewRecorder()
+	newTracedGatewayRouter(g).ServeHTTP(rec, httptest.NewRequest("POST", "/api/tasks/dispatch", nil))
+	if len(got) != 1 || !strings.HasPrefix(got[0], "00-"+serverTraceID(t, sr)+"-") {
+		t.Fatalf("traceparent = %v, want trace %s", got, serverTraceID(t, sr))
+	}
+	var client bool
+	for _, s := range sr.Ended() {
+		if s.SpanKind().String() != "client" {
+			continue
+		}
+		client = true
+		if s.Name() != "POST /v1/knights/{id}/invoke" {
+			t.Errorf("client span name = %q", s.Name())
+		}
+		for _, a := range s.Attributes() {
+			if strings.Contains(a.Value.Emit(), "secret-tok") {
+				t.Errorf("token recorded in attribute %s", a.Key)
+			}
+		}
+	}
+	if !client {
+		t.Error("no client span")
+	}
+}
+
+func TestGatewayStreamPropagatesTraceparent(t *testing.T) {
+	sr := withRecorder(t)
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("traceparent"))
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: x\n\n"))
+	}))
+	defer srv.Close()
+	g := &gatewayClient{baseURL: srv.URL, http: newGatewayHTTPClient(http.DefaultTransport)}
+	newTracedGatewayRouter(g).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/chat/t1/events", nil))
+	if len(got) != 1 || !strings.HasPrefix(got[0], "00-"+serverTraceID(t, sr)+"-") {
+		t.Fatalf("traceparent = %v", got)
+	}
+}
+
+func TestGatewayNoProviderSendsNoTraceparent(t *testing.T) {
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(noop.NewTracerProvider())
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	var got []string
+	gw := traceparentGateway(t, &got)
+	g := &gatewayClient{baseURL: gw.URL, http: newGatewayHTTPClient(http.DefaultTransport)}
+	g.relay(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil), "GET", "/v1/knights", nil, nil)
+	if len(got) != 1 || got[0] != "" {
+		t.Errorf("traceparent = %v, want none", got)
+	}
+}
+
+func TestRelayErrorLogCarriesTraceID(t *testing.T) {
+	withRecorder(t)
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(newTraceHandler(slog.NewJSONHandler(&buf, nil))))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	g := &gatewayClient{baseURL: "http://127.0.0.1:1", http: newGatewayHTTPClient(http.DefaultTransport)}
+	r := newTracedGatewayRouter(g)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("POST", "/api/tasks/dispatch", nil))
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	var line map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &line); err != nil {
+		t.Fatalf("%v: %s", err, buf.String())
+	}
+	if id, _ := line["trace_id"].(string); len(id) != 32 {
+		t.Errorf("trace_id = %v", line["trace_id"])
+	}
+}
+
+func TestGatewayRouteTemplate(t *testing.T) {
+	for in, want := range map[string]string{
+		"/v1/knights":                               "/v1/knights",
+		"/v1/tasks/abc/events":                      "/v1/tasks/{id}/events",
+		"/v1/dead-letters/t1/retry":                 "/v1/dead-letters/{id}/retry",
+		"/v1/runs/ns/run-1/cancel":                  "/v1/runs/{namespace}/{name}/cancel",
+		"/v1/schedules/ns/s/runs/digest-1795600000": "/v1/schedules/{namespace}/{name}/runs/{id}",
+		"/v1/schedules/ns/s/manifest":               "/v1/schedules/{namespace}/{name}/manifest",
+		"/other/thing":                              "/",
+	} {
+		if got := gatewayRouteTemplate(in); got != want {
+			t.Errorf("%s -> %s, want %s", in, got, want)
+		}
 	}
 }

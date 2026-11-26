@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // validTaskID guards the task ID that is forwarded into a gateway URL path.
@@ -40,8 +41,57 @@ func newGatewayClientFromEnv() *gatewayClient {
 		baseURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("GATEWAY_URL")), "/"),
 		token:     strings.TrimSpace(os.Getenv("GATEWAY_TOKEN")),
 		tokenFile: strings.TrimSpace(os.Getenv("GATEWAY_TOKEN_FILE")),
-		http:      &http.Client{Timeout: 30 * time.Second},
+		http:      newGatewayHTTPClient(http.DefaultTransport),
 	}
+}
+
+// newGatewayHTTPClient wraps rt in an otelhttp transport so gateway calls are
+// client spans carrying the W3C traceparent (a no-op without a tracer
+// provider). The span name is the route template, never the raw path. The SSE
+// copy in stream keeps this transport and only clears the Timeout.
+func newGatewayHTTPClient(rt http.RoundTripper) *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: otelhttp.NewTransport(rt, otelhttp.WithSpanNameFormatter(
+			func(_ string, r *http.Request) string {
+				return r.Method + " " + gatewayRouteTemplate(r.URL.Path)
+			})),
+	}
+}
+
+// gatewayIDSegments maps a gateway collection to the number of id segments
+// that follow it; everything after those is a literal action word.
+var gatewayIDSegments = map[string]int{
+	"knights": 1, "tasks": 1, "dead-letters": 1, "chains": 1, "runs": 2, "schedules": 2,
+}
+
+// gatewayRouteTemplate turns /v1/runs/ns/run-1/cancel into
+// /v1/runs/{namespace}/{name}/cancel so ids never reach span names.
+func gatewayRouteTemplate(p string) string {
+	parts := strings.Split(strings.Trim(p, "/"), "/")
+	if len(parts) < 2 || parts[0] != "v1" {
+		return "/"
+	}
+	n, ok := gatewayIDSegments[parts[1]]
+	if !ok {
+		return "/"
+	}
+	names := []string{"{id}"}
+	if n == 2 {
+		names = []string{"{namespace}", "{name}"}
+	}
+	out := parts[:2:2]
+	for i, seg := range parts[2:] {
+		if i < n {
+			out = append(out, names[i])
+		} else if seg == "manifest" || seg == "retry" || seg == "events" || seg == "cancel" ||
+			seg == "invoke" || seg == "runs" || seg == "suspend" || seg == "resume" || seg == "run" {
+			out = append(out, seg)
+		} else {
+			out = append(out, "{id}")
+		}
+	}
+	return "/" + strings.Join(out, "/")
 }
 
 // readTokenFile returns the first line of the token file.
@@ -56,7 +106,7 @@ func readTokenFile(path string) (string, error) {
 
 // bearer returns the token to send. With a token file the cached value is
 // used; reload re-reads the file first (after a 401).
-func (g *gatewayClient) bearer(reload bool) string {
+func (g *gatewayClient) bearer(ctx context.Context, reload bool) string {
 	if g.tokenFile == "" {
 		return g.token
 	}
@@ -65,7 +115,7 @@ func (g *gatewayClient) bearer(reload bool) string {
 	if reload || g.fileToken == "" {
 		t, err := readTokenFile(g.tokenFile)
 		if err != nil {
-			slog.Warn("cannot read gateway token file", "error", err)
+			slog.WarnContext(ctx, "cannot read gateway token file", "error", err)
 			return g.fileToken
 		}
 		g.fileToken = t
@@ -75,10 +125,10 @@ func (g *gatewayClient) bearer(reload bool) string {
 
 // do calls the gateway and returns its status and body.
 func (g *gatewayClient) do(ctx context.Context, method, path string, query url.Values, body []byte) (int, []byte, error) {
-	status, b, err := g.doOnce(ctx, method, path, query, body, g.bearer(false))
+	status, b, err := g.doOnce(ctx, method, path, query, body, g.bearer(ctx, false))
 	if err == nil && status == http.StatusUnauthorized && g.tokenFile != "" {
 		// The token may have been rotated: re-read the file and retry once.
-		status, b, err = g.doOnce(ctx, method, path, query, body, g.bearer(true))
+		status, b, err = g.doOnce(ctx, method, path, query, body, g.bearer(ctx, true))
 	}
 	return status, b, err
 }
@@ -120,7 +170,7 @@ func (g *gatewayClient) relay(w http.ResponseWriter, r *http.Request, method, pa
 	}
 	status, b, err := g.do(r.Context(), method, path, query, body)
 	if err != nil {
-		slog.Error("gateway request failed", "path", path, "error", err)
+		slog.ErrorContext(r.Context(), "gateway request failed", "path", path, "error", err)
 		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
 		return
 	}

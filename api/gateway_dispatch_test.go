@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -152,7 +153,7 @@ func TestGatewayTokenFileRereadOn401(t *testing.T) {
 	r := dispatchRouter(g)
 
 	// The first line of the file is the token.
-	if got := g.bearer(false); got != "old-token-0123456789" {
+	if got := g.bearer(context.Background(), false); got != "old-token-0123456789" {
 		t.Fatalf("token = %q", got)
 	}
 	// Rotate: the cached token is rejected, the file is re-read and the call retried.
@@ -180,8 +181,8 @@ func TestGatewayClientFromEnvTokenFile(t *testing.T) {
 	t.Setenv("GATEWAY_TOKEN", "env-token")
 	t.Setenv("GATEWAY_TOKEN_FILE", tokFile)
 	g := newGatewayClientFromEnv()
-	if g.baseURL != "http://gw:8080" || g.bearer(false) != "file-token-0123456789" {
-		t.Errorf("baseURL=%q token=%q", g.baseURL, g.bearer(false))
+	if g.baseURL != "http://gw:8080" || g.bearer(context.Background(), false) != "file-token-0123456789" {
+		t.Errorf("baseURL=%q token=%q", g.baseURL, g.bearer(context.Background(), false))
 	}
 }
 

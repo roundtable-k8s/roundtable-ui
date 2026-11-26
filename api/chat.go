@@ -92,13 +92,13 @@ func chatEventsHandler(g *gatewayClient) http.HandlerFunc {
 			return
 		}
 		path := "/v1/tasks/" + url.PathEscape(id) + "/events"
-		resp, err := g.stream(r, path, g.bearer(false))
+		resp, err := g.stream(r, path, g.bearer(r.Context(), false))
 		if err == nil && resp.StatusCode == http.StatusUnauthorized && g.tokenFile != "" {
 			resp.Body.Close()
-			resp, err = g.stream(r, path, g.bearer(true))
+			resp, err = g.stream(r, path, g.bearer(r.Context(), true))
 		}
 		if err != nil {
-			slog.Error("gateway stream failed", "path", path, "error", err)
+			slog.ErrorContext(r.Context(), "gateway stream failed", "path", path, "error", err)
 			jsonError(w, "Gateway unreachable", http.StatusBadGateway)
 			return
 		}
