@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { BriefingsPage } from './Briefings'
 
 const apiGet = vi.fn()
@@ -27,5 +28,20 @@ describe('BriefingsPage', () => {
     render(<BriefingsPage />)
     expect((await screen.findAllByText('No briefings yet')).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Failed to load/)).not.toBeInTheDocument()
+  })
+
+  it('shows each entry directory in the list and the selected one in the header', async () => {
+    apiGet.mockResolvedValue([
+      { name: '2024-01-02.md', dir: 'Agents/Briefings' },
+      { name: '2024-01-01.md', dir: 'Briefings/Daily' },
+    ])
+    render(<BriefingsPage />)
+    const rows = await screen.findAllByRole('button', { name: /2024-01-0/ })
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('Agents/Briefings')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Briefings/Daily')).toBeInTheDocument()
+    expect(await screen.findByTitle('Source directory')).toHaveTextContent('Agents/Briefings')
+    await userEvent.click(rows[1])
+    await waitFor(() => expect(screen.getByTitle('Source directory')).toHaveTextContent('Briefings/Daily'))
   })
 })

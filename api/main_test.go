@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1978,11 +1980,20 @@ func TestParseMissionResource_StandardTypes(t *testing.T) {
 
 func TestBriefingMultipleDirs(t *testing.T) {
 	tmp := t.TempDir()
-	os.MkdirAll(tmp+"/Briefings/Daily", 0755)
-	os.MkdirAll(tmp+"/Agents/Briefings", 0755)
-	os.WriteFile(tmp+"/Briefings/Daily/2024-01-01.md", []byte("old"), 0644)
-	os.WriteFile(tmp+"/Agents/Briefings/2024-01-02.md", []byte("new"), 0644)
-	os.WriteFile(tmp+"/Agents/Briefings/weekly-summary.md", []byte("x"), 0644)
+	for _, d := range []string{"/Briefings/Daily", "/Agents/Briefings"} {
+		if err := os.MkdirAll(tmp+d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for f, c := range map[string]string{
+		"/Briefings/Daily/2024-01-01.md":      "old",
+		"/Agents/Briefings/2024-01-02.md":     "new",
+		"/Agents/Briefings/weekly-summary.md": "x",
+	} {
+		if err := os.WriteFile(tmp+f, []byte(c), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	dirs := parseBriefingDirs(defaultBriefingDirs + ",missing/dir,../etc,/abs")
 	if len(dirs) != 3 {
 		t.Fatalf("unexpected dirs %v", dirs)
@@ -1994,7 +2005,9 @@ func TestBriefingMultipleDirs(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings", nil))
 	var got []briefingEntry
-	json.NewDecoder(w.Body).Decode(&got)
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
 	if w.Code != 200 || len(got) != 2 || got[1].Dir != "Agents/Briefings" {
 		t.Fatalf("list: %d %v", w.Code, got)
 	}
@@ -2013,6 +2026,48 @@ func TestBriefingMultipleDirs(t *testing.T) {
 	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings/2024-01-02?dir=../..", nil))
 	if w.Code != 403 {
 		t.Fatalf("unconfigured dir should 403, got %d", w.Code)
+	}
+}
+
+func TestBriefingListUnreadableDirWarns(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permissions are not enforced for root")
+	}
+	tmp := t.TempDir()
+	for _, d := range []string{"Locked", "Open"} {
+		if err := os.MkdirAll(filepath.Join(tmp, d), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "Open", "2024-01-03.md"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(tmp, "Locked"), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Join(tmp, "Locked"), 0755) })
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	h := briefingListHandler(tmp, []string{"Locked", "Missing", "Open"})
+	w := httptest.NewRecorder()
+	h(w, httptest.NewRequest("GET", "/api/briefings", nil))
+	var got []briefingEntry
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || len(got) != 1 || got[0].Dir != "Open" {
+		t.Fatalf("got %d %v", w.Code, got)
+	}
+	logs := buf.String()
+	if !strings.Contains(logs, "level=WARN") || !strings.Contains(logs, "dir=Locked") {
+		t.Fatalf("expected warning for Locked, got %q", logs)
+	}
+	if strings.Contains(logs, "Missing") {
+		t.Fatalf("missing dir must not warn: %q", logs)
 	}
 }
 

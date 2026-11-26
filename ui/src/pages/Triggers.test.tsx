@@ -76,6 +76,19 @@ describe('TriggerDetailPage', () => {
   })
 })
 
+describe('TriggerDetailPage active runs', () => {
+  it('links each active run to its chain run', async () => {
+    mockApiGet.mockResolvedValue(three[0])
+    render(
+      <MemoryRouter initialEntries={['/triggers/roundtable/nightly']}>
+        <Routes><Route path="/triggers/:namespace/:name" element={<TriggerDetailPage />} /></Routes>
+      </MemoryRouter>,
+    )
+    const section = await screen.findByRole('region', { name: 'active runs' })
+    expect(within(section).getByRole('link', { name: 'run-1' })).toHaveAttribute('href', '/chains?chain=run-1')
+  })
+})
+
 describe('TriggersPage links', () => {
   it('links to the Schedules page', async () => {
     mockApiGet.mockResolvedValue([])

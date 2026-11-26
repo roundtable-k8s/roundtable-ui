@@ -1191,6 +1191,9 @@ func briefingListHandler(vaultPath string, dirs []string) http.HandlerFunc {
 		for _, d := range dirs {
 			entries, err := os.ReadDir(filepath.Join(vaultPath, d))
 			if err != nil {
+				if !os.IsNotExist(err) {
+					slog.Warn("cannot read briefings directory", "dir", d, "error", err)
+				}
 				continue
 			}
 			for _, e := range entries {
