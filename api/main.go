@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -695,7 +696,7 @@ func knightHandler(namespace string) http.HandlerFunc {
 		// Fetch Knight CR first — it is the authoritative source
 		crObj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			jsonError(w, "Knight not found", http.StatusNotFound)
+			writeGetError(w, r, err, "Knight", "knight", name)
 			return
 		}
 
@@ -1593,7 +1594,7 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 
 		obj, err := dynClient.Resource(chainGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			jsonError(w, "Chain not found", http.StatusNotFound)
+			writeGetError(w, r, err, "Chain", "chain", name)
 			return
 		}
 
@@ -1866,7 +1867,7 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 
 		obj, err := dynClient.Resource(missionGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			jsonError(w, "Mission not found", http.StatusNotFound)
+			writeGetError(w, r, err, "Mission", "mission", name)
 			return
 		}
 
@@ -2211,7 +2212,7 @@ func roundTableDetailHandler(namespace string) http.HandlerFunc {
 
 		obj, err := dynClient.Resource(roundTableGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			jsonError(w, "RoundTable not found", http.StatusNotFound)
+			writeGetError(w, r, err, "RoundTable", "roundtable", name)
 			return
 		}
 
@@ -2293,6 +2294,23 @@ func parseRoundTableResource(obj map[string]interface{}) RoundTableSummary {
 
 // --- NATS KV helpers and handlers ---
 
+// writeGetError answers a failed Kubernetes Get: 404 only when the object is
+// really missing, 502 for a timeout or unavailable API server, 500 otherwise.
+// The error is logged; the body carries a fixed message, never the raw error.
+func writeGetError(w http.ResponseWriter, r *http.Request, err error, label, kind, name string) {
+	if apierrors.IsNotFound(err) {
+		jsonError(w, label+" not found", http.StatusNotFound)
+		return
+	}
+	slog.ErrorContext(r.Context(), "Get "+kind+" failed", kind, name, "error", err)
+	status := http.StatusInternalServerError
+	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) || apierrors.IsServiceUnavailable(err) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		status = http.StatusBadGateway
+	}
+	jsonError(w, "Failed to read "+strings.ToLower(label), status)
+}
+
 // lookupKVBucket returns a handle to an existing NATS KV bucket. It never
 // creates the bucket: the operator owns the results buckets, and a GET must not
 // change NATS state. ok is false when the bucket does not exist.
@@ -2316,7 +2334,8 @@ func missionResultsHandler() http.HandlerFunc {
 		}
 		kv, ok, err := lookupKVBucket(r.Context(), "mission-results")
 		if err != nil {
-			jsonError(w, err.Error(), http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "Look up mission results bucket failed", "mission", name, "error", err)
+			jsonError(w, "Failed to read results", http.StatusInternalServerError)
 			return
 		}
 		if !ok {
@@ -2325,7 +2344,12 @@ func missionResultsHandler() http.HandlerFunc {
 		}
 		entry, err := kv.Get(r.Context(), name)
 		if err != nil {
-			jsonError(w, "Results not found", http.StatusNotFound)
+			if errors.Is(err, jetstream.ErrKeyNotFound) {
+				jsonError(w, "Results not found", http.StatusNotFound)
+				return
+			}
+			slog.ErrorContext(r.Context(), "Get mission results failed", "mission", name, "error", err)
+			jsonError(w, "Failed to read results", http.StatusInternalServerError)
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
@@ -2343,7 +2367,8 @@ func chainStepOutputHandler() http.HandlerFunc {
 		}
 		kv, ok, err := lookupKVBucket(r.Context(), "chain-outputs")
 		if err != nil {
-			jsonError(w, err.Error(), http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "Look up chain outputs bucket failed", "chain", name, "step", step, "error", err)
+			jsonError(w, "Failed to read output", http.StatusInternalServerError)
 			return
 		}
 		if !ok {
@@ -2353,7 +2378,12 @@ func chainStepOutputHandler() http.HandlerFunc {
 		key := name + "." + step
 		entry, err := kv.Get(r.Context(), key)
 		if err != nil {
-			jsonError(w, "Output not found", http.StatusNotFound)
+			if errors.Is(err, jetstream.ErrKeyNotFound) {
+				jsonError(w, "Output not found", http.StatusNotFound)
+				return
+			}
+			slog.ErrorContext(r.Context(), "Get chain step output failed", "chain", name, "step", step, "error", err)
+			jsonError(w, "Failed to read output", http.StatusInternalServerError)
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
