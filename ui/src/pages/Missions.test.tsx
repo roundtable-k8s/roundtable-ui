@@ -48,6 +48,7 @@ describe('MissionsPage', () => {
     state = { missions: [], loading: false, error: 'boom' }
     renderPage()
     expect(screen.getByText(/Failed to load missions: boom/)).toBeInTheDocument()
+    expect(screen.queryByText('No missions found.')).toBeNull()
   })
 
   it('lists missions and totals the stats', () => {

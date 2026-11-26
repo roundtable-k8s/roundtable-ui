@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Target, Clock, Users, Link2, DollarSign, FileText, Brain, ChevronDown, ChevronUp, CheckCircle, XCircle, Zap, Hash } from 'lucide-react'
-import { apiGet } from '../lib/api'
+import { apiGet, ApiError } from '../lib/api'
 import type { Mission } from '../hooks/useMissions'
 import { MissionPhaseBadge } from './MissionPhaseBadge'
 import { PlanningResultViewer } from './PlanningResultViewer'
 import { getKnightConfig } from '../lib/knights'
-import { formatRelativeTime, formatDuration, formatCost } from '../lib/format'
+import { formatRelativeTime, formatCost } from '../lib/format'
 import { phaseColor } from '../lib/status'
 import { Spinner, TableBadge } from './ui'
 import { TraceLink } from './TraceLink'
@@ -22,17 +22,26 @@ interface MissionCardProps {
 function MissionResults({ name }: { name: string }) {
   const [data, setData] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    apiGet<Record<string, unknown>>(`/api/missions/${name}/results`)
-      .then(d => setData(d))
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
+    const ctrl = new AbortController()
+    setData(null)
+    setError(null)
+    setLoading(true)
+    apiGet<Record<string, unknown>>(`/api/missions/${encodeURIComponent(name)}/results`, { signal: ctrl.signal })
+      .then(d => { if (!ctrl.signal.aborted) setData(d) })
+      .catch(e => {
+        if (ctrl.signal.aborted) return
+        setError(e instanceof ApiError && e.status === 404 ? 'notfound' : (e instanceof Error ? e.message : String(e)))
+      })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
+    return () => ctrl.abort()
   }, [name])
 
   if (loading) return <p className="text-xs text-gray-500 py-2">Loading results...</p>
-  if (error) return <p className="text-xs text-gray-500 py-2">No results stored yet</p>
+  if (error === 'notfound') return <p className="text-xs text-gray-500 py-2">No results stored yet</p>
+  if (error) return <p className="text-xs text-red-400 py-2">Could not load results: {error}</p>
 
   return (
     <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-64 overflow-auto bg-roundtable-navy rounded p-3 border border-roundtable-gold/20">
@@ -52,7 +61,10 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
   const [showCriteria, setShowCriteria] = useState(false)
   const [showBriefing, setShowBriefing] = useState(false)
   
-  const isComplete = mission.phase === 'Succeeded' || mission.phase === 'Failed' || mission.phase === 'Expired'
+  // CleaningUp is finished work being torn down; count it only once the
+  // operator has stamped completedAt, otherwise it may still be running.
+  const isComplete = mission.phase === 'Succeeded' || mission.phase === 'Failed' || mission.phase === 'Expired' ||
+    (mission.phase === 'CleaningUp' && !!mission.completedAt)
   const isPlanning = mission.phase === 'Planning'
   
   // Calculate budget usage percentage
@@ -64,7 +76,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
   return (
     <div
       onClick={onClick}
-      className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-5 hover:border-roundtable-gold/30 transition-all cursor-pointer group"
+      className={`bg-roundtable-slate border border-roundtable-steel rounded-xl p-5 hover:border-roundtable-gold/30 transition-all${onClick ? ' cursor-pointer' : ''} group`}
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -145,7 +157,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
           {isComplete && mission.completedAt ? (
             <span>Completed {formatRelativeTime(mission.completedAt)}</span>
           ) : isComplete ? (
-            <span>Duration: {formatDuration(mission.startedAt, mission.expiresAt)}</span>
+            <span>Finished (time unknown)</span>
           ) : mission.startedAt ? (
             <span>Started {formatRelativeTime(mission.startedAt)}</span>
           ) : (
@@ -180,6 +192,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
         <div className="mt-3 pt-3 border-t border-roundtable-steel/50">
           <button
             onClick={(e) => { e.stopPropagation(); setShowKnights(!showKnights) }}
+            aria-expanded={showKnights}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors mb-2 w-full"
           >
             {showKnights ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -235,6 +248,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
         <div className="mt-3 pt-3 border-t border-roundtable-steel/50">
           <button
             onClick={(e) => { e.stopPropagation(); setShowChains(!showChains) }}
+            aria-expanded={showChains}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors mb-2 w-full"
           >
             {showChains ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -273,6 +287,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
         <div className="mt-3 pt-3 border-t border-roundtable-steel/50">
           <button
             onClick={(e) => { e.stopPropagation(); setShowCriteria(!showCriteria) }}
+            aria-expanded={showCriteria}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors mb-2 w-full"
           >
             {showCriteria ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -292,6 +307,7 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
         <div className="mt-3 pt-3 border-t border-roundtable-steel/50">
           <button
             onClick={(e) => { e.stopPropagation(); setShowBriefing(!showBriefing) }}
+            aria-expanded={showBriefing}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors mb-2 w-full"
           >
             {showBriefing ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -315,15 +331,18 @@ export function MissionCard({ mission, onClick, showTable }: MissionCardProps) {
           {isComplete && (
             <button
               onClick={(e) => { e.stopPropagation(); setShowResults(r => !r) }}
+              aria-expanded={showResults}
               className="flex items-center gap-1 text-xs text-roundtable-gold/60 hover:text-roundtable-gold transition-colors"
             >
               <FileText className="w-3 h-3" />
               {showResults ? 'hide results' : 'results'}
             </button>
           )}
-          <span className="text-xs text-gray-600 group-hover:text-roundtable-gold/60 transition-colors">
-            view details →
-          </span>
+          {onClick && (
+            <span className="text-xs text-gray-600 group-hover:text-roundtable-gold/60 transition-colors">
+              view details →
+            </span>
+          )}
         </div>
       </div>
 

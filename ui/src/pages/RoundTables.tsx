@@ -43,7 +43,7 @@ export function RoundTablesPage() {
         </div>
       )}
 
-      {!loading && roundTables.length === 0 && (
+      {!loading && !error && roundTables.length === 0 && (
         <EmptyState icon={Crown} title="No round tables found." />
       )}
 
