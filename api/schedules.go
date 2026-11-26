@@ -210,7 +210,7 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 			return
 		}
 		if status != http.StatusOK {
-			writeGatewayError(w, status, b)
+			writeGatewayResponse(w, status, b)
 			return
 		}
 		if format == "json" {
@@ -233,9 +233,9 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 	}
 }
 
-// writeGatewayError relays a gateway error answer: a JSON body as is, any
+// writeGatewayResponse relays a gateway answer (success or error): a JSON body as is, any
 // other body wrapped in {"error": ...}.
-func writeGatewayError(w http.ResponseWriter, status int, b []byte) {
+func writeGatewayResponse(w http.ResponseWriter, status int, b []byte) {
 	if json.Valid(b) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Content-Type-Options", "nosniff")

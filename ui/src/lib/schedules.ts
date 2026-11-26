@@ -92,7 +92,7 @@ export interface ScheduleRunNow {
   run?: string
   target?: string
   state: 'started' | 'pending' | 'skipped' | string
-  reason?: string
+  skipReason?: string
 }
 
 export const RUN_HISTORY_LIMIT = 50
@@ -135,6 +135,11 @@ const OUTCOME_LABELS: Record<string, string> = {
   running: 'Running',
   started: 'Started',
   unknown: 'Unknown',
+}
+
+/** Maps a Trigger run phase (PartiallySucceeded) to an outcome key (partiallySucceeded). */
+export function phaseToOutcome(phase: string): string {
+  return phase ? phase.charAt(0).toLowerCase() + phase.slice(1) : 'unknown'
 }
 
 export function outcomeLabel(outcome: string): string {

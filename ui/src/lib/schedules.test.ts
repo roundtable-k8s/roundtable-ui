@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatCostUSD, formatSeconds, runResultText, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
+import { phaseToOutcome, formatCostUSD, formatSeconds, runResultText, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
 
 describe('schedules helpers', () => {
   it('builds encoded API paths and links', () => {
@@ -32,5 +32,14 @@ describe('schedules helpers', () => {
       schedule: 's', target: 'chain', run: 'r', phase: 'Failed',
       steps: [{ name: 'a', output: 'A' }, { name: 'b', error: 'boom' }, { name: 'c' }],
     })).toBe('## a\n\nA\n\n## b\n\nError: boom')
+  })
+})
+
+describe('phaseToOutcome', () => {
+  it('lower-camels any run phase', () => {
+    expect(phaseToOutcome('Succeeded')).toBe('succeeded')
+    expect(phaseToOutcome('PartiallySucceeded')).toBe('partiallySucceeded')
+    expect(phaseToOutcome('Running')).toBe('running')
+    expect(phaseToOutcome('')).toBe('unknown')
   })
 })
