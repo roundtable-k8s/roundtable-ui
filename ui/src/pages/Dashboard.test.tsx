@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
@@ -87,6 +87,27 @@ function renderDashboard(props = {}) {
     </BrowserRouter>
   )
 }
+
+// Tests override these mocks; put the defaults back after every test, pass or fail.
+let defaults: { apiGet: unknown; apiFetch: unknown; useFleet: unknown; useWebSocket: unknown }
+beforeEach(async () => {
+  const api = await import('../lib/api')
+  const { useWebSocket } = await import('../hooks/useWebSocket')
+  defaults = {
+    apiGet: vi.mocked(api.apiGet).getMockImplementation(),
+    apiFetch: vi.mocked(api.apiFetch).getMockImplementation(),
+    useFleet: vi.mocked(useFleet).getMockImplementation(),
+    useWebSocket: vi.mocked(useWebSocket).getMockImplementation(),
+  }
+})
+afterEach(async () => {
+  const api = await import('../lib/api')
+  const { useWebSocket } = await import('../hooks/useWebSocket')
+  vi.mocked(api.apiGet).mockReset().mockImplementation(defaults.apiGet as typeof api.apiGet)
+  vi.mocked(api.apiFetch).mockReset().mockImplementation(defaults.apiFetch as typeof api.apiFetch)
+  vi.mocked(useFleet).mockReset().mockImplementation(defaults.useFleet as typeof useFleet)
+  vi.mocked(useWebSocket).mockReset().mockImplementation(defaults.useWebSocket as typeof useWebSocket)
+})
 
 describe('DashboardPage', () => {
   beforeEach(() => {
@@ -227,24 +248,20 @@ describe('DashboardPage', () => {
   }) as unknown as ReturnType<typeof useFleet>
 
   it('lists fleet knights that are not in KNIGHT_CONFIG', () => {
-    const orig = vi.mocked(useFleet).getMockImplementation()!
     vi.mocked(useFleet).mockImplementation(() => fleetOf(['rt-lead', 'merlin']))
     renderDashboard()
     expect(screen.getByText('merlin')).toBeInTheDocument()
     expect(screen.getByText('rt-lead')).toBeInTheDocument()
     expect(screen.getAllByText('online').length).toBe(2)
     expect(screen.queryByText('galahad')).not.toBeInTheDocument()
-    vi.mocked(useFleet).mockImplementation(orig)
   })
 
   it('shows an empty state, not offline tiles, for an empty fleet', () => {
-    const orig = vi.mocked(useFleet).getMockImplementation()!
     vi.mocked(useFleet).mockImplementation(() => fleetOf([]))
     renderDashboard()
     expect(screen.getByText('No knights found')).toBeInTheDocument()
     expect(screen.queryByText('offline')).not.toBeInTheDocument()
     expect(screen.queryByText('galahad')).not.toBeInTheDocument()
-    vi.mocked(useFleet).mockImplementation(orig)
   })
 
   it('displays time range selector', async () => {
@@ -313,7 +330,7 @@ describe('DashboardPage session cost refresh (#152)', () => {
 describe('DashboardPage truncated chain list', () => {
   async function withChains(n: number, total: string) {
     const { apiGet, apiFetch } = await import('../lib/api')
-    const orig = vi.mocked(apiGet).getMockImplementation()!
+    const orig = defaults.apiGet as typeof apiGet
     vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
       url === '/api/chains?limit=500'
         ? Promise.resolve(Array.from({ length: n }, (_, i) => ({ name: `c-${i}`, phase: 'Succeeded', steps: [] })))
@@ -322,22 +339,19 @@ describe('DashboardPage truncated chain list', () => {
       url === '/api/chains?limit=1'
         ? Promise.resolve(new Response('[]', { headers: { 'X-Total-Count': total } }))
         : Promise.resolve({ ok: false, json: () => Promise.resolve({}) })) as typeof apiFetch)
-    return () => vi.mocked(apiGet).mockImplementation(orig)
   }
 
   it('says "showing 500 of N" when there are more chains than the page', async () => {
-    const restore = await withChains(500, '731')
+    await withChains(500, '731')
     renderDashboard()
     expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
-    restore()
   })
 
   it('shows no note with fewer than 500 chains', async () => {
-    const restore = await withChains(2, '2')
+    await withChains(2, '2')
     renderDashboard()
     await screen.findByText('c-0')
     expect(screen.queryByTestId('chains-truncated')).toBeNull()
-    restore()
   })
 
   it('shows fleet and chain failures instead of zeros', async () => {

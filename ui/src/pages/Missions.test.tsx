@@ -75,7 +75,14 @@ describe('MissionsPage', () => {
     expect(screen.getAllByTestId('mission-card')).toHaveLength(2)
   })
 
-  it('refreshes from the button and after the wizard creates a mission', async () => {
+  it('refreshes when the refresh button is clicked', async () => {
+    renderPage()
+    expect(refresh).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the wizard and refreshes after it creates a mission', async () => {
     renderPage()
     await userEvent.click(screen.getByRole('button', { name: /New Mission/ }))
     expect(screen.getByTestId('wizard')).toBeInTheDocument()
