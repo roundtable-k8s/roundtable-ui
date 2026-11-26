@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { eventKey, type NatsEvent } from './useWebSocket'
 import { getKnightConfig } from '../lib/knights'
 import { parseEvent, resultFailureReason } from '../lib/events'
+import { formatCost } from '../lib/format'
 
 const MAX_SEEN_KEYS = 1000
 
@@ -43,7 +44,7 @@ export function useTaskNotifications(
         addToast(`❌ ${displayName} failed: ${reason}`, 'error')
       } else {
         const cost = typeof data.cost === 'number' ? data.cost : null
-        const costStr = cost ? ` ($${cost.toFixed(4)})` : ''
+        const costStr = cost ? ` (${formatCost(cost)})` : ''
         const domainStr = knight ? ` ${config.domain}` : ''
         addToast(`${config.emoji} ${displayName} completed a${domainStr} task${costStr}`, 'success')
       }

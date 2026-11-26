@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Skull, RotateCcw } from 'lucide-react'
 import { Drawer, Modal, EmptyState, ErrorBanner, Spinner } from './ui'
 import { UntrustedText } from './UntrustedText'
-import { formatTimestamp } from '../lib/format'
+import { formatTimestampOrDate } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { errorExcerpt, deadLetterTime, isChainOwned, type DeadLetter, type RetryResult } from '../lib/deadLetters'
 
@@ -125,7 +125,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
               {rows.map((e) => (
                 <tr key={entryKey(e)} data-testid="dead-letter-row" onClick={() => open(e)}
                   className={`border-b border-roundtable-steel/50 cursor-pointer hover:bg-roundtable-steel/30 ${e.state === 'resolved' ? 'opacity-50' : ''}`}>
-                  <td className="p-3 whitespace-nowrap text-gray-300">{formatTimestamp(deadLetterTime(e))}</td>
+                  <td className="p-3 whitespace-nowrap text-gray-300">{formatTimestampOrDate(deadLetterTime(e))}</td>
                   <td className="p-3 text-white">{e.knight}</td>
                   <td className="p-3 text-gray-300">{e.reason}</td>
                   <td className="p-3 text-gray-400 max-w-xs truncate">{sanitizeText(errorExcerpt(e.error))}</td>

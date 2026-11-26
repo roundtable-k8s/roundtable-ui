@@ -1,3 +1,4 @@
+import { formatSecondsLadder } from './format'
 /**
  * In-flight task registry as seen by the browser (#183, #200).
  *
@@ -159,7 +160,5 @@ export function formatAge(iso: string | undefined, now: number): string {
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return '—'
   const sec = Math.max(0, Math.floor((now - t) / 1000))
-  if (sec < 60) return `${sec}s`
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`
+  return formatSecondsLadder(sec)
 }

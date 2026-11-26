@@ -23,9 +23,9 @@ describe('formatWait', () => {
     expect(formatWait(0)).toBe('—')
     expect(formatWait(undefined)).toBe('—')
     expect(formatWait(45.7)).toBe('45s')
-    expect(formatWait(120)).toBe('2m')
+    expect(formatWait(120)).toBe('2m 0s')
     expect(formatWait(200)).toBe('3m 20s')
-    expect(formatWait(3900)).toBe('1h 05m')
+    expect(formatWait(3900)).toBe('1h 5m')
   })
 })
 

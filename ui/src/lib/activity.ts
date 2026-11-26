@@ -1,3 +1,4 @@
+import { formatMsLadder } from './format'
 /**
  * Live task activity stream as seen by the browser (#184, #214).
  *
@@ -313,10 +314,5 @@ export function elapsedMs(s: ActivitySummary, now: number): number | null {
 
 /** Compact duration: 850ms, 4.2s, 2m 5s, 1h 3m. */
 export function formatMs(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms) || ms < 0) return '—'
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-  const sec = Math.floor(ms / 1000)
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`
+  return formatMsLadder(ms)
 }

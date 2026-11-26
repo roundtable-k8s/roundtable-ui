@@ -6,7 +6,7 @@ import { useFleet } from '../hooks/useFleet'
 import { fetchWithTimeout } from '../hooks/useKnightSession'
 import type { SessionEntry, SessionTreeNode, SessionHistoryItem, KnightSessionStats } from '../hooks/useKnightSession'
 import { Spinner, ErrorBanner, EmptyState, PageHeader, RefreshButton, StatCard, ProgressBar } from '../components/ui'
-import { formatCost, formatTimestamp } from '../lib/format'
+import { formatCost, formatDateTime, formatTimestampOrDate } from '../lib/format'
 import { UntrustedText } from '../components/UntrustedText'
 import { sanitizeText } from '../lib/untrusted'
 import { groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession } from '../lib/sessions'
@@ -36,7 +36,7 @@ const TREE_INDENT_PX = 16
 
 // Human label for a past session in the picker: when it ran, message count, and the opening prompt.
 function sessionLabel(s: SessionHistoryItem): string {
-  const when = s.startedAt ? new Date(s.startedAt).toLocaleString() : 'unknown time'
+  const when = s.startedAt ? formatDateTime(s.startedAt) : 'unknown time'
   const prompt = s.firstPrompt ? ` — ${s.firstPrompt.slice(0, 60)}` : ''
   return `${when} · ${s.messageCount} msgs${prompt}`
 }
@@ -107,7 +107,7 @@ export function TreeNodeView({ node, depth = 0 }: { node: SessionTreeNode & { ch
         {node.childrenCount > 0 && (
           <span className="text-xs text-gray-600 shrink-0">{node.childrenCount}</span>
         )}
-        <span className="text-xs text-gray-600 shrink-0 whitespace-nowrap tabular-nums">{formatTimestamp(node.timestamp)}</span>
+        <span className="text-xs text-gray-600 shrink-0 whitespace-nowrap tabular-nums">{formatTimestampOrDate(node.timestamp)}</span>
       </div>
       {expanded && hasChildren && (
         <div>
@@ -174,7 +174,7 @@ export function ToolCallCard({ entry }: { entry: SessionEntry }) {
         {entry.tokens && (
           <span className="text-gray-600 text-xs shrink-0">{entry.tokens.input + entry.tokens.output}t</span>
         )}
-        <span className="text-gray-600 text-xs shrink-0 whitespace-nowrap tabular-nums">{formatTimestamp(entry.timestamp)}</span>
+        <span className="text-gray-600 text-xs shrink-0 whitespace-nowrap tabular-nums">{formatTimestampOrDate(entry.timestamp)}</span>
       </div>
       {expanded && (
         <div className="mt-2 space-y-2 border-t border-roundtable-steel/30 pt-2">
@@ -548,7 +548,7 @@ export function SessionsPage() {
         <div className="bg-roundtable-slate border border-roundtable-steel rounded-lg p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="text-gray-300 font-medium">📼 Replaying archived session</span>
           {archivedMeta?.startedAt && (
-            <span className="text-gray-500">Started {new Date(archivedMeta.startedAt).toLocaleString()}</span>
+            <span className="text-gray-500">Started {formatDateTime(archivedMeta.startedAt)}</span>
           )}
           {archivedMeta && (
             <span className="text-gray-500">{archivedMeta.total.toLocaleString()} entries{archivedMeta.hasMore ? ' (showing first 300)' : ''}</span>
