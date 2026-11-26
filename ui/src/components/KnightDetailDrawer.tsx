@@ -158,11 +158,13 @@ export function KnightIsolationSection({ isolation: iso }: { isolation: KnightIs
         {missingService && iso.egressRestricted?.message && (
           <p className="text-xs text-amber-300">{sanitizeText(iso.egressRestricted.message)}</p>
         )}
-        {egress && (
+        {egress && (() => {
+          const hostLabels = egressHostLabels(egress)
+          return (
           <>
             <CardRow label="Allowed hosts">
-              {egressHostLabels(egress).length > 0
-                ? <span className="flex flex-wrap justify-end gap-1">{egressHostLabels(egress).map((h) => <Chip key={h}>{sanitizeText(h)}</Chip>)}</span>
+              {hostLabels.length > 0
+                ? <span className="flex flex-wrap justify-end gap-1">{hostLabels.map((h, i) => <Chip key={`${i}-${h}`}>{sanitizeText(h)}</Chip>)}</span>
                 : <span className="text-xs text-gray-500">none (DNS, NATS and the baseline only)</span>}
             </CardRow>
             <CardRow label="Allowed ports">
@@ -183,8 +185,10 @@ export function KnightIsolationSection({ isolation: iso }: { isolation: KnightIs
                 : <span className="text-xs text-gray-500">none</span>}
             </CardRow>
             {egress.source === 'table' && <p className="text-[11px] text-gray-500">Allowlist inherited from the RoundTable default.</p>}
+            {egress.source === 'default' && <p className="text-[11px] text-gray-500">No allowlist set: the operator default applies.</p>}
           </>
-        )}
+          )
+        })()}
       </div>
     </div>
   )

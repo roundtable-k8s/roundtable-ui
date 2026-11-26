@@ -65,7 +65,7 @@ export interface KnightEgress {
   allowedPorts: number[]
   allowedServices: EgressService[]
   /** "knight" (spec.egress) or "table" (the RoundTable's default) */
-  source: 'knight' | 'table'
+  source: 'knight' | 'table' | 'default'
 }
 
 /** How isolated a knight is and what it may reach (#269). */

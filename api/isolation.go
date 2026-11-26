@@ -63,8 +63,9 @@ type KnightEgressInfo struct {
 	AllowedHostEntries []EgressHostInfo    `json:"allowedHostEntries"`
 	AllowedPorts       []int32             `json:"allowedPorts"`
 	AllowedServices    []EgressServiceInfo `json:"allowedServices"`
-	// Source is "knight" (spec.egress) or "table" (the RoundTable's
-	// spec.defaults.egress).
+	// Source is "knight" (spec.egress), "table" (the RoundTable's
+	// spec.defaults.egress) or "default" (neither set: the operator's empty
+	// allowlist).
 	Source string `json:"source"`
 }
 
@@ -264,6 +265,9 @@ func buildKnightIsolation(cr *unstructured.Unstructured, pod *corev1.Pod, tableD
 			info.Egress = parseEgress(e, "knight")
 		} else if e := getNestedMap(tableDefaults, "egress"); e != nil {
 			info.Egress = parseEgress(e, "table")
+		} else {
+			// Neither set: the operator default (an empty allowlist) applies.
+			info.Egress = parseEgress(nil, "default")
 		}
 	}
 	return info

@@ -34,6 +34,22 @@ describe('KnightIsolationSection', () => {
     expect(screen.getByText('none (DNS, NATS and the baseline only)')).toBeInTheDocument()
   })
 
+  it('explains the empty operator-default allowlist', () => {
+    const egress = { allowedHosts: [], allowedHostEntries: [], allowedPorts: [], allowedServices: [], source: 'default' as const }
+    render(<KnightIsolationSection isolation={{ ...isolated, egress }} />)
+    expect(screen.getByText('none (DNS, NATS and the baseline only)')).toBeInTheDocument()
+    expect(screen.getByText('No allowlist set: the operator default applies.')).toBeInTheDocument()
+  })
+
+  it('renders a host listed twice without a duplicate-key warning', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const egress = { ...isolated.egress!, allowedHosts: ['dup.example', 'dup.example'], allowedHostEntries: [{ host: 'dup.example' }, { host: 'dup.example' }] }
+    render(<KnightIsolationSection isolation={{ ...isolated, egress }} />)
+    expect(screen.getAllByText('dup.example')).toHaveLength(2)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
   it('shows an opt-out with its reason and that any host is reachable', () => {
     render(<KnightIsolationSection isolation={optedOut} />)
     expect(screen.getByTestId('isolation-badge')).toHaveTextContent('opted out')

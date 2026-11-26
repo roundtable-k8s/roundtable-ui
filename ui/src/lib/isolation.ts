@@ -21,12 +21,12 @@ export function isNotIsolated(knight: Pick<Knight, 'isolation'>): boolean {
   return state === 'opted-out' || state === 'not-enforced'
 }
 
-/** Hover text for the isolation badge: why the knight is (not) isolated. */
 /** "runtime: none, egress: unrestricted" — what the knight opts out of. */
 export function optOutSummary(iso: KnightIsolation): string {
   return [iso.runtimeOptOut && 'runtime: none', iso.egressOptOut && 'egress: unrestricted'].filter(Boolean).join(', ')
 }
 
+/** Hover text for the isolation badge: why the knight is (not) isolated. */
 export function isolationTooltip(iso: KnightIsolation): string {
   if (iso.state === 'opted-out') {
     const what = optOutSummary(iso)
