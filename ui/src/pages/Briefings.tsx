@@ -1,7 +1,7 @@
 import { apiGet, apiGetText } from '../lib/api'
 import { useState, useEffect } from 'react'
 import { BookOpen, Calendar, FileText, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
-import { Spinner, EmptyState, PageHeader } from '../components/ui'
+import { Spinner, EmptyState, PageHeader, ErrorBanner } from '../components/ui'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 
 // Helper to format date in human-friendly format
@@ -56,6 +56,7 @@ export function BriefingsPage() {
   const [selected, setSelected] = useState<BriefingEntry | null>(null)
   const [content, setContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [listError, setListError] = useState<string | null>(null)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState(false)
 
@@ -72,7 +73,10 @@ export function BriefingsPage() {
           setSelected(sorted[0])
         }
       })
-      .catch(() => setLoading(false))
+      .catch((e) => {
+        setListError(e instanceof Error ? e.message : 'Unknown error')
+        setLoading(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -117,7 +121,7 @@ export function BriefingsPage() {
           <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-4">
             <h2 className="text-sm font-medium text-gray-400 mb-3">Archives</h2>
             {loading && <p className="text-gray-500 text-sm">Loading...</p>}
-            {!loading && briefings.length === 0 && (
+            {!loading && !listError && briefings.length === 0 && (
               <p className="text-gray-500 text-xs">No briefings yet</p>
             )}
             <div className="space-y-1 max-h-[70vh] overflow-y-auto">
@@ -142,7 +146,9 @@ export function BriefingsPage() {
         {/* Briefing content */}
         <div className="flex-1">
           {/* Empty state when no briefings exist */}
-          {!loading && briefings.length === 0 ? (
+          {listError ? (
+            <ErrorBanner>Failed to load briefings: {listError}</ErrorBanner>
+          ) : !loading && briefings.length === 0 ? (
             <EmptyState
               icon={BookOpen}
               title="No briefings yet"

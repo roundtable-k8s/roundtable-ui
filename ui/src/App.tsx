@@ -124,7 +124,7 @@ export default function App() {
               >
                 <Icon className="w-5 h-5" />
                 <span className="font-medium">{label}</span>
-                {path === '/failed' && openDeadLetters.count > 0 && (
+                {path === '/failed' && (openDeadLetters.count > 0 || openDeadLetters.error) && (
                   <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400" aria-label={deadBadge.title} title={deadBadge.title}>
                     {deadBadge.text}
                   </span>

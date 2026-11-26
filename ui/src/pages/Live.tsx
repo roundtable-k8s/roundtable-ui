@@ -8,12 +8,12 @@ import { parseEvent, parseEventData } from '../lib/events'
 import { FleetGraph } from '../components/FleetGraph'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
-import { PageHeader, StatCard, EmptyState } from '../components/ui'
+import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 
 export function LivePage() {
   const { events, connected } = useWebSocket()
-  const { knights: fleetKnights } = useFleet()
+  const { knights: fleetKnights, error: fleetError } = useFleet()
   const [filterKnight, setFilterKnight] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   const [filterDomain, setFilterDomain] = useState<string>('')
@@ -80,6 +80,11 @@ export function LivePage() {
 
   return (
     <div>
+      {fleetError && (
+        <div className="mb-4" role="alert">
+          <ErrorBanner>Failed to load fleet: {fleetError}</ErrorBanner>
+        </div>
+      )}
       {/* Header */}
       <PageHeader icon={GitGraph} title="Message Flow">
         {connected ? (

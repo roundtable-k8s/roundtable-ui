@@ -13,9 +13,11 @@ export interface OpenDeadLetters {
   capped: boolean
   /** The real number when the gateway reports one (`total`) and no table filter applies. */
   total?: number
+  /** The last poll failed: the count is unknown, not zero. */
+  error?: boolean
 }
 
-/** Open dead letters, polled for the nav badge. Zero when the gateway is not configured or unreachable. */
+/** Open dead letters, polled for the nav badge. `error` is set when the last poll failed (the count is then unknown). */
 export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLetters {
   const [state, setState] = useState<OpenDeadLetters>({ count: 0, capped: false })
   useEffect(() => {
@@ -29,7 +31,7 @@ export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLett
           const capped = all.length >= DEAD_LETTER_CAP || (typeof d.total === 'number' && d.total > all.length)
           setState({ count, capped, total: !table && typeof d.total === 'number' ? d.total : undefined })
         })
-        .catch(() => { if (alive) setState({ count: 0, capped: false }) })
+        .catch(() => { if (alive) setState((prev) => ({ ...prev, error: true })) })
     poll()
     const id = setInterval(poll, intervalMs)
     return () => { alive = false; clearInterval(id) }
@@ -38,7 +40,8 @@ export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLett
 }
 
 /** Badge text and tooltip: "100+" with the real count in the title when known. */
-export function deadLetterBadge({ count, capped, total }: OpenDeadLetters): { text: string; title: string } {
+export function deadLetterBadge({ count, capped, total, error }: OpenDeadLetters): { text: string; title: string } {
+  if (error) return { text: '?', title: 'dead-letter count unavailable' }
   if (!capped) return { text: String(count), title: `${count} open` }
   const text = `${count}+`
   return { text, title: total !== undefined ? `${total} open (showing ${count}+)` : `${count} or more open — the list is capped, the real number is not reported` }

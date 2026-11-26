@@ -29,4 +29,19 @@ describe('useOpenDeadLetters', () => {
     expect(deadLetterBadge({ count: 3, capped: false })).toEqual({ text: '3', title: '3 open' })
     expect(deadLetterBadge({ count: 100, capped: true }).title).toMatch(/100 or more open/)
   })
+
+  it('flags an error instead of silently reporting zero', async () => {
+    apiGet.mockRejectedValue(new Error('boom'))
+    const { result } = renderHook(() => useOpenDeadLetters(''))
+    await waitFor(() => expect(result.current.error).toBe(true))
+    expect(result.current.count).toBe(0)
+    expect(deadLetterBadge(result.current)).toEqual({ text: '?', title: 'dead-letter count unavailable' })
+  })
+
+  it('clears the error once a poll succeeds again', async () => {
+    apiGet.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ deadLetters: [{ taskId: '1' }] })
+    const { result } = renderHook(() => useOpenDeadLetters('', 20))
+    await waitFor(() => expect(result.current.count).toBe(1))
+    expect(result.current.error).toBeUndefined()
+  })
 })
