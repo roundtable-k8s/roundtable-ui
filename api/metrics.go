@@ -34,6 +34,28 @@ var (
 	}, []string{"route", "method"})
 )
 
+var (
+	gatewayRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "roundtable_ui_gateway_requests_total",
+		Help: "Gateway relay calls, by route template, method and upstream status code (\"error\" when the transport failed).",
+	}, []string{"route", "method", "code"})
+
+	informerSyncFailuresTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "roundtable_ui_informer_sync_failures_total",
+		Help: "Informer first-sync timeouts (resource) and watch errors (resource_watch), by resource.",
+	}, []string{"resource"})
+
+	natsDisconnectsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "roundtable_ui_nats_disconnects_total",
+		Help: "NATS disconnects.",
+	})
+
+	natsConnected = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "roundtable_ui_nats_connected",
+		Help: "1 while the NATS connection is up, 0 otherwise.",
+	})
+)
+
 // statusRecorder captures the response status code for metrics labels.
 type statusRecorder struct {
 	http.ResponseWriter

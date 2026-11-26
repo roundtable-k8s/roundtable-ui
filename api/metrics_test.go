@@ -290,3 +290,46 @@ func TestChainWatchSubscribersMetric(t *testing.T) {
 		t.Fatalf("got %v want 0", got)
 	}
 }
+
+func relayOnce(t *testing.T, g *gatewayClient) {
+	t.Helper()
+	r := mux.NewRouter()
+	r.HandleFunc("/api/relay-test/{id}", func(w http.ResponseWriter, r *http.Request) {
+		g.relay(w, r, http.MethodGet, "/v1/x", nil, nil)
+	}).Methods("GET")
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/relay-test/abc", nil))
+}
+
+func TestGatewayRequestsMetric(t *testing.T) {
+	const route = "/api/relay-test/{id}"
+	count := func(code string) float64 {
+		return testutil.ToFloat64(gatewayRequestsTotal.WithLabelValues(route, "GET", code))
+	}
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("{}")) }))
+	defer ok.Close()
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) }))
+	defer bad.Close()
+	closed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+
+	for _, tc := range []struct{ code, url string }{{"200", ok.URL}, {"500", bad.URL}, {"error", closedURL}} {
+		before := count(tc.code)
+		relayOnce(t, &gatewayClient{baseURL: tc.url, http: &http.Client{}})
+		if got := count(tc.code) - before; got != 1 {
+			t.Errorf("code=%s: counter delta = %v, want 1", tc.code, got)
+		}
+	}
+}
+
+func TestNATSMetricsRegistered(t *testing.T) {
+	natsConnected.Set(1)
+	if got := testutil.ToFloat64(natsConnected); got != 1 {
+		t.Errorf("natsConnected = %v, want 1", got)
+	}
+	before := testutil.ToFloat64(natsDisconnectsTotal)
+	natsDisconnectsTotal.Inc()
+	if got := testutil.ToFloat64(natsDisconnectsTotal) - before; got != 1 {
+		t.Errorf("disconnects delta = %v, want 1", got)
+	}
+}

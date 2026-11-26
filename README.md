@@ -460,6 +460,10 @@ Read-only view of the Trigger resource (source, target, recent firings). 503 whe
 - `GET /metrics` — Prometheus metrics. Served at the root, outside `/api`, so it is not subject to the `DASHBOARD_API_KEY` check
   Besides the Go and process collectors and the HTTP/WebSocket series it exports internal state, read at scrape time:
   `roundtable_ui_build_info{version,commit,go_version}` (always 1), `roundtable_ui_running_tasks{status}` (`running`, `stale`, `lost`), `roundtable_ui_list_cache_objects{resource}`, `roundtable_ui_list_cache_synced{resource}` (1 once the watch cache has synced) and `roundtable_ui_chain_watch_subscribers`
+  Also:
+  - `roundtable_ui_gateway_requests_total{route,method,code}` — gateway relay calls by mux route template and upstream status (`code="error"` when the gateway was unreachable)
+  - `roundtable_ui_informer_sync_failures_total{resource}` — informer first-sync timeouts (`resource`) and watch errors (`resource_watch`)
+  - `roundtable_ui_nats_disconnects_total` and `roundtable_ui_nats_connected` (1/0) — NATS connection health
 
 ## Security
 
