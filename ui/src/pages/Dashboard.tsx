@@ -1,4 +1,5 @@
 import { apiGet } from '../lib/api'
+import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -51,7 +52,7 @@ async function fetchSessionCosts(names: string[]): Promise<Record<string, number
   return perKnight
 }
 
-export const DASHBOARD_CHAINS_URL = '/api/chains?limit=500'
+export const DASHBOARD_CHAINS_URL = `/api/chains?limit=${CHAIN_LIST_LIMIT}`
 
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
   const { table } = useTableFilter()
@@ -63,6 +64,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     [runningAll, table],
   )
   const [chains, setChains] = useState<Chain[]>([])
+  const [chainTotal, setChainTotal] = useState<number | null>(null)
   const [sessionCosts, setSessionCosts] = useState<{ total: number; perKnight: Record<string, number> }>({ total: 0, perKnight: {} })
   const [costExpanded, setCostExpanded] = useState(defaultCostExpanded)
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week')
@@ -70,7 +72,16 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   useEffect(() => {
     // The list is paginated (default 100, #275); ask for the maximum so no
     // chain is dropped. Items are slim, which is all this panel needs.
-    apiGet<Chain[]>(withTable(DASHBOARD_CHAINS_URL, table)).then(setChains).catch(() => {})
+    let alive = true
+    apiGet<Chain[]>(withTable(DASHBOARD_CHAINS_URL, table)).then(data => {
+      if (!alive) return
+      setChains(data)
+      // A full page means the list may be cut short: ask for the real total.
+      if (data.length >= CHAIN_LIST_LIMIT) {
+        fetchChainTotal(withTable(DASHBOARD_CHAINS_URL, table)).then(n => { if (alive) setChainTotal(n) })
+      } else setChainTotal(null)
+    }).catch(() => {})
+    return () => { alive = false }
   }, [table])
 
   // Fetch cumulative session costs once the fleet list arrives (reuses the
@@ -310,6 +321,9 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
         <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">⛓️ Chains</h2>
+            {truncationNote(chains.length, chainTotal) && (
+              <span className="text-xs text-yellow-400" data-testid="chains-truncated">{truncationNote(chains.length, chainTotal)}</span>
+            )}
             <Link to="/chains" className="text-xs text-roundtable-gold hover:underline flex items-center gap-1">
               View all <ArrowRight className="w-3 h-3" />
             </Link>

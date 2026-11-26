@@ -278,3 +278,34 @@ describe('DashboardPage session cost refresh (#152)', () => {
     expect(vi.mocked(apiFetch).mock.calls.length).toBe(before)
   })
 })
+
+describe('DashboardPage truncated chain list', () => {
+  async function withChains(n: number, total: string) {
+    const { apiGet, apiFetch } = await import('../lib/api')
+    const orig = vi.mocked(apiGet).getMockImplementation()!
+    vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
+      url === '/api/chains?limit=500'
+        ? Promise.resolve(Array.from({ length: n }, (_, i) => ({ name: `c-${i}`, phase: 'Succeeded', steps: [] })))
+        : orig(url, init)) as typeof apiGet)
+    vi.mocked(apiFetch).mockImplementation(((url: string) =>
+      url === '/api/chains?limit=1'
+        ? Promise.resolve(new Response('[]', { headers: { 'X-Total-Count': total } }))
+        : Promise.resolve({ ok: false, json: () => Promise.resolve({}) })) as typeof apiFetch)
+    return () => vi.mocked(apiGet).mockImplementation(orig)
+  }
+
+  it('says "showing 500 of N" when there are more chains than the page', async () => {
+    const restore = await withChains(500, '731')
+    renderDashboard()
+    expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
+    restore()
+  })
+
+  it('shows no note with fewer than 500 chains', async () => {
+    const restore = await withChains(2, '2')
+    renderDashboard()
+    await screen.findByText('c-0')
+    expect(screen.queryByTestId('chains-truncated')).toBeNull()
+    restore()
+  })
+})
