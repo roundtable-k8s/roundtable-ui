@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarClock, Check, Copy, GitBranch, Link2, Save, Shield, Target } from 'lucide-react'
@@ -10,7 +10,7 @@ import { sanitizeText } from '../lib/untrusted'
 import { scheduleApi, type Schedule } from '../lib/schedules'
 import { CRON_PRESETS, CronError, formatInZone, nextRuns } from '../lib/cron'
 import {
-  buildRequest, buildSpec, targetKind, emptyForm, fieldMessage, formFieldFor, formFromManifest, manifestYaml,
+  buildRequest, emptyForm, fieldMessage, formFieldFor, formFromManifest, manifestYaml,
   GATEWAY_LABEL, GATEWAY_LABEL_VALUE, CALLER_ANNOTATION,
   type ConcurrencyPolicy, type FormField, type ScheduleForm, type TargetKind, type TriggerManifest,
 } from '../lib/scheduleForm'
@@ -107,9 +107,6 @@ export function ScheduleFormPage() {
 
   const [form, setForm] = useState<ScheduleForm>(() => emptyForm(params.namespace ?? ''))
   const [base, setBase] = useState<TriggerManifest | undefined>()
-  // The base spec per target kind, so hidden fields (dedupeKey, maxActive, a
-  // knight's model...) survive switching the kind and back.
-  const baseSpecs = useRef(new Map<TargetKind, TriggerManifest["spec"]>())
   const [managedBy, setManagedBy] = useState<Schedule['managedBy'] | ''>('')
   const [loading, setLoading] = useState(editing)
   const [loadError, setLoadError] = useState('')
@@ -144,7 +141,6 @@ export function ScheduleFormPage() {
     ]).then(([view, manifest]) => {
       setManagedBy(view.managedBy)
       setBase(manifest)
-      baseSpecs.current = new Map([[targetKind(manifest.spec), manifest.spec]])
       setForm(formFromManifest(manifest))
     }).catch((e) => {
       setLoadError(e instanceof Error ? e.message : 'Failed to load the schedule')
@@ -157,12 +153,6 @@ export function ScheduleFormPage() {
   }
 
   const setKind = (kind: TargetKind) => {
-    // Remember what the user leaves so switching back restores its hidden fields.
-    if (base && kind !== form.kind) {
-      try {
-        baseSpecs.current.set(form.kind, buildSpec(form, baseSpecs.current.get(form.kind) ?? base.spec))
-      } catch { /* an incomplete form keeps the previously remembered spec */ }
-    }
     setForm((f) => ({
       ...f, kind,
       // Replace is not supported for knight and mission targets.
@@ -186,7 +176,7 @@ export function ScheduleFormPage() {
 
   const yaml = useMemo(() => {
     try {
-      return manifestYaml(form, base && { ...base, spec: baseSpecs.current.get(form.kind) ?? base.spec })
+      return manifestYaml(form, base)
     } catch {
       return ''
     }
@@ -206,7 +196,7 @@ export function ScheduleFormPage() {
     setSaving(true)
     setErrors({})
     try {
-      const body = buildRequest(form, baseSpecs.current.get(form.kind) ?? base?.spec)
+      const body = buildRequest(form, base?.spec)
       if (editing) await apiPut(scheduleApi(params.namespace as string, params.name as string), body)
       else await apiPost('/api/schedules', body)
       navigate('/schedules')

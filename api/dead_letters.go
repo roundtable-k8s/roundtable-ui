@@ -124,7 +124,7 @@ func (g *gatewayClient) relay(w http.ResponseWriter, r *http.Request, method, pa
 		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
 		return
 	}
-	writeGatewayError(w, status, b)
+	writeGatewayResponse(w, status, b)
 }
 
 // deadLettersHandler proxies GET /v1/dead-letters (knight, reason, state, limit).
