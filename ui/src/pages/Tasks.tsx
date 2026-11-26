@@ -133,8 +133,8 @@ export function TasksPage() {
       <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-6 mb-8">
         <div className="flex gap-4 mb-4">
           <div className="w-48">
-            <label className="text-sm text-gray-400 mb-2 block">Knight</label>
-            <select
+            <label htmlFor="task-knight" className="text-sm text-gray-400 mb-2 block">Knight</label>
+            <select id="task-knight"
               value={knight}
               onChange={(e) => setKnight(e.target.value)}
               className="w-full bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-white"
@@ -148,9 +148,10 @@ export function TasksPage() {
             </select>
           </div>
           <div className="flex-1">
-            <label className="text-sm text-gray-400 mb-2 block">Quest</label>
+            <label htmlFor="task-quest" className="text-sm text-gray-400 mb-2 block">Quest</label>
             <div className="flex gap-2">
               <input
+                id="task-quest"
                 type="text"
                 value={task}
                 onChange={(e) => setTask(e.target.value)}

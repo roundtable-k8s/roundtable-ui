@@ -76,6 +76,9 @@ function KnightNode({ data }: NodeProps<Node<KnightNodeData>>) {
         )}
       </div>
       <span className="text-xs text-gray-300 mt-1 capitalize font-medium">{data.label}</span>
+      <span className="text-[10px] text-gray-500">
+        {data.status !== 'online' ? data.status || 'offline' : data.busy ? 'busy' : 'online'}
+      </span>
       {data.recentTasks > 0 && (
         <span className="text-[10px] text-gray-500">{data.recentTasks} tasks</span>
       )}

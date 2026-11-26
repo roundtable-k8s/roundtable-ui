@@ -99,18 +99,18 @@ export function LivePage() {
       <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-3 mb-4">
         <div className="flex items-center gap-3 flex-wrap">
           <Filter className="w-4 h-4 text-gray-400" />
-          <select value={filterKnight} onChange={e => setFilterKnight(e.target.value)}
+          <select aria-label="Filter by knight" value={filterKnight} onChange={e => setFilterKnight(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-1 text-sm text-white">
             <option value="">All Knights</option>
             {knightNames.map(k => <option key={k} value={k}>{getKnightConfig(k).emoji} {k}</option>)}
           </select>
-          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+          <select aria-label="Filter by type" value={filterType} onChange={e => setFilterType(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-1 text-sm text-white">
             <option value="">All Types</option>
             <option value="task">📤 Tasks</option>
             <option value="result">📥 Results</option>
           </select>
-          <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
+          <select aria-label="Filter by domain" value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-1 text-sm text-white">
             <option value="">All Domains</option>
             {domains.map(d => <option key={d} value={d}>{d}</option>)}

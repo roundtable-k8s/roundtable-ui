@@ -49,6 +49,8 @@ describe('ReplicaDots / KnightCard', () => {
     expect(container.querySelector('[data-state="starting"]')).not.toBeNull()
     expect(container.querySelector('[data-state="draining"]')).not.toBeNull()
     expect(screen.getByText('3/5')).toBeInTheDocument()
+    expect(screen.getByText('1 ready, 1 starting, 1 draining, max 5')).toBeInTheDocument()
+    expect(container.querySelector('[data-state="starting"]')).toHaveTextContent('starting')
   })
 
   it('card shows scaled to zero, not offline', () => {

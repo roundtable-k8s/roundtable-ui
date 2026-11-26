@@ -16,15 +16,23 @@ export function ReplicaDots({ knight }: { knight: Knight }) {
   if (pods.length === 0 && knight.status === 'scaled-to-zero') {
     return <div className="text-xs text-gray-400" data-testid="replicas">Scaled to zero · 0/{max}</div>
   }
+  const counts = (['ready', 'starting', 'draining'] as const)
+    .map((st) => [st, pods.filter((p) => podState(p) === st).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([st, n]) => `${n} ${st}`)
+  const summary = `${counts.join(', ')}${counts.length ? ', ' : ''}max ${max}`
   return (
     <div className="flex items-center gap-2" data-testid="replicas">
       <div className="flex gap-1">
         {pods.map((p) => (
           <span key={p.name} title={`${p.name} (${podState(p)})`} data-state={podState(p)}
-            className={`w-2 h-2 rounded-full ${DOT[podState(p)]}`} />
+            className={`w-2 h-2 rounded-full ${DOT[podState(p)]}`}>
+            <span className="sr-only">{podState(p)}</span>
+          </span>
         ))}
       </div>
-      <span className="text-xs text-gray-400 font-mono">{sc?.currentReplicas ?? pods.length}/{max}</span>
+      <span className="sr-only">{summary}</span>
+      <span aria-hidden="true" className="text-xs text-gray-400 font-mono">{sc?.currentReplicas ?? pods.length}/{max}</span>
     </div>
   )
 }

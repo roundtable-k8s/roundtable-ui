@@ -59,8 +59,8 @@ describe('TasksPage', () => {
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     expect(screen.queryByLabelText('Table', { selector: '#dispatch-table' })).toBeNull()
 
-    await userEvent.selectOptions(screen.getAllByRole('combobox')[0], 'rt-ui')
-    await userEvent.type(screen.getByRole('textbox'), 'fix it{Enter}')
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    await userEvent.type(screen.getByLabelText('Quest'), 'fix it{Enter}')
     await waitFor(() => expect(apiPost).toHaveBeenCalled())
     expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', { knight: 'rt-ui', task: 'fix it' })
     expect(await screen.findByText('invoke-rt-ui-1')).toBeTruthy()

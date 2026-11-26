@@ -69,7 +69,7 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     const picker = await screen.findByLabelText('Session')
     await within(picker).findByRole('group', { name: 'Run run-2 · pod galahad-c' })
     await userEvent.selectOptions(picker, 'galahad-c/s-gone')
-    const notice = await screen.findByRole('status')
+    const notice = await screen.findByRole('status', { name: /^(?!Loading)/ })
     expect(notice).toHaveTextContent('Pod gone')
     expect(notice).toHaveTextContent('galahad-c')
     expect(within(notice).getByRole('link', { name: 'Running' })).toHaveAttribute('href', '/running')
@@ -86,7 +86,7 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     routes['type=history'] = json({ sessions: [] })
     routes['pod=galahad-z'] = json({ error: 'pod gone', podGone: true, pod: 'galahad-z' }, 410)
     renderPage('/sessions?knight=galahad&pod=galahad-z&runId=run-9')
-    const notice = await screen.findByRole('status')
+    const notice = await screen.findByRole('status', { name: /^(?!Loading)/ })
     expect(notice).toHaveTextContent('galahad-z')
   })
 
@@ -94,7 +94,7 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     routes['type=history'] = json({ sessions: [] })
     routes['pod=galahad-z'] = () => new Response('gone', { status: 410 })
     renderPage('/sessions?knight=galahad&pod=galahad-z&runId=run-9')
-    const notice = await screen.findByRole('status')
+    const notice = await screen.findByRole('status', { name: /^(?!Loading)/ })
     expect(notice).toHaveTextContent('No session found for pod galahad-z')
     expect(screen.queryByText(/Pod gone/i)).toBeNull()
   })
@@ -103,7 +103,7 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     routes['type=history'] = json({ sessions: [] })
     routes['pod=galahad-live'] = json({ session: null })
     renderPage('/sessions?knight=galahad&pod=galahad-live')
-    expect(await screen.findByRole('status')).toHaveTextContent('No session found for pod galahad-live')
+    expect(await screen.findByRole('status', { name: /^(?!Loading)/ })).toHaveTextContent('No session found for pod galahad-live')
   })
 
   it('re-applies the deep link when the URL changes without a remount', async () => {
@@ -118,6 +118,15 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     await within(picker).findByRole('group', { name: 'Run run-2 · pod galahad-c' })
     await vi.waitFor(() => expect(calls.some(u => u.includes('type=session&id=s-new&pod=galahad-a'))).toBe(true))
     await user.click(screen.getByText('next'))
-    expect(await screen.findByRole('status')).toHaveTextContent('galahad-c')
+    expect(await screen.findByRole('status', { name: /^(?!Loading)/ })).toHaveTextContent('galahad-c')
+  })
+})
+
+describe('Sessions page: accessible names', () => {
+  it('labels the knight picker and the search inputs', async () => {
+    renderPage()
+    expect(await screen.findByLabelText('Knight')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter knights')).toBeInTheDocument()
+    expect(screen.getByLabelText('Search entries')).toBeInTheDocument()
   })
 })
