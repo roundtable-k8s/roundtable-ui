@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -68,14 +69,14 @@ func dispatchLimits() (rate float64, burst int) {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			rate = f
 		} else {
-			slog.Warn("invalid DISPATCH_RATE, using default", "value", v)
+			slog.WarnContext(context.Background(), "invalid DISPATCH_RATE, using default", "value", v)
 		}
 	}
 	if v := envOr("DISPATCH_BURST", ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			burst = n
 		} else {
-			slog.Warn("invalid DISPATCH_BURST, using default", "value", v)
+			slog.WarnContext(context.Background(), "invalid DISPATCH_BURST, using default", "value", v)
 		}
 	}
 	return

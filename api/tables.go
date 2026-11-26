@@ -101,10 +101,10 @@ func (s *tableSource) tables(ctx context.Context) []TableInfo {
 	if err != nil {
 		if s.ok {
 			// Keep serving the last good list through a transient API error.
-			slog.Warn("Tables: RoundTable list failed, using cached tables", "error", err)
+			slog.WarnContext(ctx, "Tables: RoundTable list failed, using cached tables", "error", err)
 			return append([]TableInfo(nil), s.cached...)
 		}
-		slog.Warn("Tables: RoundTable list failed, using FLEET_PREFIX fallback", "error", err)
+		slog.WarnContext(ctx, "Tables: RoundTable list failed, using FLEET_PREFIX fallback", "error", err)
 		return resolveTables(nil, s.envPrefix, s.envStream)
 	}
 	s.cached = resolveTables(discovered, s.envPrefix, s.envStream)
@@ -132,7 +132,7 @@ func (s *tableSource) discover(ctx context.Context) ([]TableInfo, error) {
 	}
 	out := make([]TableInfo, 0, len(list.Items))
 	for i := range list.Items {
-		if t, ok := tableFromRoundTable(&list.Items[i]); ok {
+		if t, ok := tableFromRoundTable(ctx, &list.Items[i]); ok {
 			out = append(out, t)
 		}
 	}
@@ -141,7 +141,7 @@ func (s *tableSource) discover(ctx context.Context) ([]TableInfo, error) {
 
 // tableFromRoundTable reads spec.nats from a RoundTable. Tables without a
 // usable prefix are skipped; invalid stream names are dropped.
-func tableFromRoundTable(obj *unstructured.Unstructured) (TableInfo, bool) {
+func tableFromRoundTable(ctx context.Context, obj *unstructured.Unstructured) (TableInfo, bool) {
 	n := getNestedMap(getNestedMap(obj.Object, "spec"), "nats")
 	t := TableInfo{
 		Name:          obj.GetName(),
@@ -151,7 +151,7 @@ func tableFromRoundTable(obj *unstructured.Unstructured) (TableInfo, bool) {
 	}
 	if t.Name == "" || !validNATSPrefix.MatchString(t.Prefix) {
 		if t.Name != "" {
-			slog.Warn("Tables: skipping RoundTable with invalid subjectPrefix", "table", t.Name, "prefix", t.Prefix)
+			slog.WarnContext(ctx, "Tables: skipping RoundTable with invalid subjectPrefix", "table", t.Name, "prefix", t.Prefix)
 		}
 		return TableInfo{}, false
 	}

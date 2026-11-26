@@ -98,7 +98,7 @@ func knightPodsByName(ctx context.Context, namespace string) map[string][]*corev
 		LabelSelector: "app.kubernetes.io/name=knight",
 	})
 	if err != nil {
-		slog.Warn("K8s pod list error", "error", err)
+		slog.WarnContext(ctx, "K8s pod list error", "error", err)
 		return podsByName
 	}
 	for i := range pods.Items {
@@ -141,7 +141,7 @@ func listPodMetrics(ctx context.Context, namespace string) map[string]*KnightPod
 	if err != nil {
 		// metrics.k8s.io simply not installed is the normal small-cluster
 		// case; anything else is worth a line in the log.
-		slog.Debug("Pod metrics unavailable (metrics-server not installed?)", "error", err)
+		slog.DebugContext(ctx, "Pod metrics unavailable (metrics-server not installed?)", "error", err)
 		return nil
 	}
 	usage := map[string]*KnightPod{}

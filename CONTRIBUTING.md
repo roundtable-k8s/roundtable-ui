@@ -62,7 +62,7 @@ and writes the bundle to `api/static`.
 
 - Add a dependency to `ui/package.json` only when code imports it, and commit the updated `ui/package-lock.json` with it
 
-- Go: standard conventions (`gofmt`, `go vet`); structured logging with `log/slog`
+- Go: standard conventions (`gofmt`, `go vet`); structured logging with `log/slog`; in the API use the `*Context` variants (`slog.WarnContext(r.Context(), ...)`, or the `ctx` in scope, `context.Background()` only when there is none) so log lines carry `trace_id` and `span_id`
 - TypeScript: follow the existing patterns in `ui/src` (pages, components, hooks, `lib`)
 - Write tests for new functionality: `*_test.go` next to the Go code, `*.test.ts(x)` next to the frontend code
 - Lists the API cuts short (pages, caps) must say so in the UI rather than silently dropping items

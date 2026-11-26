@@ -161,7 +161,7 @@ func knightPodsHandler(namespace string, reg *runningRegistry) http.HandlerFunc 
 		}
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
 		if err != nil {
-			slog.Error("List knight pods failed", "knight", name, "error", err)
+			slog.ErrorContext(r.Context(), "List knight pods failed", "knight", name, "error", err)
 			jsonError(w, "Failed to list pods", http.StatusInternalServerError)
 			return
 		}
@@ -246,7 +246,7 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
 		if err != nil {
-			slog.Error("List knight pods failed", "knight", name, "error", err)
+			slog.ErrorContext(r.Context(), "List knight pods failed", "knight", name, "error", err)
 			jsonError(w, "Failed to list pods", http.StatusInternalServerError)
 			return
 		}
@@ -291,7 +291,7 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		})
 		stream, err := req.Stream(ctx)
 		if err != nil {
-			slog.Error("Log stream error", "knight", name, "pod", pod.Name, "previous", previous, "error", err)
+			slog.ErrorContext(r.Context(), "Log stream error", "knight", name, "pod", pod.Name, "previous", previous, "error", err)
 			if previous && apierrors.IsBadRequest(err) {
 				// The API server answers 400 when there is no previous
 				// terminated container to read.
@@ -304,17 +304,17 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 		defer stream.Close()
 
 		// Redact the (size-capped) log tail before it leaves the API (#188).
-		writeLogTail(w, name, pod.Name, stream)
+		writeLogTail(r.Context(), w, name, pod.Name, stream)
 	}
 }
 
 // writeLogTail copies the size-capped, redacted log tail to w. A read error
 // is logged: with nothing read it is a 502, otherwise the partial tail is
 // returned with X-Logs-Truncated: true.
-func writeLogTail(w http.ResponseWriter, knight, pod string, stream io.Reader) {
+func writeLogTail(ctx context.Context, w http.ResponseWriter, knight, pod string, stream io.Reader) {
 	raw, readErr := io.ReadAll(io.LimitReader(stream, knightLogMaxBytes))
 	if readErr != nil {
-		slog.Error("Log read error", "knight", knight, "pod", pod, "bytes", len(raw), "error", readErr)
+		slog.ErrorContext(ctx, "Log read error", "knight", knight, "pod", pod, "bytes", len(raw), "error", readErr)
 		if len(raw) == 0 {
 			jsonError(w, "Failed to read logs", http.StatusBadGateway)
 			return

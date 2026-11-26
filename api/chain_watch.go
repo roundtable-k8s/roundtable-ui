@@ -148,7 +148,7 @@ func (c *chainWatcher) run(ctx context.Context) {
 		rv, err := c.relist(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				slog.Warn("Chain list failed, retrying", "error", err)
+				slog.WarnContext(ctx, "Chain list failed, retrying", "error", err)
 			}
 			c.sleep(ctx)
 			continue
@@ -220,7 +220,7 @@ func (c *chainWatcher) watchOnce(ctx context.Context, rv string) (string, bool) 
 	})
 	if err != nil {
 		if ctx.Err() == nil {
-			slog.Warn("Chain watch failed, re-listing", "error", err)
+			slog.WarnContext(ctx, "Chain watch failed, re-listing", "error", err)
 		}
 		return rv, false
 	}
@@ -237,7 +237,7 @@ func (c *chainWatcher) watchOnce(ctx context.Context, rv string) (string, bool) 
 			switch ev.Type {
 			case watch.Error:
 				status := apierrors.FromObject(ev.Object)
-				slog.Info("Chain watch ended with error, re-listing", "reason", apierrors.ReasonForError(status), "error", status)
+				slog.InfoContext(ctx, "Chain watch ended with error, re-listing", "reason", apierrors.ReasonForError(status), "error", status)
 				return rv, false
 			case watch.Bookmark:
 				if obj, ok := ev.Object.(*unstructured.Unstructured); ok {

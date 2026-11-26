@@ -130,7 +130,7 @@ func chatEventsHandler(g *gatewayClient) http.HandlerFunc {
 			}
 			if rerr != nil {
 				if rerr != io.EOF {
-					slog.Debug("gateway stream ended", "error", rerr)
+					slog.DebugContext(r.Context(), "gateway stream ended", "error", rerr)
 				}
 				return
 			}

@@ -268,7 +268,7 @@ func main() {
 	// OpenTelemetry traces: only active when OTEL_EXPORTER_OTLP_ENDPOINT is set.
 	otelShutdown, otelErr := setupTelemetry(context.Background())
 	if otelErr != nil {
-		slog.Warn("OpenTelemetry setup failed, tracing disabled", "error", otelErr)
+		slog.WarnContext(context.Background(), "OpenTelemetry setup failed, tracing disabled", "error", otelErr)
 	}
 
 	natsURL := envOr("NATS_URL", "nats://nats.database.svc:4222")
@@ -289,55 +289,55 @@ func main() {
 		nats.ReconnectJitter(500*time.Millisecond, 2*time.Second),
 		nats.RetryOnFailedConnect(true), // don't hard-exit if NATS is briefly down at boot
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			slog.Warn("NATS disconnected, will retry", "error", err)
+			slog.WarnContext(context.Background(), "NATS disconnected, will retry", "error", err)
 		}),
 		nats.ReconnectHandler(func(c *nats.Conn) {
-			slog.Info("NATS reconnected", "url", c.ConnectedUrl())
+			slog.InfoContext(context.Background(), "NATS reconnected", "url", c.ConnectedUrl())
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
-			slog.Error("NATS connection permanently closed")
+			slog.ErrorContext(context.Background(), "NATS connection permanently closed")
 		}),
 	)
 	if err != nil {
-		slog.Error("NATS connect failed", "error", err, "url", natsURL)
+		slog.ErrorContext(context.Background(), "NATS connect failed", "error", err, "url", natsURL)
 		os.Exit(1)
 	}
 	defer nc.Close()
 
 	js, err = jetstream.New(nc)
 	if err != nil {
-		slog.Error("JetStream init failed", "error", err)
+		slog.ErrorContext(context.Background(), "JetStream init failed", "error", err)
 		os.Exit(1)
 	}
 	queues = jsQueueBackend{js: js}
-	slog.Info("NATS connected", "url", natsURL)
+	slog.InfoContext(context.Background(), "NATS connected", "url", natsURL)
 
 	// Connect to Kubernetes (in-cluster, falling back to kubeconfig for local dev)
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		slog.Warn("K8s in-cluster config failed (running outside cluster?)", "error", err)
+		slog.WarnContext(context.Background(), "K8s in-cluster config failed (running outside cluster?)", "error", err)
 		if cfg, kerr := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			clientcmd.NewDefaultClientConfigLoadingRules(),
 			&clientcmd.ConfigOverrides{},
 		).ClientConfig(); kerr != nil {
-			slog.Warn("Kubeconfig fallback failed", "error", kerr)
+			slog.WarnContext(context.Background(), "Kubeconfig fallback failed", "error", kerr)
 		} else {
 			config = cfg
 			err = nil
-			slog.Info("Using kubeconfig (local dev)")
+			slog.InfoContext(context.Background(), "Using kubeconfig (local dev)")
 		}
 	}
 	if err == nil {
 		// Assign globals only on success — a typed-nil client would defeat the
 		// k8sClient != nil availability checks in handlers
 		if cs, csErr := kubernetes.NewForConfig(config); csErr != nil {
-			slog.Warn("K8s client creation failed", "error", csErr)
+			slog.WarnContext(context.Background(), "K8s client creation failed", "error", csErr)
 		} else {
 			k8sClient = cs
-			slog.Info("Kubernetes client connected")
+			slog.InfoContext(context.Background(), "Kubernetes client connected")
 		}
 		if dc, dcErr := dynamic.NewForConfig(config); dcErr != nil {
-			slog.Warn("Dynamic K8s client creation failed", "error", dcErr)
+			slog.WarnContext(context.Background(), "Dynamic K8s client creation failed", "error", dcErr)
 		} else {
 			dynClient = dc
 		}
@@ -504,19 +504,19 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		slog.Info("Shutting down")
+		slog.InfoContext(context.Background(), "Shutting down")
 		stopSampler()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
 		if err := otelShutdown(ctx); err != nil {
-			slog.Warn("OpenTelemetry shutdown failed", "error", err)
+			slog.WarnContext(ctx, "OpenTelemetry shutdown failed", "error", err)
 		}
 	}()
 
-	slog.Info("Round Table Dashboard API starting", "port", port)
+	slog.InfoContext(context.Background(), "Round Table Dashboard API starting", "port", port)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		slog.Error("Server error", "error", err)
+		slog.ErrorContext(context.Background(), "Server error", "error", err)
 		os.Exit(1)
 	}
 }
@@ -608,7 +608,7 @@ func fleetHandler(namespace string) http.HandlerFunc {
 
 		crItems, err := cachedList(r.Context(), dynClient, knightGVR, namespace)
 		if err != nil {
-			slog.Error("K8s knight CR list error", "error", err)
+			slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
 			jsonError(w, "Failed to list fleet", http.StatusInternalServerError)
 			return
 		}
@@ -849,7 +849,7 @@ func traceTemplate(raw string) string {
 	}
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || !strings.Contains(raw, "{traceId}") {
-		slog.Warn("TRACE_URL_TEMPLATE ignored: need an http(s) URL containing {traceId}")
+		slog.WarnContext(context.Background(), "TRACE_URL_TEMPLATE ignored: need an http(s) URL containing {traceId}")
 		return ""
 	}
 	return raw
@@ -922,7 +922,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 		ctx := r.Context()
 		prefix := fleetPrefix // graceful degradation when the CR is unavailable
 		if knightCR, err := getKnightCR(ctx, name); err != nil {
-			slog.Warn("Failed to fetch Knight CR, falling back to FLEET_PREFIX", "knight", name, "error", err)
+			slog.WarnContext(ctx, "Failed to fetch Knight CR, falling back to FLEET_PREFIX", "knight", name, "error", err)
 		} else {
 			// Short-circuit offline knights: proxying introspect to a knight
 			// whose pod is not ready just blocks until the NATS request timeout
@@ -930,7 +930,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			// "no data" shape ({}) immediately instead — every caller guards on
 			// .session / .runtime / .entries / .nodes being present.
 			if !knightIsReady(knightCR) {
-				slog.Debug("Knight not ready, skipping introspect", "knight", name)
+				slog.DebugContext(ctx, "Knight not ready, skipping introspect", "knight", name)
 				// Scaled to zero: a named pod is certainly gone (#220).
 				if podParam != "" && looksLikeKnightPod(name, podParam) {
 					writePodGone(w, podParam)
@@ -943,7 +943,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			if p, perr := deriveIntrospectPrefix(knightCR); perr == nil {
 				prefix = p
 			} else {
-				slog.Warn("Failed to derive introspect prefix, falling back to FLEET_PREFIX", "knight", name, "error", perr)
+				slog.WarnContext(ctx, "Failed to derive introspect prefix, falling back to FLEET_PREFIX", "knight", name, "error", perr)
 			}
 		}
 
@@ -991,14 +991,14 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 	namespace := envOr("NAMESPACE", "roundtable")
 	pods, podErr := knightPodsForIntrospect(ctx, namespace, name)
 	if podErr != nil {
-		slog.Warn("Introspect: pod list failed", "knight", name, "error", podErr)
+		slog.WarnContext(ctx, "Introspect: pod list failed", "knight", name, "error", podErr)
 	}
 
 	knightLevel := func(scope string) {
 		subject := knightIntrospectSubject(prefix, name)
 		data, err := req(subject, payload, timeout)
 		if err != nil {
-			slog.Warn("Knight introspect timeout", "knight", name, "subject", subject, "error", err)
+			slog.WarnContext(ctx, "Knight introspect timeout", "knight", name, "subject", subject, "error", err)
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
@@ -1043,7 +1043,7 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 				jsonError(w, "Pod does not support per-pod introspection", http.StatusBadGateway)
 				return
 			}
-			slog.Warn("Knight introspect timeout", "knight", name, "subject", subject, "error", err)
+			slog.WarnContext(ctx, "Knight introspect timeout", "knight", name, "subject", subject, "error", err)
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
@@ -1119,7 +1119,7 @@ func taskHistoryHandler(src *tableSource) http.HandlerFunc {
 			}
 			events, msgs, err := readResults(ctx, t.ResultsStream, t.Prefix+".results.>", taskHistoryPerTable)
 			if err != nil {
-				slog.Error("JetStream task history error", "table", t.Name, "stream", t.ResultsStream, "error", err)
+				slog.ErrorContext(ctx, "JetStream task history error", "table", t.Name, "stream", t.ResultsStream, "error", err)
 				unavailable = append(unavailable, t.Name)
 				continue
 			}
@@ -1192,7 +1192,7 @@ func briefingListHandler(vaultPath string, dirs []string) http.HandlerFunc {
 			entries, err := os.ReadDir(filepath.Join(vaultPath, d))
 			if err != nil {
 				if !os.IsNotExist(err) {
-					slog.Warn("cannot read briefings directory", "dir", d, "error", err)
+					slog.WarnContext(r.Context(), "cannot read briefings directory", "dir", d, "error", err)
 				}
 				continue
 			}
@@ -1260,14 +1260,14 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// on every reconnect. Rejecting the upgrade with 503 keeps the client
 		// cleanly "Disconnected" while the backend is degraded.
 		if !nc.IsConnected() {
-			slog.Warn("NATS not connected, rejecting WS")
+			slog.WarnContext(r.Context(), "NATS not connected, rejecting WS")
 			jsonError(w, "NATS unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			slog.Error("WebSocket upgrade error", "error", err)
+			slog.ErrorContext(r.Context(), "WebSocket upgrade error", "error", err)
 			return
 		}
 
@@ -1315,7 +1315,7 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		for _, sub := range wsSubscriptions(tables) {
 			ns, err := nc.Subscribe(sub.subject, forward(sub.eventType, sub.critical))
 			if err != nil {
-				slog.Error("NATS subscribe error", "subject", sub.subject, "error", err)
+				slog.ErrorContext(r.Context(), "NATS subscribe error", "subject", sub.subject, "error", err)
 				unsubscribeAll()
 				conn.Close()
 				return
@@ -1827,7 +1827,7 @@ func missionsHandler(namespace string) http.HandlerFunc {
 
 		items, err := cachedList(r.Context(), dynClient, missionGVR, namespace)
 		if err != nil {
-			slog.Error("Mission list error", "error", err)
+			slog.ErrorContext(r.Context(), "Mission list error", "error", err)
 			jsonError(w, "Failed to list missions", http.StatusInternalServerError)
 			return
 		}
@@ -1968,7 +1968,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 			metav1.CreateOptions{},
 		)
 		if err != nil {
-			slog.Error("Mission create error", "error", err)
+			slog.ErrorContext(r.Context(), "Mission create error", "error", err)
 			jsonError(w, fmt.Sprintf("Failed to create mission: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -2000,7 +2000,7 @@ func missionDeleteHandler(namespace string) http.HandlerFunc {
 
 		err := dynClient.Resource(missionGVR).Namespace(namespace).Delete(r.Context(), name, metav1.DeleteOptions{})
 		if err != nil {
-			slog.Error("Mission delete error", "error", err)
+			slog.ErrorContext(r.Context(), "Mission delete error", "error", err)
 			jsonError(w, "Failed to delete mission", http.StatusInternalServerError)
 			return
 		}
@@ -2179,7 +2179,7 @@ func roundTablesHandler(namespace string) http.HandlerFunc {
 
 		list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 		if err != nil {
-			slog.Error("RoundTable list error", "error", err)
+			slog.ErrorContext(r.Context(), "RoundTable list error", "error", err)
 			jsonError(w, "Failed to list roundtables", http.StatusInternalServerError)
 			return
 		}
@@ -2619,7 +2619,7 @@ func (w *wsWriter) saturated() {
 	if w.closed.Swap(true) {
 		return
 	}
-	slog.Warn("closing slow WebSocket client: outbound queue saturated")
+	slog.WarnContext(context.Background(), "closing slow WebSocket client: outbound queue saturated")
 	w.shutdown()
 	if w.onSaturated != nil {
 		w.onSaturated()

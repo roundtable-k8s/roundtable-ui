@@ -204,7 +204,7 @@ func buildKnightQueue(ctx context.Context, b queueBackend, t queueTarget) Knight
 			break
 		}
 		if !errors.Is(err, jetstream.ErrConsumerNotFound) {
-			slog.Warn("queue: consumer info failed", "knight", t.knight, "stream", t.stream, "consumer", name, "error", err)
+			slog.WarnContext(ctx, "queue: consumer info failed", "knight", t.knight, "stream", t.stream, "consumer", name, "error", err)
 			q.Consumer = name
 			q.Error = "failed to read consumer info"
 			return q
@@ -239,7 +239,7 @@ func buildKnightQueue(ctx context.Context, b queueBackend, t queueTarget) Knight
 		ts, err := b.NextMsgTime(ctx, t.stream, start, subj)
 		if err != nil {
 			if !errors.Is(err, jetstream.ErrMsgNotFound) {
-				slog.Warn("queue: oldest message lookup failed", "knight", t.knight, "stream", t.stream, "seq", start, "error", err)
+				slog.WarnContext(ctx, "queue: oldest message lookup failed", "knight", t.knight, "stream", t.stream, "seq", start, "error", err)
 			}
 			continue
 		}
@@ -303,7 +303,7 @@ func queuesHandler(namespace string) http.HandlerFunc {
 		}
 		crItems, err := cachedList(r.Context(), dynClient, knightGVR, namespace)
 		if err != nil {
-			slog.Error("K8s knight CR list error", "error", err)
+			slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
 			jsonError(w, "Failed to list knights", http.StatusInternalServerError)
 			return
 		}

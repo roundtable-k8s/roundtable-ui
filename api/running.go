@@ -621,7 +621,7 @@ func knightPrefixes(ctx context.Context, namespace string) map[string]string {
 	}
 	list, err := dynClient.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		slog.Warn("Running: knight CR list failed", "error", err)
+		slog.WarnContext(ctx, "Running: knight CR list failed", "error", err)
 		return out
 	}
 	for i := range list.Items {
@@ -646,7 +646,7 @@ func bootstrapRunning(ctx context.Context, reg *runningRegistry, namespace strin
 	}
 	refs, _, err := listKnightPods(ctx, namespace, knightPrefixes(ctx, namespace), prefixes[0])
 	if err != nil {
-		slog.Warn("Running: bootstrap pod list failed", "error", err)
+		slog.WarnContext(ctx, "Running: bootstrap pod list failed", "error", err)
 		return 0
 	}
 	payload, _ := json.Marshal(map[string]string{"type": "stats"})
@@ -666,7 +666,7 @@ func bootstrapRunning(ctx context.Context, reg *runningRegistry, namespace strin
 			subject := fmt.Sprintf("%s.introspect.%s.%s", ref.Prefix, capitalizeKnight(ref.Knight), ref.Pod)
 			data, err := req(subject, payload, timeout)
 			if err != nil {
-				slog.Debug("Running: introspect failed", "subject", subject, "error", err)
+				slog.DebugContext(ctx, "Running: introspect failed", "subject", subject, "error", err)
 				return
 			}
 			var reply struct {
@@ -748,12 +748,12 @@ func (r *runningRegistry) handleMaxDeliveries(data []byte, fetch func(stream str
 	}
 	subject, payload, err := fetch(adv.Stream, adv.StreamSeq)
 	if err != nil {
-		slog.Debug("Running: advisory message lookup failed", "stream", adv.Stream, "seq", adv.StreamSeq, "error", err)
+		slog.DebugContext(context.Background(), "Running: advisory message lookup failed", "stream", adv.Stream, "seq", adv.StreamSeq, "error", err)
 		return
 	}
 	if id := taskIDFromTaskMessage(subject, payload); id != "" {
 		if r.markLost(id, lostReasonMaxDeliveries) {
-			slog.Info("Running: task lost after max deliveries", "taskId", id, "stream", adv.Stream)
+			slog.InfoContext(context.Background(), "Running: task lost after max deliveries", "taskId", id, "stream", adv.Stream)
 		}
 	}
 }
@@ -813,7 +813,7 @@ func (f *activityFollower) sync(prefixes []string) []string {
 		if !want[p] {
 			_ = sub.Unsubscribe()
 			delete(f.subs, p)
-			slog.Info("Running: activity unsubscribed", "prefix", p)
+			slog.InfoContext(context.Background(), "Running: activity unsubscribed", "prefix", p)
 		}
 	}
 	var added []string
@@ -823,7 +823,7 @@ func (f *activityFollower) sync(prefixes []string) []string {
 		}
 		sub, err := f.subscribe(p)
 		if err != nil {
-			slog.Error("Running: activity subscribe failed", "prefix", p, "error", err)
+			slog.ErrorContext(context.Background(), "Running: activity subscribe failed", "prefix", p, "error", err)
 			continue
 		}
 		f.subs[p] = sub
@@ -871,7 +871,7 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activi
 		bctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		n := bootstrapRunning(bctx, reg, namespace, prefixes, req, 3*time.Second)
-		slog.Info("Running: registry bootstrapped from introspection", "prefixes", prefixes, "tasks", n)
+		slog.InfoContext(ctx, "Running: registry bootstrapped from introspection", "prefixes", prefixes, "tasks", n)
 	}
 	// Subscribe first, bootstrap after, so no event between the two is missed;
 	// entries already seen live win over the introspected ones.
@@ -898,7 +898,7 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activi
 	if _, err := nc.Subscribe("$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.>", func(msg *nats.Msg) {
 		reg.handleMaxDeliveries(msg.Data, jsFetchMessage)
 	}); err != nil {
-		slog.Warn("Running: MAX_DELIVERIES advisory subscribe failed", "error", err)
+		slog.WarnContext(ctx, "Running: MAX_DELIVERIES advisory subscribe failed", "error", err)
 	}
 
 	go func() {
@@ -923,7 +923,7 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activi
 				_, live, err := listKnightPods(lctx, namespace, nil, "")
 				cancel()
 				if err != nil {
-					slog.Warn("Running: pod list failed", "error", err)
+					slog.WarnContext(ctx, "Running: pod list failed", "error", err)
 					continue
 				}
 				reg.reconcilePods(live)

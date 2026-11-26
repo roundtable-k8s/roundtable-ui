@@ -229,7 +229,7 @@ func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc 
 
 		items, err := cachedList(r.Context(), dynClient, chainGVR, namespace)
 		if err != nil {
-			slog.Error("Chain list error", "error", err)
+			slog.ErrorContext(r.Context(), "Chain list error", "error", err)
 			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
 			return
 		}
@@ -314,7 +314,7 @@ func chainGroupsHandler(namespace string) http.HandlerFunc {
 		}
 		items, err := cachedList(r.Context(), dynClient, chainGVR, namespace)
 		if err != nil {
-			slog.Error("Chain list error", "error", err)
+			slog.ErrorContext(r.Context(), "Chain list error", "error", err)
 			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
 			return
 		}
