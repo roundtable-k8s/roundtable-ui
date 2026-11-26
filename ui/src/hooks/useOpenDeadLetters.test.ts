@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useOpenDeadLetters, deadLetterBadge } from './useOpenDeadLetters'
 
@@ -47,6 +47,11 @@ describe('useOpenDeadLetters', () => {
 })
 
 describe('useOpenDeadLetters polling', () => {
+  afterEach(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    vi.useRealTimers()
+  })
+
   it('makes no requests on a hidden tab and refetches once when visible', async () => {
     vi.useFakeTimers()
     apiGet.mockReset()
@@ -59,7 +64,5 @@ describe('useOpenDeadLetters polling', () => {
     document.dispatchEvent(new Event('visibilitychange'))
     await vi.advanceTimersByTimeAsync(0)
     expect(apiGet).toHaveBeenCalledTimes(1)
-    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
-    vi.useRealTimers()
   })
 })
