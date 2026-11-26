@@ -122,3 +122,31 @@ func TestDeadLetterGatewayProblems(t *testing.T) {
 		t.Errorf("non-json: %d %s", w.Code, w.Body)
 	}
 }
+
+func TestDeadLetterGatewayBodyLimit(t *testing.T) {
+	// A JSON string literal of exactly n bytes, so the body is valid JSON at any size.
+	jsonOfSize := func(n int) string {
+		return `"` + strings.Repeat("a", n-2) + `"`
+	}
+	tests := []struct {
+		name     string
+		size     int
+		wantCode int
+		want     string
+	}{
+		{"at limit is relayed", gatewayMaxBody, 200, strings.Repeat("a", 10)},
+		{"over limit is 502", gatewayMaxBody + 1, 502, `"error":"Gateway response too large"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, _ := deadLetterRouter(t, 200, jsonOfSize(tt.size))
+			w := doReq(r, "GET", "/api/dead-letters", "")
+			if w.Code != tt.wantCode || !strings.Contains(w.Body.String(), tt.want) {
+				t.Fatalf("got %d (%d bytes body)", w.Code, w.Body.Len())
+			}
+			if tt.wantCode == 200 && w.Body.Len() != tt.size {
+				t.Errorf("relayed %d bytes, want %d", w.Body.Len(), tt.size)
+			}
+		})
+	}
+}
