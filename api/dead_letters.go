@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,10 @@ import (
 var validTaskID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$`)
 
 const gatewayMaxBody = 4 << 20 // cap on a gateway response we relay
+
+// errGatewayBodyTooLarge means the gateway answered with more than gatewayMaxBody
+// bytes. The body is discarded rather than relayed truncated.
+var errGatewayBodyTooLarge = errors.New("gateway response exceeds relay limit")
 
 // gatewayClient is a small client for the roundtable gateway API. Actions go
 // through the gateway, not NATS (whiteboard decision 6).
@@ -182,7 +187,11 @@ func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query u
 		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, gatewayMaxBody))
+	// Read one byte past the cap so an oversized body is detected, not cut.
+	b, err := io.ReadAll(io.LimitReader(resp.Body, gatewayMaxBody+1))
+	if err == nil && len(b) > gatewayMaxBody {
+		return resp.StatusCode, nil, resp.Header, errGatewayBodyTooLarge
+	}
 	return resp.StatusCode, b, resp.Header, err
 }
 
@@ -219,6 +228,11 @@ func (g *gatewayClient) relayKeyed(w http.ResponseWriter, r *http.Request, metho
 		return
 	}
 	status, b, hdr, err := g.doKeyed(r.Context(), method, path, query, body, idemKey)
+	if errors.Is(err, errGatewayBodyTooLarge) {
+		slog.WarnContext(r.Context(), "gateway response over relay limit", "path", path, "limit_bytes", gatewayMaxBody)
+		jsonError(w, "Gateway response too large", http.StatusBadGateway)
+		return
+	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "gateway request failed", "path", path, "error", err)
 		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
