@@ -165,3 +165,25 @@ func TestTriggerDetailHandler_GetErrors(t *testing.T) {
 		t.Errorf("missing trigger: status %d body %s, want 404 Trigger not found", w.Code, w.Body.String())
 	}
 }
+
+func TestParseTriggerTask(t *testing.T) {
+	spec := func(target map[string]interface{}, input string) map[string]interface{} {
+		s := map[string]interface{}{"source": map[string]interface{}{"schedule": map[string]interface{}{"cron": "0 7 * * *"}}, "target": target}
+		if input != "" {
+			s["input"] = input
+		}
+		return map[string]interface{}{"metadata": map[string]interface{}{"name": "x", "namespace": "roundtable"}, "spec": s}
+	}
+	knight := parseTriggerResource(spec(map[string]interface{}{"knight": map[string]interface{}{"name": "galahad", "task": "Scan the cluster\nthen report"}}, ""))
+	if knight.TargetKnight != "galahad" || knight.Task != "Scan the cluster\nthen report" || knight.TargetChain != "" {
+		t.Errorf("knight target: %+v", knight)
+	}
+	mission := parseTriggerResource(spec(map[string]interface{}{"mission": map[string]interface{}{"objective": "Ship it"}}, ""))
+	if mission.Task != "Ship it" || mission.TargetKnight != "" {
+		t.Errorf("mission target: %+v", mission)
+	}
+	chain := parseTriggerResource(spec(map[string]interface{}{"chainRef": map[string]interface{}{"name": "digest"}}, "Digest for today"))
+	if chain.Task != "Digest for today" || chain.TargetChain != "digest" {
+		t.Errorf("chain target: %+v", chain)
+	}
+}

@@ -169,3 +169,24 @@ export function runResultText(r: ScheduleRunResult): string {
     .map((s) => `## ${s.name}\n\n${s.output ?? ''}${s.error ? `${s.output ? '\n\n' : ''}Error: ${s.error}` : ''}`)
   return parts.join('\n\n')
 }
+
+export interface ScheduleList {
+  schedules: Schedule[]
+}
+
+export const SCHEDULE_DOCS_URL = 'https://github.com/roundtable-k8s/roundtable/blob/main/docs/gateway.md#schedules'
+
+export function scheduleKey(s: { namespace: string; name: string }): string {
+  return `${s.namespace}/${s.name}`
+}
+
+/** The first non-empty line of a task. */
+export function firstLine(text?: string): string {
+  if (!text) return ''
+  return text.split('\n').map((l) => l.trim()).find((l) => l) ?? ''
+}
+
+/** The knight or chain a schedule targets. */
+export function targetName(t: ScheduleTarget): string {
+  return t.knight || t.chain || t.summary
+}

@@ -427,6 +427,9 @@ func main() {
 	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(gateway)).Methods("GET")
 	api.HandleFunc("/dead-letters/{taskId}/retry", deadLetterRetryHandler(gateway)).Methods("POST")
 
+	// Schedules: every gateway schedules route; run shares the dispatch rate limit (#300)
+	scheduleRoutes(api, gateway, dispatchLimit.wrap)
+
 	// Chain endpoints
 	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
 	api.HandleFunc("/chain-groups", chainGroupsHandler(namespace)).Methods("GET")

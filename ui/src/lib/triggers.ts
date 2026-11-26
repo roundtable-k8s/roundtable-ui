@@ -29,6 +29,10 @@ export interface Trigger {
   namespace: string
   source: TriggerSource
   targetChain: string
+  /** spec.target.knight.name for a knight target. */
+  targetKnight?: string
+  /** What a firing sends: the knight task, mission objective or chain input (unrendered template). */
+  task?: string
   concurrencyPolicy: string
   maxActive?: number
   suspended: boolean
