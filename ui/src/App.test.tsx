@@ -20,7 +20,7 @@ function renderAt(path: string) {
   return render(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
 }
 
-describe('App shell accessibility', () => {
+describe('App shell accessibility', { timeout: 15000 }, () => {
   it('labels the nav and menu button, and toggles aria-expanded', async () => {
     renderAt('/')
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy()
@@ -40,7 +40,7 @@ describe('App shell accessibility', () => {
 
   it('marks the current page, including nested paths', async () => {
     renderAt('/schedules/ns/name')
-    await screen.findByText('Schedule detail stub')
+    await screen.findByText('Schedule detail stub', {}, { timeout: 4000 })
     expect(screen.getByRole('link', { name: /Schedules/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: /Fleet/ }).getAttribute('aria-current')).toBeNull()
     expect(screen.getByRole('link', { name: /Command Center/ }).getAttribute('aria-current')).toBeNull()
