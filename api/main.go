@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -166,6 +168,13 @@ var validSessionTypes = map[string]bool{"stats": true, "recent": true, "tree": t
 // the knight validates too).
 var validSessionID = regexp.MustCompile(`^[0-9a-fA-F-]{1,64}$`)
 
+// keyEqual compares API keys in constant time. Hashing first makes the
+// comparison independent of the input length.
+func keyEqual(got, want string) bool {
+	g, w := sha256.Sum256([]byte(got)), sha256.Sum256([]byte(want))
+	return subtle.ConstantTimeCompare(g[:], w[:]) == 1
+}
+
 // authMiddleware checks the DASHBOARD_API_KEY env var for API-key based auth (#68, #65)
 func authMiddleware(next http.Handler) http.Handler {
 	apiKey := os.Getenv("DASHBOARD_API_KEY")
@@ -191,7 +200,7 @@ func authMiddleware(next http.Handler) http.Handler {
 				jsonError(w, "Invalid request", http.StatusBadRequest)
 				return
 			}
-			if body.ApiKey != apiKey {
+			if !keyEqual(body.ApiKey, apiKey) {
 				jsonError(w, "Invalid API key", http.StatusUnauthorized)
 				return
 			}
@@ -206,13 +215,16 @@ func authMiddleware(next http.Handler) http.Handler {
 		// Check Authorization header
 		auth := r.Header.Get("Authorization")
 		if auth == "" {
-			// Also check query param for WebSocket connections
-			if qKey := r.URL.Query().Get("api_key"); qKey != "" {
+			// Query param is accepted for the WebSocket upgrade only: keys in
+			// URLs end up in proxy logs and browser history.
+			if r.URL.Path != "/api/ws" {
+				// fall through to 401
+			} else if qKey := r.URL.Query().Get("api_key"); qKey != "" {
 				auth = "Bearer " + qKey
 			}
 		}
 
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != apiKey {
+		if !strings.HasPrefix(auth, "Bearer ") || !keyEqual(strings.TrimPrefix(auth, "Bearer "), apiKey) {
 			jsonError(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
