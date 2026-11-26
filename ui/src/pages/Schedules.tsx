@@ -6,7 +6,7 @@ import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { apiDelete, apiPost } from '../lib/api'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Modal } from '../components/ui'
-import { formatRelativeTime, until } from '../lib/format'
+import { formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
@@ -67,7 +67,7 @@ function NextRun({ iso }: { iso?: string }) {
   return (
     <span>
       <span className="text-gray-200">{until(iso)}</span>
-      <span className="block text-xs text-gray-500">{new Date(iso).toLocaleString()}</span>
+      <span className="block text-xs text-gray-500">{formatDateTime(iso)}</span>
     </span>
   )
 }

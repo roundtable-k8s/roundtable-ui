@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CalendarClock, ArrowLeft, Play, Pause, PlayCircle, Trash2, Copy, Check, GitBranch, Link2, Shield, Target, X, Pencil } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
-import { formatRelativeTime, until } from '../lib/format'
+import { formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
@@ -15,7 +15,7 @@ import {
 const POLL_MS = 15000
 
 function absolute(iso?: string): string {
-  return iso ? new Date(iso).toLocaleString() : ''
+  return iso ? formatDateTime(iso) : ''
 }
 
 function OutcomeBadge({ outcome }: { outcome: string }) {

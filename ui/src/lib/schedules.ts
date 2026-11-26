@@ -1,3 +1,4 @@
+import { formatCost, formatSecondsLadder } from './format'
 /**
  * Schedules: Triggers with a spec.source.schedule, served by the gateway's
  * /v1/schedules routes and proxied by the dashboard API under /api/schedules
@@ -113,11 +114,7 @@ export function sortRunsNewestFirst(runs: ScheduleRun[]): ScheduleRun[] {
 
 /** 212.4 → "3m 32s"; undefined → "—". */
 export function formatSeconds(sec?: number): string {
-  if (sec == null || !Number.isFinite(sec)) return '—'
-  const s = Math.round(sec)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+  return formatSecondsLadder(sec)
 }
 
 /** "0.41" → "$0.41"; missing or unparsable → "—". */
@@ -125,7 +122,7 @@ export function formatCostUSD(cost?: string): string {
   if (!cost) return '—'
   const n = Number(cost)
   if (!Number.isFinite(n)) return '—'
-  return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`
+  return formatCost(n)
 }
 
 const OUTCOME_LABELS: Record<string, string> = {

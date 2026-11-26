@@ -3,7 +3,7 @@
  * `chain` WebSocket message (envelope `op` + ChainSummary `data`).
  */
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopRound, ChainRunGroup, ChainStep, ChainTaskLive } from './types'
-import { formatRelativeTime } from './format'
+import { formatRelativeTime, formatSecondsLadder } from './format'
 
 export interface FanOutCounts {
   total: number
@@ -73,10 +73,7 @@ export function loopLabel(loop: ChainLoop): string {
 }
 
 function shortDuration(sec: number): string {
-  const s = Math.max(0, Math.round(sec))
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+  return formatSecondsLadder(Math.max(0, sec))
 }
 
 /** Elapsed run time: from startTime when known (stays live), else the API's snapshot. */

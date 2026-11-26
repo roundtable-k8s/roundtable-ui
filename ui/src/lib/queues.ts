@@ -1,3 +1,4 @@
+import { formatSecondsLadder } from './format'
 /**
  * Types and pure helpers for the Queues page (#185 / #206).
  *
@@ -72,19 +73,10 @@ export interface KnightQueueHistory {
 /** Oldest wait above this raises a warning badge. */
 export const OLDEST_WAIT_WARN_SECONDS = 5 * 60
 
-/** Compact wait duration: 45s, 3m 20s, 1h 05m. */
+/** Compact wait duration: 45s, 3m 20s, 1h 5m; zero or less is "—". */
 export function formatWait(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return '—'
-  const s = Math.floor(seconds)
-  if (s < 60) return `${s}s`
-  if (s < 3600) {
-    const m = Math.floor(s / 60)
-    const rest = s % 60
-    return rest ? `${m}m ${rest}s` : `${m}m`
-  }
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  return `${h}h ${String(m).padStart(2, '0')}m`
+  return formatSecondsLadder(Math.floor(seconds))
 }
 
 /** The most recent known max replica count from a knight's history. */

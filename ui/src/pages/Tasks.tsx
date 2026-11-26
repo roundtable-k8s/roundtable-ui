@@ -8,7 +8,7 @@ import { useTableFilter } from '../hooks/useTableFilter'
 import { taskRows, type TableInfo } from '../lib/tables'
 import { useToast } from '../components/Toast'
 import { PageHeader, EmptyState, ErrorBanner, TableBadge } from '../components/ui'
-import { formatTimestamp } from '../lib/format'
+import { formatTimestampOrDate } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 
 const POLL_MS = 2000
@@ -198,7 +198,7 @@ export function TasksPage() {
                 </div>
                 <div className="flex items-center gap-1 text-gray-500 text-xs">
                   <Clock className="w-3 h-3" />
-                  {formatTimestamp(r.timestamp)}
+                  {formatTimestampOrDate(r.timestamp)}
                 </div>
               </div>
               <p className="text-gray-300 text-sm">{r.task}</p>
@@ -241,7 +241,7 @@ export function TasksPage() {
               </div>
               <div className="flex items-center gap-1 text-gray-500 text-xs shrink-0">
                 <Clock className="w-3 h-3" />
-                {formatTimestamp(r.timestamp)}
+                {formatTimestampOrDate(r.timestamp)}
               </div>
             </div>
             {r.text && <p className="text-gray-300 text-sm mt-1 line-clamp-2">{r.text}</p>}
