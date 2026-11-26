@@ -271,6 +271,8 @@ func main() {
 		slog.WarnContext(context.Background(), "OpenTelemetry setup failed, tracing disabled", "error", otelErr)
 	}
 
+	wsMaxConnections = wsMaxConnectionsFromEnv()
+
 	natsURL := envOr("NATS_URL", "nats://nats.database.svc:4222")
 	namespace := envOr("NAMESPACE", "roundtable")
 	port := envOr("PORT", "8080")
@@ -1266,11 +1268,25 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			return
 		}
 
+		// Connection cap (#378), enforced before the upgrade so a rejected
+		// client costs no subscriptions or goroutines.
+		if !wsAcquire() {
+			wsRejectedTotal.Inc()
+			slog.WarnContext(r.Context(), "too many WebSocket connections, rejecting", "max", wsMaxConnections)
+			w.Header().Set("Retry-After", "5")
+			jsonError(w, "Too many WebSocket connections", http.StatusServiceUnavailable)
+			return
+		}
+		defer wsRelease()
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "WebSocket upgrade error", "error", err)
 			return
 		}
+		// Clients only send small activity commands; an oversize frame ends
+		// the connection with websocket.ErrReadLimit (#378).
+		conn.SetReadLimit(wsMaxClientMessageBytes)
 
 		// Serialized writer — gorilla websocket is not concurrent-write safe (#42, #96)
 		// Bounded outbound queue drained by one writer goroutine; NATS
@@ -1278,6 +1294,9 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// memory without bound (#97). See the wsWriter docs for the policy.
 		ws := newWSWriter(conn, wsQueueSize, func() { conn.Close() })
 		go ws.run()
+		if wsWriterHook != nil {
+			wsWriterHook(ws)
+		}
 		safeWrite := func(critical bool, data []byte) { ws.enqueue(data, critical) }
 
 		// Done channel to clean up NATS subscriptions when WS closes
@@ -1314,10 +1333,11 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			}
 		}
 		for _, sub := range wsSubscriptions(tables) {
-			ns, err := nc.Subscribe(sub.subject, forward(sub.eventType, sub.critical))
+			ns, err := wsSubscribe(sub.subject, forward(sub.eventType, sub.critical))
 			if err != nil {
 				slog.ErrorContext(r.Context(), "NATS subscribe error", "subject", sub.subject, "error", err)
 				unsubscribeAll()
+				ws.close() // stop the writer goroutine started above (#378)
 				conn.Close()
 				return
 			}
@@ -2470,6 +2490,49 @@ func capitalizeKnight(name string) string {
 		return name
 	}
 	return string(unicode.ToUpper(rune(name[0]))) + name[1:]
+}
+
+// WebSocket limits (#378).
+const wsMaxClientMessageBytes = 64 << 10 // 64 KiB
+
+var (
+	// wsMaxConnections caps concurrent WebSocket connections; 0 = unlimited.
+	wsMaxConnections = 200
+	wsOpenConns      atomic.Int64
+
+	// Test seams.
+	wsSubscribe = func(subject string, cb nats.MsgHandler) (*nats.Subscription, error) {
+		return nc.Subscribe(subject, cb)
+	}
+	wsWriterHook func(*wsWriter)
+)
+
+// wsMaxConnectionsFromEnv parses WS_MAX_CONNECTIONS; invalid or negative
+// values fall back to the default.
+func wsMaxConnectionsFromEnv() int {
+	if v := strings.TrimSpace(os.Getenv("WS_MAX_CONNECTIONS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+		slog.Warn("invalid WS_MAX_CONNECTIONS, using default", "value", v)
+	}
+	return 200
+}
+
+// wsAcquire reserves a connection slot; false when the cap is reached.
+func wsAcquire() bool {
+	n := wsOpenConns.Add(1)
+	if wsMaxConnections > 0 && n > int64(wsMaxConnections) {
+		wsOpenConns.Add(-1)
+		return false
+	}
+	wsConnections.Inc()
+	return true
+}
+
+func wsRelease() {
+	wsOpenConns.Add(-1)
+	wsConnections.Dec()
 }
 
 func envOr(key, def string) string {
