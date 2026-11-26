@@ -232,6 +232,9 @@ export function SessionsPage() {
   // to the knight named in the link; appliedLink is the last link applied.
   const linkKey = searchParams.toString()
   const appliedLink = useRef('')
+  // Target of the link being applied, kept until the user leaves that knight
+  // (so a re-run of the effect for the same knight, e.g. StrictMode, keeps it).
+  const linkTarget = useRef<{ knight: string; pod: string | null; runId: string | null } | null>(null)
   // Set when a deep link names a pod on a live knight but no session was found.
   const [linkNotice, setLinkNotice] = useState<string | null>(null)
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
@@ -260,23 +263,28 @@ export function SessionsPage() {
 
   // Load the knight's past-session list; reset to the live view on knight change.
   useEffect(() => {
-    if (linkKey !== appliedLink.current && linkKnight && linkKnight !== selectedKnight) {
-      setSelectedKnight(linkKnight) // re-runs this effect for the linked knight
-      return
+    if (linkKey !== appliedLink.current && linkKnight) {
+      // Mark the link applied right away so a knight switch before the first
+      // history response is not snapped back to the linked knight.
+      appliedLink.current = linkKey
+      linkTarget.current = { knight: linkKnight, ...parseSessionTarget(searchParams) }
+      if (linkKnight !== selectedKnight) {
+        setSelectedKnight(linkKnight) // re-runs this effect for the linked knight
+        return
+      }
     }
     if (!selectedKnight) return
     setSelectedSession('live')
     setArchivedMeta(null)
     setPodGone(null)
     setLinkNotice(null)
-    const fresh = linkKey !== appliedLink.current && linkKnight === selectedKnight
-    const target = fresh ? parseSessionTarget(searchParams) : { pod: null, runId: null }
+    if (linkTarget.current && linkTarget.current.knight !== selectedKnight) linkTarget.current = null
+    const target = linkTarget.current ?? { pod: null, runId: null }
     let cancelled = false
     fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=history`)
       .then(r => (r && r.ok ? r.json() : null))
       .then(async d => {
         if (cancelled) return
-        if (fresh) appliedLink.current = linkKey
         const list: SessionHistoryItem[] = d?.sessions || []
         setSessions(list)
         const hit = pickTargetSession(list, target.pod, target.runId)
@@ -289,6 +297,7 @@ export function SessionsPage() {
           const gone = await podGoneFrom(probe, target.pod)
           if (cancelled) return
           if (gone) setPodGone(gone)
+          else if (!probe || !probe.ok) setLinkNotice(`Could not reach pod ${target.pod} to check; showing the live session.`)
           else setLinkNotice(`No session found for pod ${target.pod}${target.runId ? ` in run ${target.runId}` : ''}; showing the live session.`)
         }
       })

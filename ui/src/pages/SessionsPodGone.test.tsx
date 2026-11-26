@@ -6,17 +6,22 @@ import { SessionsPage } from './Sessions'
 
 vi.mock('../hooks/useFleet', () => ({
   useFleet: () => ({
-    knights: [{ name: 'galahad', domain: 'security', status: 'online' }],
+    knights: [{ name: 'galahad', domain: 'security', status: 'online' }, { name: 'lancelot', domain: 'dev', status: 'online' }],
     loading: false, error: null, refresh: () => {},
   }),
 }))
 
 // Per-URL responses for the introspect API.
 let routes: Record<string, () => Response>
+// When set, history requests for galahad wait for it (to simulate a slow first fetch).
+let historyGate: Promise<void> | null = null
 const calls: string[] = []
 vi.mock('../lib/api', () => ({
   apiFetch: (url: string) => {
     calls.push(url)
+    if (historyGate && url.includes('/galahad/session?type=history')) {
+      return historyGate.then(() => new Response(JSON.stringify(history), { status: 200 }))
+    }
     for (const [prefix, make] of Object.entries(routes)) {
       if (url.includes(prefix)) return Promise.resolve(make())
     }
@@ -38,6 +43,7 @@ function renderPage(url = '/sessions?knight=galahad') {
 }
 
 beforeEach(() => {
+  historyGate = null
   calls.length = 0
   routes = {
     'type=history': json(history),
@@ -95,8 +101,32 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     routes['pod=galahad-z'] = () => new Response('gone', { status: 410 })
     renderPage('/sessions?knight=galahad&pod=galahad-z&runId=run-9')
     const notice = await screen.findByRole('status', { name: /^(?!Loading)/ })
-    expect(notice).toHaveTextContent('No session found for pod galahad-z')
+    expect(notice).toHaveTextContent('Could not reach pod galahad-z to check')
+    expect(notice).not.toHaveTextContent('No session found')
     expect(screen.queryByText(/Pod gone/i)).toBeNull()
+  })
+
+  it('does not claim "No session found" when the probe fails', async () => {
+    routes['type=history'] = json({ sessions: [] })
+    routes['pod=galahad-z'] = () => new Response('boom', { status: 500 })
+    renderPage('/sessions?knight=galahad&pod=galahad-z&runId=run-9')
+    const notice = await screen.findByRole('status', { name: /^(?!Loading)/ })
+    expect(notice).toHaveTextContent('Could not reach pod galahad-z to check; showing the live session.')
+    expect(screen.queryByText(/No session found/)).toBeNull()
+  })
+
+  it('keeps the user\'s knight choice when switching before the first deep-link fetch resolves', async () => {
+    const user = userEvent.setup()
+    let release!: () => void
+    historyGate = new Promise<void>(r => { release = r })
+    renderPage('/sessions?knight=galahad&pod=galahad-a&runId=run-1')
+    const knightSelect = screen.getByLabelText('Knight') as HTMLSelectElement
+    expect(knightSelect.value).toBe('galahad')
+    await user.selectOptions(knightSelect, 'lancelot')
+    release()
+    await vi.waitFor(() => expect(calls.some(u => u.includes('/lancelot/session?type=history'))).toBe(true))
+    await new Promise(r => setTimeout(r, 20))
+    expect((screen.getByLabelText('Knight') as HTMLSelectElement).value).toBe('lancelot')
   })
 
   it('tells the user when a deep link finds no session on a live pod', async () => {

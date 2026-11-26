@@ -12,8 +12,8 @@ interface Props {
 }
 
 type LogsState =
-  | { kind: 'single'; pod: string; text: string }
-  | { kind: 'all'; lines: MergedLogLine[]; errors: { pod: string; message: string }[]; skipped: string[] }
+  | { kind: 'single'; pod: string; container: string; text: string }
+  | { kind: 'all'; container: string; lines: MergedLogLine[]; errors: { pod: string; message: string }[]; skipped: string[] }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Unknown error')
 
@@ -104,11 +104,11 @@ export function PodLogsViewer({ knightName }: Props) {
           if (r.status === 'fulfilled') streams.push({ pod: targets[i].name, text: r.value })
           else errors.push({ pod: targets[i].name, message: errMsg(r.reason) })
         })
-        setLogs({ kind: 'all', lines: mergePodLogs(streams), errors, skipped })
+        setLogs({ kind: 'all', container, lines: mergePodLogs(streams), errors, skipped })
       } else {
         const text = await apiGetText(podLogsUrl(knightName, { pod: selected, container, previous }))
         if (id !== reqId.current) return
-        setLogs({ kind: 'single', pod: selected, text })
+        setLogs({ kind: 'single', pod: selected, container, text })
       }
     } catch (e) {
       if (id !== reqId.current) return
@@ -201,7 +201,7 @@ export function PodLogsViewer({ knightName }: Props) {
         <pre data-testid="pod-logs" className="text-xs text-gray-300 font-mono overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words">
           {logs.skipped.map((p) => (
             <span key={`skip-${p}`} className="block text-gray-500">
-              <span className={podColor(podIndex.get(p) ?? 0)}>[{shortPodName(p, knightName)}]</span> skipped: no container &quot;{container}&quot;
+              <span className={podColor(podIndex.get(p) ?? 0)}>[{shortPodName(p, knightName)}]</span> skipped: no container &quot;{logs.container}&quot;
             </span>
           ))}
           {logs.errors.map((e) => (
