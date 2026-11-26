@@ -369,3 +369,22 @@ describe('DashboardPage truncated chain list', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })
+
+describe('DashboardPage scheduled chains', () => {
+  it('shows "next in" for a scheduled chain that is not suspended', async () => {
+    const { apiGet } = await import('../lib/api')
+    const orig = vi.mocked(apiGet).getMockImplementation()!
+    const next = new Date(Date.now() + 3 * 3600_000).toISOString()
+    vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
+      url === '/api/chains?limit=500'
+        ? Promise.resolve([
+          { name: 'nightly', phase: 'Succeeded', schedule: '0 6 * * *', nextScheduledAt: next, steps: [] },
+          { name: 'paused', phase: 'Succeeded', schedule: '0 6 * * *', suspend: true, nextScheduledAt: next, steps: [] },
+        ])
+        : orig(url, init)) as typeof apiGet)
+    renderDashboard()
+    expect(await screen.findByText(/^next in 3h/)).toBeInTheDocument()
+    expect(screen.getAllByText(/^next in/)).toHaveLength(1)
+    vi.mocked(apiGet).mockImplementation(orig)
+  })
+})
