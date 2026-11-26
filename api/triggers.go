@@ -196,7 +196,7 @@ func triggersHandler(namespace string) http.HandlerFunc {
 			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
-		list, err := dynClient.Resource(triggerGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		items, err := cachedList(r.Context(), dynClient, triggerGVR, namespace)
 		if err != nil {
 			slog.Error("Trigger list error", "error", err)
 			jsonError(w, "Failed to list triggers", http.StatusInternalServerError)
@@ -205,7 +205,7 @@ func triggersHandler(namespace string) http.HandlerFunc {
 		chainTables := chainTableMap(r.Context(), namespace)
 		filter := tableFilter(r)
 		out := []TriggerSummary{}
-		for _, item := range list.Items {
+		for _, item := range items {
 			t := parseTriggerResource(item.Object)
 			applyTriggerTable(&t, chainTables)
 			if !tableMatches(filter, t.Table) {
@@ -261,11 +261,11 @@ func chainTableMap(ctx context.Context, namespace string) map[string]string {
 	if dynClient == nil {
 		return out
 	}
-	list, err := dynClient.Resource(chainGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	items, err := cachedList(ctx, dynClient, chainGVR, namespace)
 	if err != nil {
 		return out
 	}
-	for _, item := range list.Items {
+	for _, item := range items {
 		out[item.GetName()] = getRefName(getNestedMap(item.Object, "spec"), "roundTableRef")
 	}
 	return out

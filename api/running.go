@@ -1028,12 +1028,12 @@ func knightTables(ctx context.Context, namespace string) map[string]string {
 	if dynClient == nil {
 		return out
 	}
-	list, err := dynClient.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	items, err := cachedList(ctx, dynClient, knightGVR, namespace)
 	if err != nil {
 		return out
 	}
-	for i := range list.Items {
-		out[strings.ToLower(list.Items[i].GetName())] = knightTableName(&list.Items[i])
+	for i := range items {
+		out[strings.ToLower(items[i].GetName())] = knightTableName(&items[i])
 	}
 	return out
 }

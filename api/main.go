@@ -1469,11 +1469,11 @@ func knightInfoMap(ctx context.Context, client dynamic.Interface, namespace stri
 	if client == nil {
 		return m
 	}
-	list, err := client.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	items, err := cachedList(ctx, client, knightGVR, namespace)
 	if err != nil {
 		return m
 	}
-	for _, item := range list.Items {
+	for _, item := range items {
 		spec, _ := item.Object["spec"].(map[string]interface{})
 		if spec != nil {
 			m[item.GetName()] = knightInfoFromSpec(spec)
@@ -1820,7 +1820,7 @@ func missionsHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
-		list, err := dynClient.Resource(missionGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		items, err := cachedList(r.Context(), dynClient, missionGVR, namespace)
 		if err != nil {
 			slog.Error("Mission list error", "error", err)
 			jsonError(w, "Failed to list missions", http.StatusInternalServerError)
@@ -1830,7 +1830,7 @@ func missionsHandler(namespace string) http.HandlerFunc {
 		chains := missionChainIndex(r.Context(), dynClient, namespace)
 		missions := []MissionSummary{}
 		filter := tableFilter(r)
-		for _, item := range list.Items {
+		for _, item := range items {
 			m := parseMissionResource(item.Object)
 			if !tableMatches(filter, m.RoundTableRef) {
 				continue
