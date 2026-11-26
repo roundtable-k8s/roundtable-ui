@@ -341,7 +341,7 @@ export function ScheduleFormPage() {
           </div>
 
           <Field id="schedule-timezone" label="Time zone" error={errors.timeZone}>
-            <input id="schedule-timezone" list="schedule-timezones" className={`${input} ${border(errors.timeZone)}`} value={form.timeZone}
+            <input id="schedule-timezone" list="schedule-timezones" className={`${input} ${border(errors.timeZone)}`} value={form.timeZone} placeholder="UTC"
               onChange={(e) => set('timeZone', e.target.value)} />
             <datalist id="schedule-timezones">{zones.map((z) => <option key={z} value={z} />)}</datalist>
           </Field>

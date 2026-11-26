@@ -128,6 +128,14 @@ describe('ScheduleDetailPage', () => {
     expect(within(actions).getByRole('button', { name: /Run now/ })).toBeInTheDocument()
     expect(within(actions).getByRole('button', { name: /Suspend/ })).toBeInTheDocument()
     expect(within(actions).queryByRole('button', { name: /Delete/ })).toBeNull()
+    expect(within(actions).queryByRole('link', { name: /Edit/ })).toBeNull()
+  })
+
+  it('links to the edit form for a schedule that is not Git-managed', async () => {
+    mockApi(sched())
+    renderPage()
+    const actions = await screen.findByTestId('schedule-actions')
+    expect(within(actions).getByRole('link', { name: /Edit/ })).toHaveAttribute('href', '/schedules/roundtable/morning-digest/edit')
   })
 
   it('confirms Run now with the task before firing', async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarClock, ArrowLeft, Play, Pause, PlayCircle, Trash2, Copy, Check, GitBranch, Link2, Shield, Target, X } from 'lucide-react'
+import { CalendarClock, ArrowLeft, Play, Pause, PlayCircle, Trash2, Copy, Check, GitBranch, Link2, Shield, Target, X, Pencil } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
 import { formatRelativeTime, until } from '../lib/format'
@@ -8,7 +8,7 @@ import { sanitizeText } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
 import {
-  RUN_HISTORY_LIMIT, scheduleApi, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
+  RUN_HISTORY_LIMIT, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
   runResultText, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -143,6 +143,11 @@ export function ScheduleActions({ s, onChanged, onDeleted }: {
           <button className={`${btn} border-amber-500/30 text-amber-300 hover:bg-amber-500/10`} disabled={busy} onClick={() => setSuspended(true)}>
             <Pause className="w-4 h-4" aria-hidden /> Suspend
           </button>
+        )}
+        {s.managedBy !== 'git' && (
+          <Link to={scheduleEditPath(s)} className={`${btn} border-roundtable-steel text-gray-300 hover:bg-white/5`}>
+            <Pencil className="w-4 h-4" aria-hidden /> Edit
+          </Link>
         )}
         {s.managedBy !== 'git' && (
           <button className={`${btn} border-red-500/30 text-red-300 hover:bg-red-500/10`} disabled={busy} onClick={() => setConfirm('delete')}>

@@ -104,7 +104,7 @@ export function formFromManifest(m: TriggerManifest): ScheduleForm {
     objective: str(mission.objective),
     costBudgetUSD: str(mission.costBudgetUSD) || '1.00',
     cron: str(schedule.cron),
-    timeZone: str(schedule.timeZone) || 'UTC',
+    timeZone: str(schedule.timeZone),
     concurrency: policy === 'Forbid' || policy === 'Replace' ? policy : 'Allow',
     suspend: spec.suspend === true,
   }
@@ -121,7 +121,12 @@ export function buildSpec(f: ScheduleForm, base: Obj = {}): Obj {
   const baseTarget = obj(base.target)
   const sameKind = Object.keys(base).length > 0 && targetKind(base) === f.kind
 
-  spec.source = { schedule: { ...obj(obj(base.source).schedule), cron: f.cron.trim(), timeZone: f.timeZone.trim() } }
+  // timeZone is omitempty in the CRD: an empty field means UTC and is left out.
+  const schedule: Obj = { ...obj(obj(base.source).schedule), cron: f.cron.trim() }
+  const tz = f.timeZone.trim()
+  if (tz) schedule.timeZone = tz
+  else delete schedule.timeZone
+  spec.source = { schedule }
 
   switch (f.kind) {
     case 'knight': {

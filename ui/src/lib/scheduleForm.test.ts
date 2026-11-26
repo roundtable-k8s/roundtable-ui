@@ -57,6 +57,17 @@ describe('YAML preview', () => {
     const base = JSON.parse(json) as TriggerManifest
     expect(manifestYaml(formFromManifest(base), base)).toBe(want)
   })
+
+  it('round-trips a schedule without a timeZone and leaves an empty one out', () => {
+    const base = JSON.parse(chainJson) as TriggerManifest
+    delete (base.spec.source as { schedule: { timeZone?: string } }).schedule.timeZone
+    const form = formFromManifest(base)
+    expect(form.timeZone).toBe('')
+    const yaml = manifestYaml(form, base)
+    expect(yaml).toBe(chainYaml.replace('      timeZone: UTC\n', ''))
+    expect(yaml).not.toContain('timeZone')
+    expect(buildSpec({ ...form, timeZone: '  ' }, base.spec).source).toEqual({ schedule: { cron: '30 2 * * *' } })
+  })
 })
 
 describe('buildSpec', () => {
