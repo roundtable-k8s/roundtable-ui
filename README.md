@@ -272,7 +272,7 @@ The dashboard API server is configured via environment variables:
 | `GATEWAY_TOKEN_FILE` | File whose first line is the gateway bearer token; re-read when the gateway answers 401 (token rotation). Takes precedence over `GATEWAY_TOKEN` | _(none)_ |
 | `GATEWAY_TOKEN` | Optional bearer token sent to the gateway | _(none)_ |
 | `DISPATCH_RATE` / `DISPATCH_BURST` | Rate limit (requests/sec, bucket size) of dispatch and run-now; rate <= 0 disables it | `2` / `10` |
-| `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
+| `DASHBOARD_API_KEY` | Optional API key for authentication. The `?api_key=` query form is accepted on `/api/ws` only; use the `Authorization` header elsewhere | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
 | `LOG_LEVEL` | Only `debug` is special (debug logging); any other value, or unset, logs at info | _(unset = info)_ |
 | `TRACE_URL_TEMPLATE` | Trace viewer URL for the "View trace" links: an http(s) URL containing `{traceId}`. Anything else is ignored with a warning. Returned as `traceUrlTemplate` by `GET /api/config`. See [Tracing](#tracing) | _(unset)_ |
@@ -314,7 +314,7 @@ bearer check remains for direct (non-browser) access. Two supported modes:
    ingress/proxy inject `Authorization: Bearer <key>` into proxied requests
    (including WebSocket upgrades). Direct API calls without the header get
    401; scripts can pass the header themselves, and WebSocket clients may
-   use the `?api_key=` query parameter.
+   use the `?api_key=` query parameter (on `/api/ws` only).
 
 > ⚠️ If `DASHBOARD_API_KEY` is set but no proxy injects the header, the UI
 > will show 401 errors everywhere — there is no in-browser login.

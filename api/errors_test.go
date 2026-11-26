@@ -147,3 +147,41 @@ func TestObjectiveAndMessageCountCharacters(t *testing.T) {
 		t.Errorf("dispatch whitespace: got %d", w.Code)
 	}
 }
+
+func TestAuthKeyHandling(t *testing.T) {
+	t.Setenv("DASHBOARD_API_KEY", "secret")
+	h := authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	cases := []struct {
+		name, method, target, auth, body string
+		want                             int
+	}{
+		{"bearer ok", "GET", "/api/fleet", "Bearer secret", "", 200},
+		{"bearer wrong", "GET", "/api/fleet", "Bearer nope", "", 401},
+		{"query ok on ws", "GET", "/api/ws?api_key=secret", "", "", 200},
+		{"query wrong on ws", "GET", "/api/ws?api_key=nope", "", "", 401},
+		{"query rejected on fleet", "GET", "/api/fleet?api_key=secret", "", "", 401},
+		{"login ok", "POST", "/api/auth/login", "", `{"apiKey":"secret"}`, 200},
+		{"login wrong", "POST", "/api/auth/login", "", `{"apiKey":"nope"}`, 401},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(c.method, c.target, strings.NewReader(c.body))
+			if c.auth != "" {
+				req.Header.Set("Authorization", c.auth)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			if w.Code != c.want {
+				t.Errorf("status = %d, want %d", w.Code, c.want)
+			}
+		})
+	}
+}
+
+func TestKeyEqual(t *testing.T) {
+	if !keyEqual("a", "a") || keyEqual("a", "b") || keyEqual("", "a") || keyEqual("ab", "a") {
+		t.Error("keyEqual wrong")
+	}
+}
