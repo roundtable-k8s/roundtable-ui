@@ -15,6 +15,9 @@ import { SkillFilter } from '../components/SkillFilter'
 import { isNotIsolated } from '../lib/isolation'
 import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as SkillFilterValue } from '../lib/cards'
 
+/** The knight's table for card lookup; undefined when unset or "none". */
+const tableOf = (k: { table?: string }) => (k.table && k.table !== 'none' ? k.table : undefined)
+
 export function FleetPage() {
   const { knights, loading, error, refresh } = useFleet()
   const { table } = useTableFilter()
@@ -28,7 +31,7 @@ export function FleetPage() {
   const notIsolatedCount = knights.filter(isNotIsolated).length
   const visibleKnights = useMemo(
     () => knights
-      .filter((k) => matchesSkillFilter(cardForKnight(cards, k.name), skillFilter))
+      .filter((k) => matchesSkillFilter(cardForKnight(cards, k.name, tableOf(k)), skillFilter))
       .filter((k) => !notIsolatedOnly || isNotIsolated(k))
       .sort((a, b) => a.name.localeCompare(b.name)),
     [knights, cards, skillFilter, notIsolatedOnly],
@@ -266,7 +269,7 @@ export function FleetPage() {
               knight={knight}
               onClick={() => setSelectedKnight(knight)}
               activity={knightActivity[knight.name]}
-              card={cardForKnight(cards, knight.name)}
+              card={cardForKnight(cards, knight.name, tableOf(knight))}
               showTable={!table}
             />
           ))}
@@ -282,7 +285,7 @@ export function FleetPage() {
       <KnightDetailDrawer
         knight={selectedKnight}
         onClose={() => setSelectedKnight(null)}
-        card={selectedKnight ? cardForKnight(cards, selectedKnight.name) : undefined}
+        card={selectedKnight ? cardForKnight(cards, selectedKnight.name, tableOf(selectedKnight)) : undefined}
       />
     </div>
   )

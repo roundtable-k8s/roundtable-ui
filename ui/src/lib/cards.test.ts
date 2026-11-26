@@ -76,6 +76,10 @@ describe('cardForKnight', () => {
     expect(cardForKnight(m, 'galahad', 'zzz')!.table).toBe('a')
     expect(cardForKnight(m, 'kay')).toBeUndefined()
   })
+  it('picks the card of the knight\'s own table, not the first in the map', () => {
+    expect(cardForKnight(m, 'galahad', 'a')!.table).toBe('a')
+    expect(cardForKnight(m, 'galahad', 'b')!.table).toBe('b')
+  })
 })
 
 describe('cardLoad', () => {

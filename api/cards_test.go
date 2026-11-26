@@ -322,3 +322,51 @@ func TestSplitCardKey(t *testing.T) {
 		t.Errorf("cardTables = %+v", got)
 	}
 }
+
+func TestCardsServedFromSnapshotWithoutNewWatcher(t *testing.T) {
+	conn, jsc := startCardsNATS(t)
+	kv := createCardsBucket(t, jsc, defaultCardsBucket)
+	putCard(t, kv, "personal", "galahad", "v1")
+	store := testCardStore(conn, jsc, "personal")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { store.run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timeout waiting for %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitFor("snapshot ready", func() bool {
+		store.snapMu.RLock()
+		defer store.snapMu.RUnlock()
+		return store.ready
+	})
+	opens := store.watchOpens.Load()
+
+	_, cards := getCards(t, store, "")
+	if len(cards) != 1 || cards[0].Knight != "galahad" {
+		t.Fatalf("cards = %+v", cards)
+	}
+	// A card written after the watch started shows up (no subscribers needed).
+	putCard(t, kv, "personal", "kay", "new")
+	waitFor("new card", func() bool { _, c := getCards(t, store, ""); return len(c) == 2 })
+	if err := kv.Delete(context.Background(), "personal.galahad"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor("deleted card gone", func() bool {
+		_, c := getCards(t, store, "")
+		return len(c) == 1 && c[0].Knight == "kay"
+	})
+	getCards(t, store, "")
+	if got := store.watchOpens.Load(); got != opens {
+		t.Fatalf("watchers opened = %d, want %d", got, opens)
+	}
+}

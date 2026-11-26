@@ -22,7 +22,6 @@ export interface CardRoundtable {
   phase?: string
   readyReplicas?: number
   suspended?: boolean
-  maxConcurrency?: number
   updatedAt?: string
 }
 
@@ -92,7 +91,6 @@ export function parseCard(raw: unknown): AgentCard | null {
       phase: str(rt.phase),
       readyReplicas: num(rt.readyReplicas),
       suspended: rt.suspended === true,
-      maxConcurrency: num(rt.maxConcurrency) ?? num(rt.maxConcurrentTasks) ?? num(rt.concurrency),
       updatedAt: str(rt.updatedAt),
     },
   }
@@ -200,7 +198,7 @@ export function cardLoad(entry: CardEntry | undefined, fallbackMax?: number): Ca
     load = loadOf(entry.stats)
   }
   if (!load) return null
-  return { active: load.active, max: load.max ?? entry.card.roundtable.maxConcurrency ?? fallbackMax }
+  return { active: load.active, max: load.max ?? fallbackMax }
 }
 
 /** All skill tags across cards, sorted and de-duplicated. */
