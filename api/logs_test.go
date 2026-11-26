@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/otel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -286,38 +288,40 @@ func TestWriteLogTail_ReadError(t *testing.T) {
 }
 
 func TestKnightLogs_ListErrorIs500(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
 	r, fc := setupLogsRouter(t, nil)
 	fc.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("apiserver down")
 	})
-	w := doGet(r, "/api/fleet/galahad/logs")
+	withRecorder(t)
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(newTraceHandler(slog.NewJSONHandler(&buf, nil))))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx, span := otel.Tracer("test").Start(context.Background(), "request")
+	defer span.End()
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/fleet/galahad/logs", nil).WithContext(ctx))
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status %d, want 500", w.Code)
 	}
 	if !strings.Contains(w.Body.String(), "Failed to list pods") {
 		t.Errorf("body %q", w.Body.String())
 	}
-
-	found := false
-	for _, raw := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
-		var line map[string]any
-		if err := json.Unmarshal([]byte(raw), &line); err != nil {
-			continue
-		}
-		if line["msg"] != "List knight pods failed" {
-			continue
-		}
-		found = true
-		if line["level"] != "ERROR" || line["knight"] != "galahad" {
-			t.Errorf("log line %v: want level ERROR and knight galahad", line)
+	var line map[string]any
+	for _, l := range bytes.Split(buf.Bytes(), []byte("\n")) {
+		var m map[string]any
+		if json.Unmarshal(l, &m) == nil && m["msg"] == "List knight pods failed" {
+			line = m
 		}
 	}
-	if !found {
-		t.Errorf("no \"List knight pods failed\" log line; logs: %s", buf.String())
+	if line == nil {
+		t.Fatalf("list error not logged: %s", buf.String())
+	}
+	if line["level"] != "ERROR" || line["knight"] != "galahad" {
+		t.Errorf("log line %v: want level ERROR and knight galahad", line)
+	}
+	if id, _ := line["trace_id"].(string); len(id) != 32 {
+		t.Errorf("trace_id = %v, want 32-char id", line["trace_id"])
 	}
 }

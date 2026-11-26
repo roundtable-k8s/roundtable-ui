@@ -211,7 +211,7 @@ func (c *cardStore) liveStats(ctx context.Context) map[string]json.RawMessage {
 	}
 	stats, err := c.requestStats(ctx)
 	if err != nil {
-		slog.Warn("Cards: knight STATS request failed", "error", err)
+		slog.WarnContext(ctx, "Cards: knight STATS request failed", "error", err)
 	}
 	c.stats, c.statsAt, c.cached = stats, c.now(), true
 	return stats
@@ -414,7 +414,7 @@ func (c *cardStore) watchOnce(ctx context.Context) {
 	kv, ok, err := c.keyValue(ctx)
 	if err != nil || !ok {
 		if err != nil && ctx.Err() == nil {
-			slog.Warn("Cards: opening KV bucket failed", "bucket", c.bucket, "error", err)
+			slog.WarnContext(ctx, "Cards: opening KV bucket failed", "bucket", c.bucket, "error", err)
 		}
 		return
 	}
@@ -427,7 +427,7 @@ func (c *cardStore) watchOnce(ctx context.Context) {
 	w, err := kv.WatchFiltered(ctx, filters)
 	if err != nil {
 		if ctx.Err() == nil {
-			slog.Warn("Cards: KV watch failed", "bucket", c.bucket, "error", err)
+			slog.WarnContext(ctx, "Cards: KV watch failed", "bucket", c.bucket, "error", err)
 		}
 		return
 	}
@@ -514,7 +514,7 @@ func cardsHandler(store *cardStore) http.HandlerFunc {
 			cards, err = store.list(ctx, tables)
 		}
 		if err != nil {
-			slog.Error("Cards: list failed", "bucket", store.bucket, "error", err)
+			slog.ErrorContext(r.Context(), "Cards: list failed", "bucket", store.bucket, "error", err)
 			jsonError(w, "Cards unavailable", http.StatusInternalServerError)
 			return
 		}

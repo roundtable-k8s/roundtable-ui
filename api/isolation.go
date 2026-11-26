@@ -108,7 +108,7 @@ func tableDefaultsByName(ctx context.Context, namespace string) map[string]map[s
 	}
 	list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		slog.Debug("RoundTable list for isolation defaults failed", "error", err)
+		slog.DebugContext(ctx, "RoundTable list for isolation defaults failed", "error", err)
 		return nil
 	}
 	out := make(map[string]map[string]interface{}, len(list.Items))

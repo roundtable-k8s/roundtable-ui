@@ -250,7 +250,7 @@ func (s *queueSampler) sampleOnce(ctx context.Context) {
 
 	crs, err := s.listKnights(ctx)
 	if err != nil {
-		slog.Warn("queue sampler: list knights failed", "error", err)
+		slog.WarnContext(ctx, "queue sampler: list knights failed", "error", err)
 		return
 	}
 	now := s.now()
@@ -263,7 +263,7 @@ func (s *queueSampler) sampleOnce(ctx context.Context) {
 			DesiredReplicas: t.desired, MaxReplicas: t.max,
 		}
 		if info, cerr := s.consumerInfo(ctx, t.stream, t.consumer); cerr != nil {
-			slog.Debug("queue sampler: consumer info failed", "knight", t.name, "consumer", t.consumer, "error", cerr)
+			slog.DebugContext(ctx, "queue sampler: consumer info failed", "knight", t.name, "consumer", t.consumer, "error", cerr)
 		} else if info != nil {
 			pending, ack, redeliv, waiting := info.NumPending, info.NumAckPending, info.NumRedelivered, info.NumWaiting
 			smp.Pending, smp.AckPending, smp.Redelivered, smp.Waiting = &pending, &ack, &redeliv, &waiting
@@ -274,7 +274,7 @@ func (s *queueSampler) sampleOnce(ctx context.Context) {
 	var evts []corev1.Event
 	if s.listEvents != nil {
 		if evts, err = s.listEvents(ctx); err != nil {
-			slog.Debug("queue sampler: list events failed", "error", err)
+			slog.DebugContext(ctx, "queue sampler: list events failed", "error", err)
 			evts = nil
 		}
 	}

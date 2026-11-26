@@ -198,7 +198,7 @@ func triggersHandler(namespace string) http.HandlerFunc {
 		}
 		items, err := cachedList(r.Context(), dynClient, triggerGVR, namespace)
 		if err != nil {
-			slog.Error("Trigger list error", "error", err)
+			slog.ErrorContext(r.Context(), "Trigger list error", "error", err)
 			jsonError(w, "Failed to list triggers", http.StatusInternalServerError)
 			return
 		}
@@ -242,7 +242,7 @@ func triggerDetailHandler(namespace string) http.HandlerFunc {
 				return
 			}
 			// Forbidden, timeout and other API errors are not "missing".
-			slog.Error("Get trigger failed", "namespace", namespace, "trigger", name, "error", err)
+			slog.ErrorContext(r.Context(), "Get trigger failed", "namespace", namespace, "trigger", name, "error", err)
 			jsonError(w, "Failed to read trigger", http.StatusInternalServerError)
 			return
 		}
