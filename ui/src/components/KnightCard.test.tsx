@@ -371,3 +371,20 @@ describe('KnightCard isolation badge (#269)', () => {
     expect(screen.queryByTestId('isolation-badge')).not.toBeInTheDocument()
   })
 })
+
+describe('KnightCard age', () => {
+  it('shows a readable age and "uptime" for a ready pod', () => {
+    const createdAt = new Date(Date.now() - (44 * 86400 + 3 * 3600 + 60) * 1000).toISOString()
+    render(<KnightCard knight={{ ...mockKnight, age: '1059h1m0s', createdAt }} />)
+    expect(screen.getByText('44d 3h uptime')).toBeInTheDocument()
+  })
+  it('labels it "age" when the knight is not ready', () => {
+    const createdAt = new Date(Date.now() - 3 * 3600 * 1000 - 60000).toISOString()
+    render(<KnightCard knight={{ ...mockKnight, ready: false, status: 'offline', createdAt }} />)
+    expect(screen.getByText('3h 1m age')).toBeInTheDocument()
+  })
+  it('falls back to the age string without createdAt', () => {
+    render(<KnightCard knight={mockKnight} />)
+    expect(screen.getByText('2h 15m uptime')).toBeInTheDocument()
+  })
+})

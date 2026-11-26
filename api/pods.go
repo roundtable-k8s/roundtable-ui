@@ -53,6 +53,10 @@ type KnightPod struct {
 	LastTerminationReason string `json:"lastTerminationReason,omitempty"`
 	// Age is the pod's age, rounded to seconds.
 	Age string `json:"age"`
+	// CreatedAt is the pod creation time, RFC 3339.
+	CreatedAt string `json:"createdAt,omitempty"`
+	// StartedAt is when the kubelet started the pod, RFC 3339; absent while pending.
+	StartedAt string `json:"startedAt,omitempty"`
 	// Image is the knight container image.
 	Image string `json:"image,omitempty"`
 	// Draining is true when the pod has a deletionTimestamp (rollout, #246).
@@ -180,12 +184,16 @@ func sumContainerQuantities(obj map[string]interface{}, field string) (resource.
 // metrics map when present.
 func buildKnightPod(pod *corev1.Pod, usage map[string]*KnightPod) KnightPod {
 	kp := KnightPod{
-		Name:     pod.Name,
-		Node:     pod.Spec.NodeName,
-		Phase:    string(pod.Status.Phase),
-		Draining: pod.DeletionTimestamp != nil,
-		Age:      time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
-		Image:    pod.Spec.Containers[0].Image,
+		Name:      pod.Name,
+		Node:      pod.Spec.NodeName,
+		Phase:     string(pod.Status.Phase),
+		Draining:  pod.DeletionTimestamp != nil,
+		Age:       time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
+		Image:     pod.Spec.Containers[0].Image,
+		CreatedAt: pod.CreationTimestamp.UTC().Format(time.RFC3339),
+	}
+	if pod.Status.StartTime != nil {
+		kp.StartedAt = pod.Status.StartTime.UTC().Format(time.RFC3339)
 	}
 	// Sum requests and limits over containers; the knight container is
 	// containers[0] but sidecars may add more.

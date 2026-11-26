@@ -3,7 +3,7 @@ import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRigh
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
-import { formatCost, formatUptime, formatTimestamp } from '../lib/format'
+import { formatAge, formatCost, formatUptime, formatTimestamp } from '../lib/format'
 import { PodsPanel } from './PodsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet'
@@ -271,7 +271,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
             <span className={`w-2.5 h-2.5 rounded-full ${knight.status === 'scaled-to-zero' ? 'bg-gray-500' : knight.ready ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
             <span className="text-sm text-gray-300">{knight.status === 'scaled-to-zero' ? 'Scaled to zero' : knight.ready ? 'Online' : 'Offline'}</span>
             <span className="text-xs text-gray-500">•</span>
-            <span className="text-xs text-gray-500">{knight.age} uptime</span>
+            <span className="text-xs text-gray-500">{formatAge(knight.createdAt, knight.age)} {knight.ready ? 'uptime' : 'age'}</span>
             <span className="text-xs text-gray-500">•</span>
             <span className="text-xs text-gray-500">{knight.restarts} restarts</span>
             <span className="text-xs text-gray-500">•</span>

@@ -1,7 +1,7 @@
 import { Shield, Wifi, WifiOff, RotateCw, Cpu, CheckCircle, XCircle, DollarSign } from 'lucide-react'
 import type { Knight } from '../hooks/useFleet'
 import { getKnightConfig } from '../lib/knights'
-import { formatRelativeTime } from '../lib/format'
+import { formatAge, formatRelativeTime } from '../lib/format'
 import { ReplicaDots } from './ReplicaDots'
 import { phaseColor, KNIGHT_STATUS_DOT } from '../lib/status'
 import { cardLoad, type CardEntry } from '../lib/cards'
@@ -229,7 +229,7 @@ export function KnightCard({ knight, onClick, activity, card, showTable }: Knigh
       )}
 
       <div className={`${activity || (knight.tasksCompleted !== undefined || knight.totalCost !== undefined) ? 'mt-2' : 'mt-3 pt-3 border-t border-roundtable-steel/50'} flex items-center justify-between`}>
-        <p className="text-xs text-gray-500 truncate font-mono">{knight.age} uptime</p>
+        <p className="text-xs text-gray-500 truncate font-mono">{formatAge(knight.createdAt, knight.age)} {knight.ready ? 'uptime' : 'age'}</p>
         <span className="text-xs text-gray-600 group-hover:text-roundtable-gold/60 transition-colors">inspect →</span>
       </div>
     </div>
