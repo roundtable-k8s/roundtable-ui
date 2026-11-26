@@ -592,3 +592,56 @@ func TestWithTables(t *testing.T) {
 		t.Fatal("remove delta gained a task")
 	}
 }
+
+func TestActivityFollowerFollowsPrefixes(t *testing.T) {
+	conn, _ := startCardsNATS(t)
+	reg, _ := newTestRegistry(10)
+	f := newActivityFollower(conn, reg, nil)
+
+	publish := func(prefix, task string) {
+		ev, _ := json.Marshal(activityEvent{V: 1, Type: "task.started", Knight: "k", TaskID: task})
+		if err := conn.Publish(prefix+".activity.k."+task, ev); err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.Flush(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitLen := func(n int) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if len(reg.snapshot()) == n {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("registry has %d entries, want %d", len(reg.snapshot()), n)
+	}
+
+	if added := f.sync([]string{"a"}); len(added) != 1 {
+		t.Fatalf("added = %v", added)
+	}
+	publish("b", "t0") // not yet followed
+	publish("a", "t1")
+	waitLen(1)
+
+	// A table created after start is picked up; a repeat sync adds nothing.
+	if added := f.sync([]string{"a", "b"}); len(added) != 1 || added[0] != "b" {
+		t.Fatalf("added = %v", added)
+	}
+	if added := f.sync([]string{"a", "b"}); len(added) != 0 {
+		t.Fatalf("second sync added %v", added)
+	}
+	publish("b", "t2") // one event adds exactly one entry
+	waitLen(2)
+
+	// A removed table stops delivering.
+	f.sync([]string{"a"})
+	publish("b", "t3")
+	publish("a", "t4")
+	waitLen(3)
+	if _, ok := reg.get("t3"); ok {
+		t.Fatal("event of removed table was delivered")
+	}
+}
