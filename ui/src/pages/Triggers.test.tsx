@@ -70,7 +70,7 @@ describe('TriggerDetailPage', () => {
       </MemoryRouter>,
     )
     const section = await screen.findByRole('region', { name: 'recent firings' })
-    expect(mockApiGet).toHaveBeenCalledWith('/api/triggers/roundtable/nightly')
+    expect(mockApiGet).toHaveBeenCalledWith('/api/triggers/roundtable/nightly', expect.anything())
     expect(section).toHaveTextContent('Skipped: ConcurrencyForbid')
     expect(within(section).getByRole('link', { name: 'run-2' })).toHaveAttribute('href', '/chains?chain=run-2')
   })

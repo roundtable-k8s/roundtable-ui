@@ -169,7 +169,7 @@ describe('SchedulesPage', () => {
     serve()
     renderPage('/schedules?table=fleet-b')
     await rowFor('cluster-scan')
-    expect(mockApiGet).toHaveBeenCalledWith('/api/schedules?table=fleet-b')
+    expect(mockApiGet).toHaveBeenCalledWith('/api/schedules?table=fleet-b', expect.anything())
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(1)
   })
 

@@ -1,3 +1,4 @@
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useState, useEffect, useMemo } from 'react'
 import { Scroll, Clock } from 'lucide-react'
 import { apiGet, apiPost } from '../lib/api'
@@ -84,18 +85,17 @@ export function TasksPage() {
 
   // Poll dispatched tasks through the gateway until they finish
   const pendingIds = results.filter((r) => !isFinal(r.status)).map((r) => r.taskId).join(',')
-  useEffect(() => {
-    if (!pendingIds) return
-    const poll = () => {
-      for (const id of pendingIds.split(',')) {
-        apiGet<GatewayTask>(`/api/tasks/dispatch/${encodeURIComponent(id)}`)
+  useVisibleInterval(
+    (signal) =>
+      Promise.all(pendingIds.split(',').map((id) =>
+        apiGet<GatewayTask>(`/api/tasks/dispatch/${encodeURIComponent(id)}`, { signal })
           .then((t) => setResults((prev) => prev.map((r) => (r.taskId === id ? mergeTask(r, t) : r))))
-          .catch(() => {})
-      }
-    }
-    const timer = setInterval(poll, POLL_MS)
-    return () => clearInterval(timer)
-  }, [pendingIds])
+          .catch(() => {}),
+      )),
+    POLL_MS,
+    !!pendingIds,
+    { key: pendingIds },
+  )
 
   const dispatch = async () => {
     if (!task.trim() || !selected) return

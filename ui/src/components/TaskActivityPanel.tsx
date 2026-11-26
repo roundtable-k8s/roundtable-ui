@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDown, Bot, CheckCircle2, Loader2, Play, Scissors, W
 import { Drawer } from './ui'
 import { UntrustedText } from './UntrustedText'
 import { useTaskActivity } from '../hooks/useTaskActivity'
+import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { apiGet } from '../lib/api'
 import { parseEvent } from '../lib/events'
@@ -42,15 +43,6 @@ interface TaskActivityPanelProps {
 
 /** Distance from the bottom (px) within which the timeline counts as "at the bottom". */
 const BOTTOM_SLACK_PX = 32
-
-function useNow(intervalMs = 1000): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
-  return now
-}
 
 function chainHref(chainName: string): string {
   return `/chains?chain=${encodeURIComponent(chainName)}`

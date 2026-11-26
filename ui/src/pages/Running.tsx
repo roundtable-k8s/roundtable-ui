@@ -4,6 +4,7 @@ import { Activity } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
 import { useRunning } from '../hooks/useRunning'
+import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
@@ -21,16 +22,6 @@ const STATUS_STYLES: Record<RunningStatus, { row: string; badge: string; text: s
   running: { row: '', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30', text: 'text-gray-300' },
   stale: { row: 'bg-yellow-500/10', badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', text: 'text-yellow-400' },
   lost: { row: 'bg-red-500/10', badge: 'bg-red-500/20 text-red-400 border-red-500/30', text: 'text-red-400' },
-}
-
-/** Re-render every second so elapsed / heartbeat age stay live. */
-function useNow(intervalMs = 1000): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
-  return now
 }
 
 function StatusBadge({ status }: { status: RunningStatus }) {

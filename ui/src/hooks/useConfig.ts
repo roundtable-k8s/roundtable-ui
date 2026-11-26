@@ -1,4 +1,5 @@
-import { usePolledFetch } from './usePolledFetch'
+import { useEffect, useState } from 'react'
+import { apiGet } from '../lib/api'
 
 export interface AppConfig {
   fleetPrefix?: string
@@ -6,8 +7,15 @@ export interface AppConfig {
   traceUrlTemplate?: string
 }
 
-/** GET /api/config (static for the life of the server, so polled rarely). */
+/** GET /api/config (static for the life of the server, so fetched once). */
 export function useConfig(): AppConfig {
-  const { data } = usePolledFetch<AppConfig>('/api/config', 600000, {})
-  return data ?? {}
+  const [data, setData] = useState<AppConfig>({})
+  useEffect(() => {
+    const ctrl = new AbortController()
+    apiGet<AppConfig>('/api/config', { signal: ctrl.signal })
+      .then((c) => setData(c ?? {}))
+      .catch(() => {})
+    return () => ctrl.abort()
+  }, [])
+  return data
 }

@@ -1,3 +1,4 @@
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarClock, Check, Copy, GitBranch, Link2, Save, Shield, Target } from 'lucide-react'
@@ -116,10 +117,7 @@ export function ScheduleFormPage() {
   const [now, setNow] = useState(() => new Date())
   const zones = useMemo(timeZones, [])
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(id)
-  }, [])
+  useVisibleInterval(() => setNow(new Date()), 60_000)
 
   useEffect(() => {
     apiGet<Chain[]>(CHAINS_URL).then((c) => setChains(Array.isArray(c) ? c : [])).catch(() => setChains([]))
