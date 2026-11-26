@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { KnightCardSection, KnightDetailDrawer } from './KnightDetailDrawer'
 import { galahadCard, patsyCard } from '../test/fixtures/cards'
 import type { Knight } from '../hooks/useFleet'
@@ -46,13 +47,20 @@ describe('KnightCardSection', () => {
 
 describe('KnightDetailDrawer card section', () => {
   it('shows the Card section when a card is given', () => {
-    render(<KnightDetailDrawer knight={knight} onClose={() => {}} card={galahadCard} />)
+    render(<MemoryRouter><KnightDetailDrawer knight={knight} onClose={() => {}} card={galahadCard} /></MemoryRouter>)
     const section = screen.getByTestId('knight-card-section')
     expect(within(section).getByText('Card')).toBeInTheDocument()
   })
 
   it('omits the Card section for a knight without a card', () => {
-    render(<KnightDetailDrawer knight={knight} onClose={() => {}} />)
+    render(<MemoryRouter><KnightDetailDrawer knight={knight} onClose={() => {}} /></MemoryRouter>)
     expect(screen.queryByTestId('knight-card-section')).not.toBeInTheDocument()
+  })
+})
+
+describe('KnightDetailDrawer chat link', () => {
+  it('links to the chat page with an encoded name and namespace', () => {
+    render(<MemoryRouter><KnightDetailDrawer knight={{ ...knight, namespace: 'team a' } as Knight} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: /chat/i })).toHaveAttribute('href', `/chat?knight=${encodeURIComponent(knight.name)}&ns=team%20a`)
   })
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { KnightIsolationSection, KnightDetailDrawer } from './KnightDetailDrawer'
 import type { Knight } from '../hooks/useFleet'
 import { isolated, notEnforced, optedOut } from '../test/fixtures/isolation'
@@ -74,7 +75,7 @@ describe('KnightIsolationSection', () => {
       name: 'kay', domain: 'research', status: 'online', ready: true, restarts: 0, age: '1h',
       image: 'knight:latest', skills: 0, nixTools: 0, labels: {}, isolation: optedOut,
     }
-    render(<KnightDetailDrawer knight={knight} onClose={() => {}} />)
+    render(<MemoryRouter><KnightDetailDrawer knight={knight} onClose={() => {}} /></MemoryRouter>)
     const section = screen.getByTestId('knight-isolation-section')
     expect(within(section).getByText('Reason: scrapes arbitrary sites')).toBeInTheDocument()
   })
