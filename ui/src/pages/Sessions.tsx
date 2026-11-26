@@ -457,7 +457,7 @@ export function SessionsPage() {
       {/* Knight picker with search + view tabs */}
       <div className="flex items-center gap-4 mb-6">
         <div className="relative">
-          <select value={selectedKnight} onChange={e => setSelectedKnight(e.target.value)}
+          <select aria-label="Knight" value={selectedKnight} onChange={e => setSelectedKnight(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-4 py-2 text-white pr-8 appearance-none min-w-[200px]">
             {filteredKnights.map(k => {
               const kc = knightConfig[k.name]
@@ -473,6 +473,7 @@ export function SessionsPage() {
             type="text" 
             value={knightSearchQuery} 
             onChange={e => setKnightSearchQuery(e.target.value)}
+            aria-label="Filter knights"
             placeholder="Filter knights by name or domain..."
             className="w-full bg-roundtable-navy border border-roundtable-steel rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500" 
           />
@@ -496,10 +497,11 @@ export function SessionsPage() {
             <div className="relative flex-1 max-w-xs">
               <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                aria-label="Search entries"
                 placeholder="Search entries..."
                 className="w-full bg-roundtable-navy border border-roundtable-steel rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500" />
             </div>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            <select aria-label="Filter by entry type" value={filterType} onChange={e => setFilterType(e.target.value)}
               className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-sm text-white">
               <option value="">All Types</option>
               <option value="user">📨 User</option>

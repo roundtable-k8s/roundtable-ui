@@ -16,14 +16,15 @@ import { phaseColor } from '../../lib/status'
 export function Spinner({ size = 'md' }: { size?: 'sm' | 'md' }) {
   const dims = size === 'sm' ? 'w-5 h-5' : 'w-8 h-8'
   return (
-    <div className={`animate-spin ${dims} border-2 border-roundtable-gold border-t-transparent rounded-full`} />
+    <div role="status" aria-label="Loading"
+      className={`animate-spin ${dims} border-2 border-roundtable-gold border-t-transparent rounded-full`} />
   )
 }
 
 /** Red error banner. */
 export function ErrorBanner({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 text-sm">
+    <div role="alert" className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 text-sm">
       {children}
     </div>
   )

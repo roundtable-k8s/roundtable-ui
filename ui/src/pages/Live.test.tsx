@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { LivePage } from './Live'
+import { Spinner, ErrorBanner } from '../components/ui'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
 const events: NatsEvent[] = [
@@ -25,6 +26,13 @@ const renderPage = () => render(<MemoryRouter><LivePage /></MemoryRouter>)
 const cards = () => screen.queryAllByText(/^(scan the cluster|fix the page|scan clean)$/).map((e) => e.textContent)
 
 describe('LivePage filters', () => {
+  it('labels the three filter selects', () => {
+    renderPage()
+    expect(screen.getByLabelText('Filter by knight')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by type')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by domain')).toBeInTheDocument()
+  })
+
   it('shows every event and the connection state by default', () => {
     renderPage()
     expect(cards()).toHaveLength(3)
@@ -65,5 +73,13 @@ describe('LivePage filters', () => {
     await userEvent.selectOptions(screen.getByDisplayValue('All Knights'), 'kay')
     await userEvent.selectOptions(screen.getByDisplayValue('All Types'), 'result')
     expect(screen.getByText('Waiting for messages…')).toBeInTheDocument()
+  })
+})
+
+describe('feedback primitives', () => {
+  it('Spinner is a labelled status and ErrorBanner an alert', () => {
+    render(<><Spinner /><ErrorBanner>boom</ErrorBanner></>)
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('boom')
   })
 })

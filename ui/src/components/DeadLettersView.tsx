@@ -86,7 +86,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
   return (
     <div>
       {error && <div className="mb-4"><ErrorBanner>{error}</ErrorBanner></div>}
-      {retryError && <div className="mb-4" role="alert"><ErrorBanner>Retry failed: {retryError}</ErrorBanner></div>}
+      {retryError && <div className="mb-4"><ErrorBanner>Retry failed: {retryError}</ErrorBanner></div>}
 
       <div className="flex gap-4 mb-4">
         <div>

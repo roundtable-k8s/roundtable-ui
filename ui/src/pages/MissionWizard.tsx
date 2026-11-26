@@ -162,8 +162,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
           {step === 0 && (
             <>
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Mission Name</label>
-                <input
+                <label htmlFor="wiz-mission-name" className="block text-sm text-gray-300 mb-1">Mission Name</label>
+                <input id="wiz-mission-name"
                   value={form.name}
                   onChange={e => updateField('name', e.target.value)}
                   placeholder="e.g. code-review-sprint"
@@ -171,8 +171,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Objective</label>
-                <textarea
+                <label htmlFor="wiz-objective" className="block text-sm text-gray-300 mb-1">Objective</label>
+                <textarea id="wiz-objective"
                   value={form.objective}
                   onChange={e => updateField('objective', e.target.value)}
                   placeholder="Describe the mission objective..."
@@ -181,8 +181,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-300 mb-1">RoundTable Reference</label>
-                <input
+                <label htmlFor="wiz-roundtable-reference" className="block text-sm text-gray-300 mb-1">RoundTable Reference</label>
+                <input id="wiz-roundtable-reference"
                   value={form.roundTableRef}
                   onChange={e => updateField('roundTableRef', e.target.value)}
                   placeholder="e.g. fleet-a"
@@ -209,16 +209,16 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Cost Budget (USD)</label>
-                  <input
+                  <label htmlFor="wiz-cost-budget" className="block text-sm text-gray-300 mb-1">Cost Budget (USD)</label>
+                  <input id="wiz-cost-budget"
                     value={form.costBudgetUSD}
                     onChange={e => updateField('costBudgetUSD', e.target.value)}
                     className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">TTL (seconds)</label>
-                  <input
+                  <label htmlFor="wiz-ttl" className="block text-sm text-gray-300 mb-1">TTL (seconds)</label>
+                  <input id="wiz-ttl"
                     type="number"
                     value={form.ttl}
                     onChange={e => updateField('ttl', parseInt(e.target.value) || 0)}
@@ -226,8 +226,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Timeout (seconds)</label>
-                  <input
+                  <label htmlFor="wiz-timeout" className="block text-sm text-gray-300 mb-1">Timeout (seconds)</label>
+                  <input id="wiz-timeout"
                     type="number"
                     value={form.timeout}
                     onChange={e => updateField('timeout', parseInt(e.target.value) || 0)}
@@ -246,17 +246,19 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   <input
                     value={knight.name}
                     onChange={e => updateKnight(idx, 'name', e.target.value)}
+                    aria-label="Knight name"
                     placeholder="Knight name"
                     className="flex-1 px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                   />
                   <input
                     value={knight.role}
                     onChange={e => updateKnight(idx, 'role', e.target.value)}
+                    aria-label="Knight role"
                     placeholder="Role (optional)"
                     className="flex-1 px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                   />
                   {form.knights.length > 1 && (
-                    <button onClick={() => removeKnight(idx)} className="text-gray-500 hover:text-red-400">
+                    <button onClick={() => removeKnight(idx)} aria-label="Remove knight" className="text-gray-500 hover:text-red-400">
                       <X className="w-4 h-4" />
                     </button>
                   )}
@@ -292,8 +294,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
 
               {/* Success Criteria */}
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Success Criteria (optional)</label>
-                <textarea
+                <label htmlFor="wiz-success-criteria" className="block text-sm text-gray-300 mb-1">Success Criteria (optional)</label>
+                <textarea id="wiz-success-criteria"
                   value={form.successCriteria}
                   onChange={e => updateField('successCriteria', e.target.value)}
                   placeholder="Describe how to determine if the mission succeeded..."
@@ -304,8 +306,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
 
               {/* Briefing */}
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Briefing (optional)</label>
-                <textarea
+                <label htmlFor="wiz-briefing" className="block text-sm text-gray-300 mb-1">Briefing (optional)</label>
+                <textarea id="wiz-briefing"
                   value={form.briefing}
                   onChange={e => updateField('briefing', e.target.value)}
                   placeholder="Initial context and instructions for mission knights..."
@@ -316,8 +318,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
 
               {/* Cleanup Policy */}
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Cleanup Policy</label>
-                <select
+                <label htmlFor="wiz-cleanup-policy" className="block text-sm text-gray-300 mb-1">Cleanup Policy</label>
+                <select id="wiz-cleanup-policy"
                   value={form.cleanupPolicy}
                   onChange={e => updateField('cleanupPolicy', e.target.value as 'Delete' | 'Retain')}
                   className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
@@ -365,8 +367,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Planner Knight (optional)</label>
-                    <input
+                    <label htmlFor="wiz-planner-knight" className="block text-xs text-gray-400 mb-1">Planner Knight (optional)</label>
+                    <input id="wiz-planner-knight"
                       value={form.planner.knightRef}
                       onChange={e => updatePlanner('knightRef', e.target.value)}
                       placeholder="table planner (default)"
@@ -376,8 +378,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
 
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Timeout (s)</label>
-                      <input
+                      <label htmlFor="wiz-planner-timeout" className="block text-xs text-gray-400 mb-1">Timeout (s)</label>
+                      <input id="wiz-planner-timeout"
                         type="number"
                         value={form.planner.timeout}
                         onChange={e => updatePlanner('timeout', parseInt(e.target.value) || 300)}
@@ -385,8 +387,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Max Chains</label>
-                      <input
+                      <label htmlFor="wiz-max-chains" className="block text-xs text-gray-400 mb-1">Max Chains</label>
+                      <input id="wiz-max-chains"
                         type="number"
                         min="1"
                         max="20"
@@ -396,8 +398,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Max Knights</label>
-                      <input
+                      <label htmlFor="wiz-max-knights" className="block text-xs text-gray-400 mb-1">Max Knights</label>
+                      <input id="wiz-max-knights"
                         type="number"
                         min="1"
                         max="50"
@@ -409,8 +411,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Additional Context (optional)</label>
-                    <textarea
+                    <label htmlFor="wiz-additional-context" className="block text-xs text-gray-400 mb-1">Additional Context (optional)</label>
+                    <textarea id="wiz-additional-context"
                       value={form.planner.context}
                       onChange={e => updatePlanner('context', e.target.value)}
                       placeholder="Extra context for the planner..."

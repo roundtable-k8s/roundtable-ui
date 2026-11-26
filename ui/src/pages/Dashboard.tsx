@@ -257,13 +257,13 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
       />
 
       {(fleetError || chainsError) && (
-        <div className="mb-6 space-y-2" role="alert">
+        <div className="mb-6 space-y-2">
           {fleetError && <ErrorBanner>Failed to load fleet: {fleetError}</ErrorBanner>}
           {chainsError && <ErrorBanner>Failed to load chains: {chainsError}</ErrorBanner>}
         </div>
       )}
       {((fleetLoading && knights.length === 0 && !fleetError) || (chainsLoading && !chainsError)) && (
-        <div className="mb-6 flex items-center gap-2 text-sm text-gray-400" role="status">
+        <div className="mb-6 flex items-center gap-2 text-sm text-gray-400">
           <Spinner size="sm" /> Loading…
         </div>
       )}
