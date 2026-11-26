@@ -3,7 +3,7 @@ import { Inbox, AlertTriangle, Clock, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge } from '../components/ui'
+import { PageHeader, RefreshButton, ListState, TableBadge } from '../components/ui'
 import { QueueSparkline } from '../components/QueueSparkline'
 import {
   OLDEST_WAIT_WARN_SECONDS,
@@ -139,24 +139,14 @@ export function QueuesPage() {
         <RefreshButton onClick={() => { refresh(); refreshHistory() }} loading={loading} />
       </PageHeader>
 
-      {error && (
-        <div className="mb-4">
-          <ErrorBanner>Failed to load queues: {error}</ErrorBanner>
-        </div>
-      )}
       {historyError && !error && (
         <p className="mb-4 text-xs text-gray-500">Scaling history unavailable: {historyError}</p>
       )}
 
-      {loading && queues.length === 0 && (
-        <div className="flex justify-center py-12"><Spinner /></div>
-      )}
-
-      {!loading && queues.length === 0 && !error && (
-        <EmptyState icon={Inbox} title="No knight queues found." />
-      )}
-
-      {queues.length > 0 && <QueuesTable queues={queues} history={history} showTable={!table} />}
+      <ListState loading={loading} error={error} count={queues.length} what="queues" icon={Inbox} onRetry={refresh}
+        emptyTitle="No knight queues found.">
+        <QueuesTable queues={queues} history={history} showTable={!table} />
+      </ListState>
 
       <p className="mt-3 text-xs text-gray-500">
         Warnings: oldest wait over {formatWait(OLDEST_WAIT_WARN_SECONDS)}, or tasks pending with no free slots while replicas are at max.

@@ -3,7 +3,7 @@ import { Zap, ArrowLeft, ExternalLink, CalendarClock } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, ListState, TableBadge } from '../components/ui'
 import { formatRelativeTime, until } from '../lib/format'
 import { chainLink, TRIGGER_DOCS_URL, type Trigger } from '../lib/triggers'
 
@@ -24,14 +24,9 @@ function when(iso?: string): string {
   return iso ? formatRelativeTime(iso) : '—'
 }
 
-function TriggersEmpty() {
+function TriggersEmptyExtra() {
   return (
-    <div data-testid="triggers-empty">
-      <EmptyState
-        icon={Zap}
-        title="No Triggers yet"
-        sub="A Trigger starts a Chain automatically: on a cron schedule, when a NATS message arrives, or on a webhook call."
-      />
+    <div>
       <p className="text-center text-sm">
         <a href={TRIGGER_DOCS_URL} target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-roundtable-gold hover:underline">
@@ -94,10 +89,12 @@ export function TriggersPage() {
         </Link>
         <RefreshButton onClick={refresh} loading={loading} />
       </PageHeader>
-      {error && <div className="mb-4"><ErrorBanner>Failed to load triggers: {error}</ErrorBanner></div>}
-      {loading && data.length === 0 && !error && <div className="flex justify-center py-12"><Spinner /></div>}
-      {!loading && !error && data.length === 0 && <TriggersEmpty />}
-      {data.length > 0 && <TriggersTable triggers={data} showTable={!table} />}
+      <ListState loading={loading} error={error} count={data.length} what="triggers" icon={Zap} onRetry={refresh}
+        emptyTitle="No Triggers yet"
+        emptySub="A Trigger starts a Chain automatically: on a cron schedule, when a NATS message arrives, or on a webhook call."
+        emptyExtra={<TriggersEmptyExtra />}>
+        <TriggersTable triggers={data} showTable={!table} />
+      </ListState>
     </div>
   )
 }

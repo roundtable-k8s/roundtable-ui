@@ -5,7 +5,7 @@ import { useMissions } from '../hooks/useMissions'
 import { MissionCard } from '../components/MissionCard'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
 import { MissionWizard } from './MissionWizard'
-import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner, EmptyState } from '../components/ui'
+import { PageHeader, RefreshButton, StatCard, ListState } from '../components/ui'
 import { formatCost } from '../lib/format'
 
 const PHASE_FILTERS = [
@@ -111,52 +111,33 @@ export function MissionsPage() {
         )}
       </div>
 
-      {/* Error State */}
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner>Failed to load missions: {error}</ErrorBanner>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {loading && missions.length === 0 && (
-        <div className="text-center py-12">
-          <div className="flex justify-center mb-3">
-            <Spinner />
+      <ListState loading={loading} error={error} count={missions.length} what="missions"
+        icon={Target} emptyTitle="No missions found." emptySub="Create a mission to get started." onRetry={refresh}>
+        {/* Filtered Empty State */}
+        {filteredMissions.length === 0 && (
+          <div className="text-center py-12">
+            <Filter className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-500">No missions match your filters.</p>
+            <button
+              onClick={() => {
+                setPhaseFilter('All')
+              }}
+              className="text-sm text-roundtable-gold hover:text-yellow-300 mt-2"
+            >
+              Clear filters
+            </button>
           </div>
-          <p className="text-gray-500 text-sm">Loading missions...</p>
-        </div>
-      )}
+        )}
 
-      {/* Empty State */}
-      {!loading && !error && missions.length === 0 && (
-        <EmptyState icon={Target} title="No missions found." sub="Create a mission to get started." />
-      )}
-
-      {/* Filtered Empty State */}
-      {!loading && missions.length > 0 && filteredMissions.length === 0 && (
-        <div className="text-center py-12">
-          <Filter className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-500">No missions match your filters.</p>
-          <button
-            onClick={() => {
-              setPhaseFilter('All')
-            }}
-            className="text-sm text-roundtable-gold hover:text-yellow-300 mt-2"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
-      {/* Mission Grid */}
-      {filteredMissions.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredMissions.map((mission) => (
-            <MissionCard key={mission.name} mission={mission} showTable={!table} />
-          ))}
-        </div>
-      )}
+        {/* Mission Grid */}
+        {filteredMissions.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredMissions.map((mission) => (
+              <MissionCard key={mission.name} mission={mission} showTable={!table} />
+            ))}
+          </div>
+        )}
+      </ListState>
 
       {/* Mission Creation Wizard */}
       {showWizard && (

@@ -35,7 +35,7 @@ describe('MissionsPage', () => {
   it('shows a spinner message while loading', () => {
     state = { missions: [], loading: true, error: null }
     renderPage()
-    expect(screen.getByText('Loading missions...')).toBeInTheDocument()
+    expect(screen.getByText('Loading missions…')).toBeInTheDocument()
     expect(screen.queryByText('No missions found.')).toBeNull()
   })
 

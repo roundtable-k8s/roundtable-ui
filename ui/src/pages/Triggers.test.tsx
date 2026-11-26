@@ -28,7 +28,7 @@ describe('TriggersPage', () => {
   it('shows the empty state with a docs link when there are no triggers', async () => {
     mockApiGet.mockResolvedValue([])
     render(<MemoryRouter><TriggersPage /></MemoryRouter>)
-    const empty = await screen.findByTestId('triggers-empty')
+    const empty = await screen.findByTestId('list-empty')
     expect(empty).toHaveTextContent('A Trigger starts a Chain')
     expect(within(empty).getByRole('link', { name: /docs/i })).toHaveAttribute('href', expect.stringContaining('github.com/roundtable-k8s'))
   })

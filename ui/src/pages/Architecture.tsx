@@ -4,7 +4,7 @@ import { Network, Server, Globe, MessageSquare, Shield, Crown, Cpu } from 'lucid
 import { apiGet } from '../lib/api'
 import { useFleet } from '../hooks/useFleet'
 import type { RoundTable } from '../lib/types'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner } from '../components/ui'
+import { PageHeader, RefreshButton, ListState } from '../components/ui'
 
 interface ComponentNode {
   id: string
@@ -111,6 +111,7 @@ export function ArchitecturePage() {
     },
   ]
   const isLoading = loading || knightsLoading
+  const liveCount = roundTables.length + missions.length
 
   return (
     <div>
@@ -122,21 +123,9 @@ export function ArchitecturePage() {
         connected via NATS messaging and observed through this dashboard.
       </p>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner>Failed to load live data: {error}</ErrorBanner>
-        </div>
-      )}
-
-      {isLoading && roundTables.length === 0 && (
-        <div className="text-center py-12 mb-8">
-          <div className="flex justify-center mb-3">
-            <Spinner />
-          </div>
-          <p className="text-gray-500 text-sm">Loading architecture data...</p>
-        </div>
-      )}
-
+      <ListState loading={isLoading} error={error} what="architecture data" onRetry={fetchData}
+        count={liveCount || (isLoading || error ? 0 : COMPONENTS.length)}
+        emptyTitle="No architecture data.">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
         {COMPONENTS.map(comp => (
           <div 
@@ -167,6 +156,7 @@ export function ArchitecturePage() {
           </div>
         ))}
       </div>
+      </ListState>
       <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-6">
         <h2 className="text-lg font-bold text-white mb-4">Data Flow</h2>
         <div className="space-y-3 text-sm text-gray-300">
