@@ -275,7 +275,7 @@ func knightQueueHandler(namespace string) http.HandlerFunc {
 		}
 		cr, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			jsonError(w, "Knight not found", http.StatusNotFound)
+			writeGetError(w, r, err, "Knight", "knight", name)
 			return
 		}
 
