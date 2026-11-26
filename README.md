@@ -365,6 +365,7 @@ The dashboard exposes a comprehensive REST API:
   `card` is the raw card JSON (schema: roundtable `docs/agent-cards.md`). `live`/`stats` come from `$SRV.STATS.roundtable-knight` (all replies within 500 ms, matched on the service's `table` and `knight` metadata, cached 10 s); `stats` is the latest STATS reply, `null` when the knight is not live. With several pods the most recently started one is used.
 
 ### Task Dispatch
+- `GET /api/tables` — Tables covered by the dashboard (`{"tables": [{name, prefix, tasksStream, resultsStream}]}`)
 - `GET /api/tasks` — List recent tasks from JetStream
 - `POST /api/tasks/dispatch` — Dispatch a task through the invoke gateway (`POST /v1/knights/{knight}/invoke`, `timeoutSeconds: 0`). Body `{knight, task, model?, runId?}`; returns the gateway task record (`taskId`, `runId`, `status`). 503 when `GATEWAY_URL` is unset; rate limited (429)
 - `GET /api/tasks/dispatch/{taskId}` — Task status and output (`GET /v1/tasks/{taskId}`)

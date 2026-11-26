@@ -333,6 +333,7 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.HandleFunc("/queues/history", queuesHistoryHandler(d.sampler)).Methods("GET")
 
 	// Task endpoints
+	api.HandleFunc("/tables", tablesHandler(d.tables)).Methods("GET")
 	api.HandleFunc("/tasks", taskHistoryHandler(d.tables)).Methods("GET")
 
 	// Dispatch and run-now go through the invoke gateway, not NATS (#247)

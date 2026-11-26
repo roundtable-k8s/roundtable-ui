@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 const tablesTestNS = "roundtable"
@@ -314,4 +315,58 @@ func TestKnightStatusCarriesNATSPrefix(t *testing.T) {
 	if ks.NATSPrefix != "rt-dev" {
 		t.Errorf("natsPrefix = %q", ks.NATSPrefix)
 	}
+}
+
+func TestTablesHandler(t *testing.T) {
+	withTwoTables(t)
+	r := mux.NewRouter()
+	r.HandleFunc("/api/tables", tablesHandler(newTableSource(tablesTestNS, "", ""))).Methods("GET")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/tables", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	var resp struct{ Tables []TableInfo }
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Tables) != 2 || resp.Tables[0].Name != "fleet-a" {
+		t.Errorf("tables = %+v", resp.Tables)
+	}
+}
+
+func TestTablesStaleCacheDoesNotWaitForSlowDiscovery(t *testing.T) {
+	withTwoTables(t)
+	now := time.Now()
+	src := newTableSource(tablesTestNS, "", "")
+	src.now = func() time.Time { return now }
+	first := src.tables(context.Background()) // warm the cache
+
+	// Make the cache stale and block the next list on the API server.
+	release := make(chan struct{})
+	started := make(chan struct{})
+	dynClient.(*fake.FakeDynamicClient).PrependReactor("list", "roundtables",
+		func(k2 clienttesting.Action) (bool, runtime.Object, error) {
+			close(started)
+			<-release
+			return false, nil, nil
+		})
+	now = now.Add(2 * src.ttl)
+
+	done := make(chan []TableInfo)
+	go func() { done <- src.tables(context.Background()) }() // runs the slow refresh
+	<-started
+
+	got := make(chan []TableInfo, 1)
+	go func() { got <- src.tables(context.Background()) }()
+	select {
+	case g := <-got:
+		if !reflect.DeepEqual(g, first) {
+			t.Errorf("got %+v, want cached %+v", g, first)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second caller blocked behind slow discovery")
+	}
+	close(release)
+	<-done
 }

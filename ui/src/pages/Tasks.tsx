@@ -84,7 +84,7 @@ export function TasksPage() {
   const rows = useMemo(() => taskRows(events, tables, tableFilter), [events, tables, tableFilter])
 
   useEffect(() => {
-    apiGet<{ tables?: TableInfo[] }>('/api/tasks')
+    apiGet<{ tables?: TableInfo[] }>('/api/tables')
       .then((data) => setTables(data.tables ?? []))
       .catch(() => {})
   }, [])
