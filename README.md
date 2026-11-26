@@ -274,6 +274,32 @@ The dashboard API server is configured via environment variables:
 | `DISPATCH_RATE` / `DISPATCH_BURST` | Rate limit (requests/sec, bucket size) of dispatch and run-now; rate <= 0 disables it | `2` / `10` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
+| `LOG_LEVEL` | Only `debug` is special (debug logging); any other value, or unset, logs at info | _(unset = info)_ |
+| `TRACE_URL_TEMPLATE` | Trace viewer URL for the "View trace" links: an http(s) URL containing `{traceId}`. Anything else is ignored with a warning. Returned as `traceUrlTemplate` by `GET /api/config`. See [Tracing](#tracing) | _(unset)_ |
+| `ACTIVITY_PREFIXES` | Comma-separated NATS prefixes whose `<prefix>.activity.>` events feed the running-tasks view | the prefix of every discovered table |
+| `ACTIVITY_HEARTBEAT_INTERVAL` | The knights' heartbeat interval as a Go duration (e.g. `10s`); running entries go stale after 3x this. Invalid or <= 0 values fall back to the default | `10s` |
+| `OTEL_SDK_DISABLED` | `true` (case-insensitive) turns trace export off | _(unset)_ |
+| `OTEL_TRACES_EXPORTER` | `none` turns trace export off | _(unset)_ |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector endpoint; setting it (or the traces one below) enables trace export | _(unset: no export)_ |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Traces-specific OTLP/HTTP endpoint (same effect as above) | _(unset)_ |
+| `OTEL_SERVICE_NAME` | `service.name` of the exported spans | `roundtable-ui` |
+
+### Tracing
+
+The API server exports OpenTelemetry traces (OTLP over HTTP) only when
+`OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set;
+without one no exporter is created and no collector connection is attempted.
+`OTEL_SDK_DISABLED=true` or `OTEL_TRACES_EXPORTER=none` switches export off
+even with an endpoint. Each request gets a server span named after its route
+template, and gateway calls are client spans carrying the W3C `traceparent`.
+`/api/ws`, `/metrics`, `/healthz` and `/readyz` produce no spans. Log lines
+written inside a traced request carry `trace_id` and `span_id`.
+
+The "View trace" links on chain and mission cards use the `traceId` (32 hex
+characters, from `status.traceID` of the Chain or Mission). The dashboard
+fetches `traceUrlTemplate` from `GET /api/config` and replaces `{traceId}`
+with it, e.g. `TRACE_URL_TEMPLATE=https://tempo.example.com/trace/{traceId}`.
+With no template, or no trace ID, no link is shown.
 
 ### Authentication
 
@@ -316,6 +342,8 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/fleet` — List all knights
 - `GET /api/fleet/{knight}` — Get knight details
 - `GET /api/fleet/{knight}/logs` — Stream knight pod logs
+- `GET /api/fleet/{knight}/pods` — Pods of the knight with container state and last activity: `{pods: [...], default}` (`default` is the pod to show first, absent when there are none). 503 when Kubernetes is unavailable
+- `GET /api/running` — Tasks running now (from live `<prefix>.activity.>` events): `{tasks, count, generatedAt, heartbeatIntervalMs, staleAfterMs}`. Optional `?table=<name>` (`none` = knights without a RoundTable)
 - `GET /api/fleet/{knight}/session?type={stats|recent|tree}` — Knight session introspection
 - `GET /api/fleet/{knight}/queue` — Knight's JetStream task queue (pending, ack-pending, redelivered, oldest wait, free slots)
 - `GET /api/queues` — Task queues of all knights
@@ -340,13 +368,46 @@ The dashboard exposes a comprehensive REST API:
 - `POST /api/tasks/dispatch` — Dispatch a task through the invoke gateway (`POST /v1/knights/{knight}/invoke`, `timeoutSeconds: 0`). Body `{knight, task, model?, runId?}`; returns the gateway task record (`taskId`, `runId`, `status`). 503 when `GATEWAY_URL` is unset; rate limited (429)
 - `GET /api/tasks/dispatch/{taskId}` — Task status and output (`GET /v1/tasks/{taskId}`)
 
+### Chat
+Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
+- `GET /api/chat/knights` — Knights the gateway can reach (`GET /v1/knights`)
+- `POST /api/chat/{knight}` — Send a chat turn (`POST /v1/knights/{knight}/invoke`, `timeoutSeconds: 0`). Body `{message, runId?, model?, namespace?}`; `message` is 1-10000 characters, pass an earlier turn's `runId` to continue its session. Returns the gateway task record at once; rate limited (429)
+- `GET /api/chat/tasks/{taskId}` — Task status and output (same as `GET /api/tasks/dispatch/{taskId}`)
+- `GET /api/chat/tasks/{taskId}/events` — Server-sent events of the task, streamed from the gateway; a non-200 answer (404 when the gateway has no events endpoint, message `Task events not available`) is relayed as JSON so the client can fall back to polling
+
+### Failed & Lost
+Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
+- `GET /api/dead-letters` — List dead letters. Query (forwarded as is): `knight`, `reason`, `state`, `limit`
+- `GET /api/dead-letters/{taskId}` — One dead letter including the original task payload, which the list omits. Optional `?table=`
+- `POST /api/dead-letters/{taskId}/retry` — Retry a dead letter. Optional body `{force?, table?}` (only these two are forwarded); the gateway's status codes (409, 422, …) pass through. The dashboard never sends a `namespace`, so the retry relies on the gateway's default namespace
+
 ### Chain Orchestration
 - `GET /api/chains` — List chains: slim (chain-level phase, timings, cost and tokens; steps carry only `name` and `phase`), running first then newest first. Query: `limit` (default 100, max 500), `offset`, `phase` (comma-separated), `template` (run copies of a template, from the `ai.roundtable.io/run-template` annotation, exposed as `runTemplate`), `copies` (`include` | `exclude` | `only`), `full=true` (the full payload; every chain in list order unless `limit`/`offset` is given). `X-Total-Count` is the number of matching chains
 - `GET /api/chain-groups` — Run copies per template: `{template, runs, phases, lastStartTime, templateExists}`
 - `GET /api/chains/{name}` — Get chain details (step results, fan-out items, loop rounds; same shape as the `chain` WebSocket push)
 - `POST /api/chains/{name}/run` — Run now through the gateway (`POST /v1/chains/{name}/runs`, `waitSeconds: 0`). Optional body `{input}`; only Chains labelled `ai.roundtable.io/invokable: "true"` can be run (chain summaries carry `invokable`). 503 when `GATEWAY_URL` is unset; rate limited (429)
 - `GET /api/chains/runs/{namespace}/{run}` — Run status (`GET /v1/runs/{namespace}/{run}`)
+- `POST /api/chains/runs/{namespace}/{run}/cancel` — Cancel a run (`POST /v1/runs/{namespace}/{run}/cancel`). Optional body `{reason}` (at most 500 characters, else 400); the gateway's 404/409 for runs it cannot cancel pass through. 503 when `GATEWAY_URL` is unset; rate limited (429)
 - `GET /api/chains/{name}/steps/{step}/output` — Get step output from NATS KV
+
+### Schedules
+Proxied to the gateway (`/v1/schedules`); all answer 503 when `GATEWAY_URL` is unset and pass the gateway's status codes and JSON body through (e.g. 409 with `managedBy` for a Git-managed schedule). `{namespace}` and `{name}` must be Kubernetes names (else 400); bodies are limited to 1 MiB and must be valid JSON (400 otherwise, 413 when too large) — the gateway validates the schedule itself.
+- `GET /api/schedules` — List schedules. Optional `?namespace=` and `?table=` (`none` is the dashboard's own filter value and is not forwarded)
+- `POST /api/schedules` — Create a schedule (body forwarded as is)
+- `GET /api/schedules/{namespace}/{name}` — Get a schedule
+- `PUT /api/schedules/{namespace}/{name}` — Replace a schedule (body forwarded as is)
+- `DELETE /api/schedules/{namespace}/{name}` — Delete a schedule
+- `GET /api/schedules/{namespace}/{name}/manifest` — The schedule as a manifest, `application/yaml` by default; `?format=json` converts it to JSON, `?format=yaml` is the default, any other value is 400
+- `POST /api/schedules/{namespace}/{name}/suspend` — Suspend (no body)
+- `POST /api/schedules/{namespace}/{name}/resume` — Resume (no body)
+- `POST /api/schedules/{namespace}/{name}/run` — Run now (no body); rate limited (429) like dispatch
+- `GET /api/schedules/{namespace}/{name}/runs` — Recent runs. Optional `?limit=` (1-200, else 400)
+- `GET /api/schedules/{namespace}/{name}/runs/{run}` — Result of one run
+
+### Triggers
+Read-only view of the Trigger resource (source, target, recent firings). 503 when Kubernetes is unavailable.
+- `GET /api/triggers` — List triggers in `NAMESPACE`. Optional `?table=<name>` (`none` = no RoundTable)
+- `GET /api/triggers/{namespace}/{name}` — Trigger detail; 404 when `{namespace}` is not the dashboard's `NAMESPACE` or the trigger does not exist
 
 ### Mission Management
 - `GET /api/missions` — List all missions
@@ -369,8 +430,9 @@ The dashboard exposes a comprehensive REST API:
   - Task activity: send `{"subscribe":"activity","taskId":"…"}` (and `{"unsubscribe":"activity","taskId":"…"}`) to watch up to 10 tasks per connection. The server replies with an `activity` event `{op:"backlog"}` holding the task's last 200 events (kept 15 minutes after `task.finished`), then `{op:"event"}` for each live event of that task only. Live events are droppable; `{op:"gap", fromSeq, toSeq}` marks events dropped for this client, and clients should also treat a `seq` jump as a gap.
 
 ### System
-- `GET /api/config` — Get dashboard configuration (fleet prefix)
+- `GET /api/config` — Get dashboard configuration (`fleetPrefix`, `namespace`, and `traceUrlTemplate` when `TRACE_URL_TEMPLATE` is valid)
 - `GET /api/health` — Health check endpoint
+- `GET /metrics` — Prometheus metrics. Served at the root, outside `/api`, so it is not subject to the `DASHBOARD_API_KEY` check
 
 ## Security
 
