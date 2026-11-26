@@ -563,7 +563,6 @@ func main() {
 	handler := cors.New(corsOpts).Handler(r)
 
 	srv := newHTTPServer(":"+port, handler)
-	srv.RegisterOnShutdown(beginWSShutdown)
 
 	// Graceful shutdown: main waits on done so the process exits only after
 	// Shutdown and the telemetry flush returned (or the budget expired).
@@ -575,7 +574,15 @@ func main() {
 		<-sigCh
 		slog.InfoContext(context.Background(), "Shutting down")
 		stopSampler()
-		gracefulShutdown(srv.Shutdown, otelShutdown, shutdownBudget)
+		gracefulShutdown(func(ctx context.Context) error {
+			// Tell WebSockets first, then drain HTTP, then wait for the
+			// close frames to be written (hijacked conns are not tracked by
+			// http.Server.Shutdown).
+			wsLife.begin()
+			err := srv.Shutdown(ctx)
+			wsLife.wait(ctx)
+			return err
+		}, otelShutdown, shutdownBudget)
 	}()
 
 	slog.InfoContext(context.Background(), "Round Table Dashboard API starting", "port", port)
@@ -600,12 +607,19 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 	}
 }
 
+// flushReserve is the part of the budget kept for the telemetry flush, so a
+// long-lived request (an open SSE stream) that Shutdown cannot cancel does
+// not leave the flush with an expired context.
+const flushReserve = time.Second
+
 // gracefulShutdown drains the server, then flushes telemetry, both within one
 // shared budget. It returns only after both steps returned.
 func gracefulShutdown(shutdown, flush func(context.Context) error, budget time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	if err := shutdown(ctx); err != nil {
+	drainCtx, cancelDrain := context.WithTimeout(ctx, budget-min(flushReserve, budget/2))
+	defer cancelDrain()
+	if err := shutdown(drainCtx); err != nil {
 		slog.WarnContext(ctx, "HTTP shutdown incomplete", "error", err)
 	}
 	if err := flush(ctx); err != nil {
@@ -613,15 +627,54 @@ func gracefulShutdown(shutdown, flush func(context.Context) error, budget time.D
 	}
 }
 
-// wsShutdown is closed when the server starts shutting down; WebSocket
-// handlers then send a 1001 close frame. Hijacked connections are not
-// tracked by http.Server.Shutdown, so they must be told explicitly.
-var (
-	wsShutdown     = make(chan struct{})
-	wsShutdownOnce sync.Once
-)
+// wsLifecycle tracks live WebSocket handlers. Hijacked connections are not
+// tracked by http.Server.Shutdown, so handlers are told explicitly (begin)
+// and shutdown waits for them to have written their 1001 close frame (wait).
+type wsLifecycle struct {
+	shutdown chan struct{}
+	mu       sync.Mutex
+	closing  bool
+	wg       sync.WaitGroup
+}
 
-func beginWSShutdown() { wsShutdownOnce.Do(func() { close(wsShutdown) }) }
+func newWSLifecycle() *wsLifecycle { return &wsLifecycle{shutdown: make(chan struct{})} }
+
+// wsLife is the process-wide lifecycle; tests swap in a fresh one.
+var wsLife = newWSLifecycle()
+
+// enter registers a handler; false means the server is already shutting down.
+func (l *wsLifecycle) enter() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closing {
+		return false
+	}
+	l.wg.Add(1)
+	return true
+}
+
+func (l *wsLifecycle) leave() { l.wg.Done() }
+
+// begin signals every handler to send a 1001 close frame. Safe to call twice.
+func (l *wsLifecycle) begin() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.closing {
+		l.closing = true
+		close(l.shutdown)
+	}
+}
+
+// wait blocks until all handlers returned or ctx expired.
+func (l *wsLifecycle) wait(ctx context.Context) {
+	idle := make(chan struct{})
+	go func() { l.wg.Wait(); close(idle) }()
+	select {
+	case <-idle:
+	case <-ctx.Done():
+		slog.WarnContext(ctx, "WebSocket handlers still open at shutdown deadline")
+	}
+}
 
 // closeGoingAway sends a 1001 close frame and closes the connection.
 func closeGoingAway(ws *wsWriter, conn interface{ Close() error }) {
@@ -1376,6 +1429,13 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			return
 		}
 
+		life := wsLife
+		if !life.enter() {
+			jsonError(w, "server shutting down", http.StatusServiceUnavailable)
+			return
+		}
+		defer life.leave()
+
 		// Connection cap (#378), enforced before the upgrade so a rejected
 		// client costs no subscriptions or goroutines.
 		if !wsAcquire() {
@@ -1518,7 +1578,7 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		go func() {
 			select {
 			case <-done:
-			case <-wsShutdown:
+			case <-life.shutdown:
 				closeGoingAway(ws, conn)
 			}
 		}()

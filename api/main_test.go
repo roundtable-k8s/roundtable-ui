@@ -15,9 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -2177,5 +2176,55 @@ func TestCloseGoingAway(t *testing.T) {
 	closeGoingAway(ws, c)
 	if !c.closed || gotType != websocket.CloseMessage || len(got) < 2 || int(got[0])<<8|int(got[1]) != websocket.CloseGoingAway {
 		t.Fatalf("closed=%v type=%d payload=%v", c.closed, gotType, got)
+	}
+}
+
+// TestWSShutdownSendsGoingAway runs the real handler behind httptest with a
+// real WebSocket client and checks that graceful shutdown waits for the 1001
+// close frame to be sent.
+func TestWSShutdownSendsGoingAway(t *testing.T) {
+	conn, _ := startCardsNATS(t)
+	oldNC, oldLife := nc, wsLife
+	nc, wsLife = conn, newWSLifecycle()
+	t.Cleanup(func() { nc, wsLife = oldNC, oldLife })
+
+	src := &tableSource{ttl: time.Hour, now: time.Now, ok: true}
+	srv := httptest.NewServer(wsHandler(src, nil, nil, nil, nil, nil))
+	defer srv.Close()
+
+	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	gotCode := make(chan int, 1)
+	go func() {
+		for {
+			if _, _, err := c.ReadMessage(); err != nil {
+				code := -1
+				var ce *websocket.CloseError
+				if errors.As(err, &ce) {
+					code = ce.Code
+				}
+				gotCode <- code
+				return
+			}
+		}
+	}()
+	time.Sleep(100 * time.Millisecond) // let the handler register
+
+	gracefulShutdown(func(ctx context.Context) error {
+		wsLife.begin()
+		wsLife.wait(ctx)
+		return nil
+	}, func(context.Context) error { return nil }, 5*time.Second)
+
+	select {
+	case code := <-gotCode:
+		if code != websocket.CloseGoingAway {
+			t.Fatalf("close code = %d, want 1001", code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no close frame received")
 	}
 }
