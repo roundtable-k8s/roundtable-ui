@@ -23,6 +23,8 @@ export interface KnightPod {
   restarts: number
   lastTerminationReason?: string
   age: string
+  createdAt?: string  // RFC 3339 pod creation time
+  startedAt?: string
   image?: string
   draining: boolean
   // Kubernetes quantity strings ("150m", "256Mi"); usage absent without metrics-server
@@ -94,6 +96,7 @@ export interface Knight {
   ready: boolean
   restarts: number
   age: string
+  createdAt?: string  // RFC 3339; pod (or Knight CR when no pod) creation time
   image: string
   skills: number           // keep for backward compat
   skillsList?: string[]    // actual skill names from CRD

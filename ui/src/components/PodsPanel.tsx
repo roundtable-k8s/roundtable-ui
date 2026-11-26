@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { Knight } from '../hooks/useFleet'
 import { formatCpu, formatMemory, usageFraction, podState } from '../lib/pods'
-import { formatRelativeTime } from '../lib/format'
+import { formatAge, formatRelativeTime } from '../lib/format'
 
 function Bar({ usage, limit, request, label }: { usage?: string; limit?: string; request?: string; label: string }) {
   const f = usageFraction(usage, limit, request)
@@ -55,7 +55,7 @@ export function PodsPanel({ knight }: { knight: Knight }) {
                   <td className="px-2 py-2 font-mono text-gray-300">
                     <div className="truncate max-w-[140px]" title={p.name}>{p.name}</div>
                     <div className="text-gray-500">
-                      {p.draining ? <span className="text-orange-400">Draining</span> : p.ready ? 'Ready' : p.phase} · {p.age}
+                      {p.draining ? <span className="text-orange-400">Draining</span> : p.ready ? 'Ready' : p.phase} · {formatAge(p.createdAt, p.age)}
                     </div>
                   </td>
                   <td className="px-2 py-2 text-gray-400 font-mono">{p.node || '—'}</td>

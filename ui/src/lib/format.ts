@@ -49,6 +49,19 @@ export function formatRelativeTime(iso: string | null): string {
   return `${Math.floor(hr / 24)}d ago`
 }
 
+/** ISO creation time → "45s" / "12m" / "5h 12m" / "44d 3h"; clock skew clamps to "0s". Falls back to `fallback` when unparsable. */
+export function formatAge(iso: string | undefined, fallback = '—', now: number = Date.now()): string {
+  const t = iso ? new Date(iso).getTime() : NaN
+  if (Number.isNaN(t)) return fallback
+  const sec = Math.max(0, Math.floor((now - t) / 1000))
+  if (sec < 60) return `${sec}s`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ${min % 60}m`
+  return `${Math.floor(hr / 24)}d ${hr % 24}h`
+}
+
 /** Uptime seconds → "3h 12m" / "45m" */
 export function formatUptime(seconds: number): string {
   const h = Math.floor(seconds / 3600)

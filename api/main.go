@@ -73,13 +73,15 @@ var (
 
 // KnightStatus represents a knight's current state
 type KnightStatus struct {
-	Name            string            `json:"name"`
-	Namespace       string            `json:"namespace"`
-	Domain          string            `json:"domain"`
-	Status          string            `json:"status"` // online, offline, starting
-	Ready           bool              `json:"ready"`
-	Restarts        int32             `json:"restarts"`
-	Age             string            `json:"age"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Domain    string `json:"domain"`
+	Status    string `json:"status"` // online, offline, starting
+	Ready     bool   `json:"ready"`
+	Restarts  int32  `json:"restarts"`
+	Age       string `json:"age"`
+	// CreatedAt is the pod's creation time (the Knight CR's when there is no pod), RFC 3339.
+	CreatedAt       string            `json:"createdAt,omitempty"`
 	Image           string            `json:"image"`
 	Skills          int               `json:"skills"`
 	NixTools        int               `json:"nixTools"`
@@ -602,12 +604,14 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 	var image string
 	var labels map[string]string
 	age := time.Since(cr.GetCreationTimestamp().Time).Round(time.Second).String()
+	createdAt := cr.GetCreationTimestamp().UTC().Format(time.RFC3339)
 
 	if pod != nil {
 		if pod.Labels != nil {
 			labels = pod.Labels
 		}
 		age = time.Since(pod.CreationTimestamp.Time).Round(time.Second).String()
+		createdAt = pod.CreationTimestamp.UTC().Format(time.RFC3339)
 		if len(pod.Spec.Containers) > 0 {
 			image = pod.Spec.Containers[0].Image
 		}
@@ -649,6 +653,7 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 		Ready:              ready,
 		Restarts:           restarts,
 		Age:                age,
+		CreatedAt:          createdAt,
 		Image:              image,
 		Labels:             labels,
 		Phase:              getStr(status, "phase"),

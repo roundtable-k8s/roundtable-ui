@@ -272,6 +272,12 @@ func TestFleetHandlerDrainingPod(t *testing.T) {
 	if k.Pods[0].LastTerminationReason != "OOMKilled" {
 		t.Errorf("expected lastTerminationReason 'OOMKilled', got '%s'", k.Pods[0].LastTerminationReason)
 	}
+	if _, err := time.Parse(time.RFC3339, k.Pods[0].CreatedAt); err != nil {
+		t.Errorf("pod createdAt %q does not parse: %v", k.Pods[0].CreatedAt, err)
+	}
+	if _, err := time.Parse(time.RFC3339, k.CreatedAt); err != nil {
+		t.Errorf("knight createdAt %q does not parse: %v", k.CreatedAt, err)
+	}
 	// A draining pod still shows node and image.
 	if k.Pods[0].Node != "node-1" || k.Pods[0].Image == "" {
 		t.Errorf("expected node and image on draining pod, got %+v", k.Pods[0])

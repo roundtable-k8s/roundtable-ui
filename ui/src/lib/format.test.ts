@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  formatCost, formatDateTime, formatDuration, formatMsLadder, formatRelativeTime,
+  formatCost, formatDateTime, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
   formatSecondsLadder, formatTimestamp, formatTimestampOrDate, formatUptime, until,
 } from './format'
 
@@ -132,5 +132,19 @@ describe('until', () => {
     expect(until(ago(0))).toBe('due now')
     expect(until(ago(30))).toBe('due now')
     expect(until(undefined)).toBe('—')
+  })
+})
+
+describe('formatAge', () => {
+  it('formats two largest units', () => {
+    expect(formatAge(ago(45))).toBe('45s')
+    expect(formatAge(ago(12 * 60))).toBe('12m')
+    expect(formatAge(ago(5 * 3600 + 12 * 60))).toBe('5h 12m')
+    expect(formatAge(ago(44 * 86400 + 3 * 3600 + 5 * 60))).toBe('44d 3h')
+  })
+  it('clamps clock skew to 0s', () => { expect(formatAge(ahead(30))).toBe('0s') })
+  it('falls back when absent or invalid', () => {
+    expect(formatAge(undefined, '1052h34m12s')).toBe('1052h34m12s')
+    expect(formatAge('nope', 'x')).toBe('x')
   })
 })
