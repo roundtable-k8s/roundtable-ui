@@ -370,3 +370,33 @@ func TestCardsServedFromSnapshotWithoutNewWatcher(t *testing.T) {
 		t.Fatalf("watchers opened = %d, want %d", got, opens)
 	}
 }
+
+func TestCardsInvalidValueDropsSnapshotEntry(t *testing.T) {
+	conn, jsc := startCardsNATS(t)
+	kv := createCardsBucket(t, jsc, defaultCardsBucket)
+	putCard(t, kv, "personal", "galahad", "v1")
+	store := testCardStore(conn, jsc, "personal")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { store.run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timeout waiting for %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitFor("card served", func() bool { _, c := getCards(t, store, ""); return len(c) == 1 })
+	if _, err := kv.Put(context.Background(), "personal.galahad", []byte("{not json")); err != nil {
+		t.Fatal(err)
+	}
+	waitFor("invalid card dropped", func() bool { _, c := getCards(t, store, ""); return len(c) == 0 })
+	putCard(t, kv, "personal", "galahad", "v2")
+	waitFor("valid card back", func() bool { _, c := getCards(t, store, ""); return len(c) == 1 })
+}

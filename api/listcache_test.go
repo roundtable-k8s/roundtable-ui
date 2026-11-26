@@ -76,9 +76,9 @@ func TestCachedListFailedSyncRemembered(t *testing.T) {
 		informerLists.Add(1)
 		return true, nil, errors.New("list unavailable")
 	})
-	oldTimeout := listCacheSyncTimeoutVar
-	listCacheSyncTimeoutVar = 300 * time.Millisecond
-	t.Cleanup(func() { listCacheSyncTimeoutVar = oldTimeout })
+	oldTimeout := listCacheSyncTimeout
+	listCacheSyncTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { listCacheSyncTimeout = oldTimeout })
 
 	start := time.Now()
 	_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")

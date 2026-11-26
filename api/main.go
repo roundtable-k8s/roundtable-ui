@@ -507,9 +507,9 @@ func main() {
 	fleetPrefix := tables.defaultPrefix()
 	// One knight-to-table cache for all WebSocket connections.
 	tc := newKnightTableCache(namespace)
-	tc.refresh()
+	// The first lookup runs in the background so start-up does not wait on it.
 	go tc.run(runningCtx.Done())
-	startRunningRegistry(runningCtx, running, activity, tables.prefixes, namespace)
+	startRunningRegistry(runningCtx, running, activity, tables.prefixes, fleetPrefix, namespace)
 
 	// Live chain updates over WS (#228)
 	var chains *chainWatcher

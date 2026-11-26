@@ -636,7 +636,7 @@ func knightPrefixes(ctx context.Context, namespace string) map[string]string {
 // introspection reply (`<prefix>.introspect.<Knight>.<pod>`, type=stats).
 // Only pods on a prefix the registry subscribes to are asked: tasks of other
 // tables would never receive task.finished and linger as stale.
-func bootstrapRunning(ctx context.Context, reg *runningRegistry, namespace string, prefixes []string, req introspectRequester, timeout time.Duration) int {
+func bootstrapRunning(ctx context.Context, reg *runningRegistry, namespace string, prefixes []string, fallbackPrefix string, req introspectRequester, timeout time.Duration) int {
 	if len(prefixes) == 0 {
 		return 0
 	}
@@ -644,7 +644,7 @@ func bootstrapRunning(ctx context.Context, reg *runningRegistry, namespace strin
 	for _, p := range prefixes {
 		subscribed[p] = true
 	}
-	refs, _, err := listKnightPods(ctx, namespace, knightPrefixes(ctx, namespace), prefixes[0])
+	refs, _, err := listKnightPods(ctx, namespace, knightPrefixes(ctx, namespace), fallbackPrefix)
 	if err != nil {
 		slog.WarnContext(ctx, "Running: bootstrap pod list failed", "error", err)
 		return 0
@@ -855,7 +855,7 @@ func (f *activityFollower) subscribe(p string) (*nats.Subscription, error) {
 // the stale sweeper and pod reconciler. Background goroutines stop with ctx.
 // When act is non-nil the same activity events also feed the per-task
 // activity buffers (#184) and are swept on the same ticker.
-func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, listPrefixes func(context.Context) []string, namespace string) {
+func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activityStore, listPrefixes func(context.Context) []string, fallbackPrefix, namespace string) {
 	follower := newActivityFollower(nc, reg, act)
 	bootstrap := func(prefixes []string) {
 		if len(prefixes) == 0 {
@@ -870,7 +870,7 @@ func startRunningRegistry(ctx context.Context, reg *runningRegistry, act *activi
 		}
 		bctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		n := bootstrapRunning(bctx, reg, namespace, prefixes, req, 3*time.Second)
+		n := bootstrapRunning(bctx, reg, namespace, prefixes, fallbackPrefix, req, 3*time.Second)
 		slog.InfoContext(ctx, "Running: registry bootstrapped from introspection", "prefixes", prefixes, "tasks", n)
 	}
 	// Subscribe first, bootstrap after, so no event between the two is missed;
@@ -1080,8 +1080,9 @@ func (c *tableCache) refresh() {
 	c.mu.Unlock()
 }
 
-// run refreshes periodically until done closes.
+// run refreshes immediately, then periodically until done closes.
 func (c *tableCache) run(done <-chan struct{}) {
+	c.refresh() // first lookup before the first tick
 	t := time.NewTicker(c.interval)
 	defer t.Stop()
 	for {

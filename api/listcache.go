@@ -23,10 +23,8 @@ import (
 // direct list.
 
 // listCacheSyncTimeout bounds how long a read waits for an informer's first sync.
-const listCacheSyncTimeout = 5 * time.Second
-
-// listCacheSyncTimeoutVar is the effective timeout (overridable in tests).
-var listCacheSyncTimeoutVar = listCacheSyncTimeout
+// It is a variable so tests can shorten it.
+var listCacheSyncTimeout = 5 * time.Second
 
 type listCacheKey struct {
 	client    dynamic.Interface
@@ -89,7 +87,7 @@ func cachedList(ctx context.Context, client dynamic.Interface, gvr schema.GroupV
 	if recentlyFailed {
 		return direct()
 	}
-	syncCtx, cancel := context.WithTimeout(ctx, listCacheSyncTimeoutVar)
+	syncCtx, cancel := context.WithTimeout(ctx, listCacheSyncTimeout)
 	defer cancel()
 	if !cache.WaitForCacheSync(syncCtx.Done(), inf.HasSynced) {
 		// Remember only a real sync timeout, not a cancelled caller.
