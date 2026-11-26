@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -69,6 +70,16 @@ type cardStore struct {
 	subMu   sync.Mutex
 	subs    map[int]func([]byte)
 	nextSub int
+
+	// snapshot of the cards held by the long-running watch. ready is false
+	// until the watch delivered its initial values (and again after it ends),
+	// then /api/cards falls back to list.
+	snapMu     sync.RWMutex
+	snap       map[string]CardEntry // keyed by cardStatsKey-like table\x00knight
+	snapTables map[string]bool
+	ready      bool
+
+	watchOpens atomic.Int64 // KV watchers opened (tests)
 }
 
 func newCardStore(nc *nats.Conn, js jetstream.JetStream, bucket string, tables func(ctx context.Context) []TableInfo) *cardStore {
@@ -150,6 +161,7 @@ func (c *cardStore) list(ctx context.Context, tables []TableInfo) ([]CardEntry, 
 	for _, t := range tables {
 		filters = append(filters, t.Name+".*")
 	}
+	c.watchOpens.Add(1)
 	w, err := kv.WatchFiltered(ctx, filters, jetstream.IgnoreDeletes())
 	if err != nil {
 		return nil, err
@@ -168,12 +180,7 @@ func (c *cardStore) list(ctx context.Context, tables []TableInfo) ([]CardEntry, 
 				for i := range out {
 					c.join(&out[i], stats)
 				}
-				sort.Slice(out, func(i, j int) bool {
-					if out[i].Table != out[j].Table {
-						return out[i].Table < out[j].Table
-					}
-					return out[i].Knight < out[j].Knight
-				})
+				sortCards(out)
 				return out, nil
 			}
 			table, knight, ok := splitCardKey(e.Key(), tables)
@@ -302,14 +309,82 @@ func cardWSEvent(op, table, knight string, payload interface{}) []byte {
 	return data
 }
 
+// applySnapshot records one card change in the snapshot.
+func (c *cardStore) applySnapshot(table, knight string, value []byte, deleted bool) {
+	c.snapMu.Lock()
+	defer c.snapMu.Unlock()
+	if c.snap == nil {
+		return
+	}
+	key := cardKey(table, knight)
+	if deleted {
+		delete(c.snap, key)
+		return
+	}
+	c.snap[key] = CardEntry{Table: table, Knight: knight, Card: json.RawMessage(append([]byte(nil), value...))}
+}
+
+func cardKey(table, knight string) string { return table + "\x00" + knight }
+
+// fromSnapshot returns the cards of the tables from the watch snapshot, joined
+// with live stats. ok=false when the snapshot is not ready or does not cover
+// every requested table.
+func (c *cardStore) fromSnapshot(ctx context.Context, tables []TableInfo) ([]CardEntry, bool) {
+	tables = cardTables(tables)
+	c.snapMu.RLock()
+	if !c.ready {
+		c.snapMu.RUnlock()
+		return nil, false
+	}
+	want := map[string]bool{}
+	for _, t := range tables {
+		if !c.snapTables[t.Name] {
+			c.snapMu.RUnlock()
+			return nil, false
+		}
+		want[t.Name] = true
+	}
+	out := []CardEntry{}
+	for _, e := range c.snap {
+		if want[e.Table] {
+			out = append(out, e)
+		}
+	}
+	c.snapMu.RUnlock()
+	if len(out) > 0 {
+		stats := c.liveStats(ctx)
+		for i := range out {
+			c.join(&out[i], stats)
+		}
+	}
+	sortCards(out)
+	return out, true
+}
+
+func sortCards(out []CardEntry) {
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Table != out[j].Table {
+			return out[i].Table < out[j].Table
+		}
+		return out[i].Knight < out[j].Knight
+	})
+}
+
 // handleUpdate broadcasts one KV change.
 func (c *cardStore) handleUpdate(ctx context.Context, e jetstream.KeyValueEntry, tables []TableInfo) {
 	table, knight, ok := splitCardKey(e.Key(), tables)
-	if !ok || !c.hasSubscribers() {
+	if !ok {
 		return
 	}
-	switch e.Operation() {
-	case jetstream.KeyValueDelete, jetstream.KeyValuePurge:
+	deleted := e.Operation() == jetstream.KeyValueDelete || e.Operation() == jetstream.KeyValuePurge
+	if deleted || json.Valid(e.Value()) {
+		c.applySnapshot(table, knight, e.Value(), deleted)
+	}
+	if !c.hasSubscribers() {
+		return
+	}
+	switch {
+	case deleted:
 		c.broadcast(cardWSEvent(chainOpDelete, table, knight, cardDeleted{Table: table, Knight: knight, Deleted: true}))
 	default:
 		if !json.Valid(e.Value()) {
@@ -347,7 +422,9 @@ func (c *cardStore) watchOnce(ctx context.Context) {
 	for _, t := range tables {
 		filters = append(filters, t.Name+".*")
 	}
-	w, err := kv.WatchFiltered(ctx, filters, jetstream.UpdatesOnly())
+	c.watchOpens.Add(1)
+	// No UpdatesOnly: the first pass delivers current values, which seed the snapshot.
+	w, err := kv.WatchFiltered(ctx, filters)
 	if err != nil {
 		if ctx.Err() == nil {
 			slog.Warn("Cards: KV watch failed", "bucket", c.bucket, "error", err)
@@ -355,6 +432,18 @@ func (c *cardStore) watchOnce(ctx context.Context) {
 		return
 	}
 	defer w.Stop()
+	c.snapMu.Lock()
+	c.snap, c.snapTables, c.ready = map[string]CardEntry{}, map[string]bool{}, false
+	for _, t := range tables {
+		c.snapTables[t.Name] = true
+	}
+	c.snapMu.Unlock()
+	defer func() {
+		c.snapMu.Lock()
+		c.snap, c.snapTables, c.ready = nil, nil, false
+		c.snapMu.Unlock()
+	}()
+	initial := true
 	// Re-check the table set now and then so a new RoundTable is picked up.
 	recheck := time.NewTicker(tableCacheTTL)
 	defer recheck.Stop()
@@ -370,9 +459,16 @@ func (c *cardStore) watchOnce(ctx context.Context) {
 			if !open {
 				return
 			}
-			if e != nil {
-				c.handleUpdate(ctx, e, tables)
+			if e == nil { // initial values delivered
+				if initial {
+					initial = false
+					c.snapMu.Lock()
+					c.ready = true
+					c.snapMu.Unlock()
+				}
+				continue
 			}
+			c.handleUpdate(ctx, e, tables)
 		}
 	}
 }
@@ -412,7 +508,11 @@ func cardsHandler(store *cardStore) http.HandlerFunc {
 			}
 			tables = []TableInfo{t}
 		}
-		cards, err := store.list(ctx, tables)
+		cards, ok := store.fromSnapshot(ctx, tables)
+		var err error
+		if !ok {
+			cards, err = store.list(ctx, tables)
+		}
 		if err != nil {
 			slog.Error("Cards: list failed", "bucket", store.bucket, "error", err)
 			jsonError(w, "Cards unavailable", http.StatusInternalServerError)

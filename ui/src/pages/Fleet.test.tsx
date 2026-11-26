@@ -90,3 +90,22 @@ describe('Fleet isolation filter (#269)', () => {
     expect(screen.queryByRole('button', { name: /not isolated/i })).not.toBeInTheDocument()
   })
 })
+
+describe('Fleet card of the knight\'s own table', () => {
+  it('uses the card of the knight\'s table when the name exists in two tables', async () => {
+    const user = userEvent.setup()
+    const opsCard = {
+      ...galahadCard,
+      table: 'work',
+      card: { ...galahadCard.card, skills: [{ id: 'deploy', name: 'deploy', tags: ['ops'] }] },
+    }
+    knights = [{ ...k('galahad', 'security'), table: 'work' }]
+    cards = new Map([
+      [cardKey('personal', 'galahad'), galahadCard], // first in the map, other table
+      [cardKey('work', 'galahad'), opsCard],
+    ])
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'ops' }))
+    expect(names()).toEqual(['galahad'])
+  })
+})
