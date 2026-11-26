@@ -8,7 +8,7 @@ import { PodsPanel } from './PodsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet'
 import { IsolationBadge } from './IsolationBadge'
-import { optOutSummary } from '../lib/isolation'
+import { egressHostLabels, optOutSummary } from '../lib/isolation'
 import { sanitizeText } from '../lib/untrusted'
 import { PodLogsViewer } from './PodLogsViewer'
 import { cardLoad, type CardEntry } from '../lib/cards'
@@ -161,8 +161,8 @@ export function KnightIsolationSection({ isolation: iso }: { isolation: KnightIs
         {egress && (
           <>
             <CardRow label="Allowed hosts">
-              {egress.allowedHosts.length > 0
-                ? <span className="flex flex-wrap justify-end gap-1">{egress.allowedHosts.map((h) => <Chip key={h}>{sanitizeText(h)}</Chip>)}</span>
+              {egressHostLabels(egress).length > 0
+                ? <span className="flex flex-wrap justify-end gap-1">{egressHostLabels(egress).map((h) => <Chip key={h}>{sanitizeText(h)}</Chip>)}</span>
                 : <span className="text-xs text-gray-500">none (DNS, NATS and the baseline only)</span>}
             </CardRow>
             <CardRow label="Allowed ports">

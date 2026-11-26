@@ -48,11 +48,21 @@ type EgressServiceInfo struct {
 	Ports     []int32 `json:"ports"`
 }
 
+// EgressHostInfo is an allowed host, optionally restricted to its own ports
+// (an object entry of spec.egress.allowedHosts; roundtable#527).
+type EgressHostInfo struct {
+	Host  string  `json:"host"`
+	Ports []int32 `json:"ports,omitempty"`
+}
+
 // KnightEgressInfo is the knight's effective egress allowlist.
 type KnightEgressInfo struct {
-	AllowedHosts    []string            `json:"allowedHosts"`
-	AllowedPorts    []int32             `json:"allowedPorts"`
-	AllowedServices []EgressServiceInfo `json:"allowedServices"`
+	// AllowedHosts lists every allowed host name, including object entries.
+	AllowedHosts []string `json:"allowedHosts"`
+	// AllowedHostEntries lists the same hosts with their per-host ports.
+	AllowedHostEntries []EgressHostInfo    `json:"allowedHostEntries"`
+	AllowedPorts       []int32             `json:"allowedPorts"`
+	AllowedServices    []EgressServiceInfo `json:"allowedServices"`
 	// Source is "knight" (spec.egress) or "table" (the RoundTable's
 	// spec.defaults.egress).
 	Source string `json:"source"`
@@ -159,14 +169,24 @@ func int32List(items []interface{}) []int32 {
 // parseEgress converts a KnightEgress object into the DTO.
 func parseEgress(m map[string]interface{}, source string) *KnightEgressInfo {
 	e := &KnightEgressInfo{
-		AllowedHosts:    []string{},
-		AllowedPorts:    int32List(getSlice(m, "allowedPorts")),
-		AllowedServices: []EgressServiceInfo{},
-		Source:          source,
+		AllowedHosts:       []string{},
+		AllowedHostEntries: []EgressHostInfo{},
+		AllowedPorts:       int32List(getSlice(m, "allowedPorts")),
+		AllowedServices:    []EgressServiceInfo{},
+		Source:             source,
 	}
 	for _, h := range getSlice(m, "allowedHosts") {
-		if s, ok := h.(string); ok {
-			e.AllowedHosts = append(e.AllowedHosts, s)
+		switch v := h.(type) {
+		case string:
+			e.AllowedHosts = append(e.AllowedHosts, v)
+			e.AllowedHostEntries = append(e.AllowedHostEntries, EgressHostInfo{Host: v})
+		case map[string]interface{}:
+			host := getStr(v, "host")
+			if host == "" {
+				continue
+			}
+			e.AllowedHosts = append(e.AllowedHosts, host)
+			e.AllowedHostEntries = append(e.AllowedHostEntries, EgressHostInfo{Host: host, Ports: int32List(getSlice(v, "ports"))})
 		}
 	}
 	for _, s := range getSlice(m, "allowedServices") {

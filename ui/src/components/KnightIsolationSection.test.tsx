@@ -24,6 +24,16 @@ describe('KnightIsolationSection', () => {
     expect(screen.queryByTestId('hostname-warning')).not.toBeInTheDocument()
   })
 
+  it('shows per-host ports and the empty-allowlist hint', () => {
+    const egress = { ...isolated.egress!, allowedHosts: ['api.github.com', 'registry.example'], allowedHostEntries: [{ host: 'api.github.com' }, { host: 'registry.example', ports: [5000] }] }
+    const { unmount } = render(<KnightIsolationSection isolation={{ ...isolated, egress }} />)
+    expect(screen.getByText('api.github.com')).toBeInTheDocument()
+    expect(screen.getByText('registry.example:5000')).toBeInTheDocument()
+    unmount()
+    render(<KnightIsolationSection isolation={{ ...isolated, egress: { ...egress, allowedHosts: [], allowedHostEntries: [] } }} />)
+    expect(screen.getByText('none (DNS, NATS and the baseline only)')).toBeInTheDocument()
+  })
+
   it('shows an opt-out with its reason and that any host is reachable', () => {
     render(<KnightIsolationSection isolation={optedOut} />)
     expect(screen.getByTestId('isolation-badge')).toHaveTextContent('opted out')

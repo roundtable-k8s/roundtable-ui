@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isNotIsolated, isolationTooltip, optOutSummary } from './isolation'
+import { egressHostLabels, isNotIsolated, isolationTooltip, optOutSummary } from './isolation'
 import { isolated, notEnforced, optedOut } from '../test/fixtures/isolation'
 
 describe('isolation helpers', () => {
@@ -22,5 +22,14 @@ describe('isolation helpers', () => {
   it('tooltip gives the condition reason and message otherwise', () => {
     expect(isolationTooltip(notEnforced)).toBe('FQDNPolicyUnavailable: cilium.io/v2 CiliumNetworkPolicy is not served')
     expect(isolationTooltip(isolated)).toContain('Isolated: RuntimeClass "gvisor" applies')
+  })
+
+  it('egressHostLabels adds per-host ports and falls back to allowedHosts', () => {
+    const base = { allowedHosts: ['a.example', 'registry.example'], allowedPorts: [], allowedServices: [], source: 'knight' }
+    expect(egressHostLabels({
+      ...base,
+      allowedHostEntries: [{ host: 'a.example' }, { host: 'registry.example', ports: [5000, 5001] }],
+    })).toEqual(['a.example', 'registry.example:5000,5001'])
+    expect(egressHostLabels(base)).toEqual(['a.example', 'registry.example'])
   })
 })

@@ -1,4 +1,4 @@
-import type { Knight, IsolationState, KnightIsolation } from '../hooks/useFleet'
+import type { Knight, IsolationState, KnightIsolation, KnightEgress } from '../hooks/useFleet'
 import { sanitizeText } from './untrusted'
 
 export const ISOLATION_LABEL: Record<IsolationState, string> = {
@@ -36,4 +36,11 @@ export function isolationTooltip(iso: KnightIsolation): string {
   if (iso.state === 'unknown') return 'The operator has not reported an Isolated condition for this knight'
   const msg = sanitizeText(iso.message)
   return iso.reason ? `${iso.reason}${msg ? `: ${msg}` : ''}` : msg
+}
+
+/** "host:5000,5001" for hosts with their own ports, the plain host otherwise. */
+export function egressHostLabels(egress: KnightEgress): string[] {
+  const entries = egress.allowedHostEntries
+  if (!entries) return egress.allowedHosts
+  return entries.map((e) => (e.ports && e.ports.length > 0 ? `${e.host}:${e.ports.join(',')}` : e.host))
 }
