@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { TasksPage } from './Tasks'
@@ -36,6 +36,17 @@ beforeEach(() => {
   apiGet.mockImplementation((url: string) =>
     Promise.resolve(url === '/api/tasks' ? { results: [], tables } : { taskId: 'invoke-rt-ui-1', status: 'pending' }))
   apiPost.mockResolvedValue({ taskId: 'invoke-rt-ui-1', runId: 'r1', status: 'pending', roundTable: 'dev' })
+})
+
+function setHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+  // drop the own-property override so jsdom's prototype getter applies again
+  delete (document as unknown as { hidden?: boolean }).hidden
 })
 
 describe('TasksPage', () => {
@@ -89,5 +100,22 @@ describe('TasksPage', () => {
     await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('succeeded'), { timeout: 5000 })
     expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1', expect.anything())
     expect(screen.getByTestId('dispatch-output').textContent).toBe('page fixed')
+  })
+
+  it('pauses polling a dispatched task in a hidden tab and resumes when visible', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
+    expect(await screen.findByText('invoke-rt-ui-1')).toBeTruthy()
+    const polls = () => apiGet.mock.calls.filter((c) => String(c[0]).startsWith('/api/tasks/dispatch/')).length
+
+    await act(async () => { setHidden(true) })
+    const before = polls()
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(polls()).toBe(before)
+
+    await act(async () => { setHidden(false) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_000) })
+    expect(polls()).toBeGreaterThan(before)
   })
 })
