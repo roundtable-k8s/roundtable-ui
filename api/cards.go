@@ -377,9 +377,10 @@ func (c *cardStore) handleUpdate(ctx context.Context, e jetstream.KeyValueEntry,
 		return
 	}
 	deleted := e.Operation() == jetstream.KeyValueDelete || e.Operation() == jetstream.KeyValuePurge
-	if deleted || json.Valid(e.Value()) {
-		c.applySnapshot(table, knight, e.Value(), deleted)
-	}
+	valid := !deleted && json.Valid(e.Value())
+	// An invalid value is treated like a delete: never keep serving the
+	// previous card once its latest KV value is unusable.
+	c.applySnapshot(table, knight, e.Value(), deleted || !valid)
 	if !c.hasSubscribers() {
 		return
 	}
@@ -387,7 +388,7 @@ func (c *cardStore) handleUpdate(ctx context.Context, e jetstream.KeyValueEntry,
 	case deleted:
 		c.broadcast(cardWSEvent(chainOpDelete, table, knight, cardDeleted{Table: table, Knight: knight, Deleted: true}))
 	default:
-		if !json.Valid(e.Value()) {
+		if !valid {
 			return
 		}
 		entry := CardEntry{Table: table, Knight: knight, Card: json.RawMessage(e.Value())}
@@ -423,7 +424,9 @@ func (c *cardStore) watchOnce(ctx context.Context) {
 		filters = append(filters, t.Name+".*")
 	}
 	c.watchOpens.Add(1)
-	// No UpdatesOnly: the first pass delivers current values, which seed the snapshot.
+	// No UpdatesOnly: the first pass delivers current values, which seed the
+	// snapshot. Side effect: every watch start (re)broadcasts every current
+	// card to WebSocket subscribers as an upsert.
 	w, err := kv.WatchFiltered(ctx, filters)
 	if err != nil {
 		if ctx.Err() == nil {

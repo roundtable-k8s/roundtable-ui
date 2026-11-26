@@ -410,7 +410,7 @@ func TestRunningAPIRestartRebuildsRegistry(t *testing.T) {
 	// After the restart: an empty registry, one event seen live already.
 	after, _ := newTestRegistry(10)
 	after.handleActivity(activity(t, "task.started", "t-live", 7, map[string]any{"pod": "galahad-abc-2", "model": "live-model"}), "Galahad")
-	n := bootstrapRunning(ctx, after, ns, []string{"fleet-a"}, req, time.Second)
+	n := bootstrapRunning(ctx, after, ns, []string{"fleet-a"}, "fleet-a", req, time.Second)
 	if n != 2 {
 		t.Fatalf("bootstrap added %d tasks, want 2 (t-live was already known)", n)
 	}
