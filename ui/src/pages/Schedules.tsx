@@ -187,7 +187,7 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
 function runNowMessage(name: string, r: ScheduleRunNow): string {
   if (r.state === 'started') return `Started ${name}${r.run ? `: ${r.run}` : ''}`
   if (r.state === 'pending') return `Run of ${name} requested; the operator has not started it yet${r.run ? ` (${r.run})` : ''}`
-  return `${name} was skipped${r.reason ? `: ${r.reason}` : ''}`
+  return `${name} was skipped${r.skipReason ? `: ${r.skipReason}` : ''}`
 }
 
 function ConfirmDialog({ pending, task, working, onCancel, onConfirm }: {

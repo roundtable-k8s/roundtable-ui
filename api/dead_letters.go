@@ -124,22 +124,7 @@ func (g *gatewayClient) relay(w http.ResponseWriter, r *http.Request, method, pa
 		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
 		return
 	}
-	if !json.Valid(b) {
-		// Not JSON (proxy error page etc.): wrap it so clients parse one shape.
-		msg := strings.TrimSpace(string(b))
-		if len(msg) > 300 {
-			msg = msg[:300]
-		}
-		if msg == "" {
-			msg = http.StatusText(status)
-		}
-		jsonError(w, msg, status)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(status)
-	_, _ = w.Write(b)
+	writeGatewayError(w, status, b)
 }
 
 // deadLettersHandler proxies GET /v1/dead-letters (knight, reason, state, limit).

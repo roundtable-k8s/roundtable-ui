@@ -8,7 +8,7 @@ import { sanitizeText } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
 import {
-  RUN_HISTORY_LIMIT, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
+  RUN_HISTORY_LIMIT, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass, phaseToOutcome,
   runResultText, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -107,7 +107,7 @@ export function ScheduleActions({ s, onChanged, onDeleted }: {
     const r = await apiPost<ScheduleRunNow>(scheduleApi(s.namespace, s.name, 'run'), {})
     if (r.state === 'started') return r.run ? `Started run ${r.run}` : 'Run started'
     if (r.state === 'pending') return 'Run requested; the operator has not started it yet'
-    return `Run ${r.state}${r.reason ? `: ${r.reason}` : ''}`
+    return `Run ${r.state}${r.skipReason ? `: ${r.skipReason}` : ''}`
   })
   const setSuspended = (suspend: boolean) => act(async () => {
     const r = await apiPost<ScheduleSuspendState>(scheduleApi(s.namespace, s.name, suspend ? 'suspend' : 'resume'), {})
@@ -271,7 +271,7 @@ export function RunResultViewer({ namespace, name, run, onClose }: {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 font-semibold text-white">
           Result of <code className="text-roundtable-gold">{run}</code>
-          {result && <OutcomeBadge outcome={result.phase === 'Succeeded' ? 'succeeded' : result.phase === 'Failed' ? 'failed' : result.phase} />}
+          {result && <OutcomeBadge outcome={phaseToOutcome(result.phase)} />}
         </h3>
         <div className="flex items-center gap-2">
           <div role="group" aria-label="result format" className="inline-flex overflow-hidden rounded-lg border border-roundtable-steel text-xs">

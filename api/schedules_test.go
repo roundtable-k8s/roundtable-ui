@@ -63,7 +63,7 @@ func TestSchedulesPassGatewayErrorsThrough(t *testing.T) {
 			io.WriteString(w, conflict)
 		case strings.HasSuffix(c.path, "/run"):
 			w.WriteHeader(http.StatusConflict)
-			io.WriteString(w, `{"state":"skipped","reason":"concurrency Forbid: run x is active"}`)
+			io.WriteString(w, `{"state":"skipped","skipReason":"concurrency Forbid: run x is active"}`)
 		case strings.HasSuffix(c.path, "/manifest"):
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusNotFound)

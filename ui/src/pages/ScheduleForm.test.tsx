@@ -167,6 +167,32 @@ describe('ScheduleFormPage: edit', () => {
     }))
   })
 
+  it('keeps hidden fields when the kind is switched to chain and back', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.endsWith('/manifest?format=json')) {
+        const m = JSON.parse(knightJson)
+        m.spec.input = undefined
+        m.spec.concurrency = { ...m.spec.concurrency, maxActive: 3 }
+        m.spec.dedupeKey = 'brief-{{date}}'
+        return Promise.resolve(m)
+      }
+      if (url === '/api/schedules/roundtable/morning-brief') return Promise.resolve({ name: 'morning-brief', namespace: 'roundtable', managedBy: 'api' })
+      if (url.startsWith('/api/chains')) return Promise.resolve([{ name: 'daily-digest' }])
+      return Promise.reject(new Error(`unexpected ${url}`))
+    })
+    mockPut.mockResolvedValue({})
+    renderAt('/schedules/roundtable/morning-brief/edit')
+    await waitFor(() => expect(screen.getByLabelText('Knight')).toHaveValue('galahad'))
+    fireEvent.click(screen.getByRole('radio', { name: /Chain/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /Task to a knight/ }))
+    await waitFor(() => expect(screen.getByLabelText('Knight')).toHaveValue('galahad'))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
+    await screen.findByText('schedules list')
+    const spec = mockPut.mock.calls[0][1] as { spec: Record<string, any> }
+    expect(spec.spec.dedupeKey).toBe('brief-{{date}}')
+    expect(spec.spec.concurrency.maxActive).toBe(3)
+  })
+
   it('offers no form for a Git-managed schedule', async () => {
     serve('git')
     renderAt('/schedules/roundtable/morning-brief/edit')

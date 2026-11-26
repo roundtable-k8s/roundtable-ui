@@ -138,6 +138,15 @@ describe('ScheduleDetailPage', () => {
     expect(within(actions).getByRole('link', { name: /Edit/ })).toHaveAttribute('href', '/schedules/roundtable/morning-digest/edit')
   })
 
+  it('shows the skip reason of a run-now the gateway answers with 409', async () => {
+    mockApi(sched())
+    mockApiPost.mockRejectedValue(Object.assign(new Error('conflict: concurrency Forbid: run digest-1 is active'), { status: 409 }))
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /Run now/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }))
+    expect(await screen.findByText(/concurrency Forbid: run digest-1 is active/)).toBeInTheDocument()
+  })
+
   it('confirms Run now with the task before firing', async () => {
     mockApi(sched())
     mockApiPost.mockResolvedValue({ schedule: 'morning-digest', namespace: 'roundtable', run: 'digest-3', state: 'started' })
