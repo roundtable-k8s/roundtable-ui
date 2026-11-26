@@ -7,11 +7,14 @@
 
 export class ApiError extends Error {
   readonly status: number
+  /** The request field a 400 names, e.g. the gateway's "spec.source.schedule.cron". */
+  readonly field?: string
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, field?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.field = field
   }
 }
 
@@ -19,12 +22,14 @@ async function toApiError(res: Response): Promise<ApiError> {
   // The Go API mixes JSON {"error": ...} bodies with plain-text http.Error
   // messages (e.g. "TTL must be 60-604800 seconds") — surface both.
   let message = `${res.status} ${res.statusText}`
+  let field: string | undefined
   try {
     const body = (await res.text()).trim()
     if (body) {
       try {
         const parsed = JSON.parse(body)
         message = typeof parsed?.error === 'string' ? parsed.error : body.slice(0, 300)
+        if (typeof parsed?.field === 'string' && parsed.field) field = parsed.field
       } catch {
         message = body.slice(0, 300)
       }
@@ -32,7 +37,7 @@ async function toApiError(res: Response): Promise<ApiError> {
   } catch {
     // unreadable body — keep the status line
   }
-  return new ApiError(res.status, message)
+  return new ApiError(res.status, message, field)
 }
 
 /** Low-level fetch wrapper: sets JSON Content-Type when a body is present,
@@ -62,6 +67,13 @@ export async function apiGetText(url: string): Promise<string> {
 /** POST a JSON body and parse the JSON response. Throws ApiError on non-2xx. */
 export async function apiPost<T>(url: string, body: unknown): Promise<T> {
   const res = await apiFetch(url, { method: 'POST', body: JSON.stringify(body) })
+  if (!res.ok) throw await toApiError(res)
+  return res.json() as Promise<T>
+}
+
+/** PUT a JSON body and parse the JSON response. Throws ApiError on non-2xx. */
+export async function apiPut<T>(url: string, body: unknown): Promise<T> {
+  const res = await apiFetch(url, { method: 'PUT', body: JSON.stringify(body) })
   if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<T>
 }

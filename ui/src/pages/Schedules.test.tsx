@@ -173,6 +173,21 @@ describe('SchedulesPage', () => {
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(1)
   })
 
+  it('has no Edit for a Git-managed schedule, and an Edit link to the form otherwise', async () => {
+    serve()
+    renderPage()
+    const digest = await rowFor('morning-digest')
+    expect(within(digest).queryByRole('link', { name: /Edit/ })).toBeNull()
+    expect(within(await rowFor('weekly-report')).getByRole('link', { name: 'Edit weekly-report' }))
+      .toHaveAttribute('href', '/schedules/roundtable/weekly-report/edit')
+  })
+
+  it('links to the new schedule form', async () => {
+    serve([])
+    renderPage()
+    expect(await screen.findByRole('link', { name: /New schedule/ })).toHaveAttribute('href', '/schedules/new')
+  })
+
   it('links to the Triggers page', async () => {
     serve([])
     renderPage()

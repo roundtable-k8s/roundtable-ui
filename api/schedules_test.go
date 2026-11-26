@@ -183,3 +183,69 @@ func TestScheduleRunIsRateLimited(t *testing.T) {
 		t.Errorf("suspend: got %d", w.Code)
 	}
 }
+
+func TestScheduleManifestAsJSON(t *testing.T) {
+	manifest := "apiVersion: ai.roundtable.io/v1alpha1\nkind: Trigger\nmetadata:\n  labels:\n    app.kubernetes.io/managed-by: roundtable-gateway\n  name: morning-digest\n  namespace: roundtable\nspec:\n  source:\n    schedule:\n      cron: 0 7 * * 1-5\n  target:\n    knight:\n      name: galahad\n      task: |-\n        line one\n        line two\n      timeoutSeconds: 3600\n"
+	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/yaml")
+		io.WriteString(w, manifest)
+	}}
+	srv := f.server(t)
+	r := scheduleRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+
+	w := doReq(r, "GET", "/api/schedules/roundtable/morning-digest/manifest?format=json", "")
+	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("got %d %s %q", w.Code, w.Header().Get("Content-Type"), w.Body)
+	}
+	var got struct {
+		Metadata struct {
+			Name   string            `json:"name"`
+			Labels map[string]string `json:"labels"`
+		} `json:"metadata"`
+		Spec struct {
+			Source struct {
+				Schedule struct {
+					Cron string `json:"cron"`
+				} `json:"schedule"`
+			} `json:"source"`
+			Target struct {
+				Knight struct {
+					Task           string `json:"task"`
+					TimeoutSeconds int    `json:"timeoutSeconds"`
+				} `json:"knight"`
+			} `json:"target"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Metadata.Name != "morning-digest" || got.Metadata.Labels["app.kubernetes.io/managed-by"] != "roundtable-gateway" ||
+		got.Spec.Source.Schedule.Cron != "0 7 * * 1-5" || got.Spec.Target.Knight.Task != "line one\nline two" || got.Spec.Target.Knight.TimeoutSeconds != 3600 {
+		t.Errorf("manifest as JSON: %+v", got)
+	}
+	// The gateway is asked for its YAML manifest; the query is not forwarded.
+	if f.calls[0].path != "/v1/schedules/roundtable/morning-digest/manifest" || f.calls[0].query != "" {
+		t.Errorf("gateway call %+v", f.calls[0])
+	}
+
+	w = doReq(r, "GET", "/api/schedules/roundtable/morning-digest/manifest?format=yaml", "")
+	if w.Code != http.StatusOK || w.Body.String() != manifest {
+		t.Errorf("format=yaml: got %d %q", w.Code, w.Body)
+	}
+	w = doReq(r, "GET", "/api/schedules/roundtable/morning-digest/manifest?format=xml", "")
+	if w.Code != http.StatusBadRequest || len(f.calls) != 2 {
+		t.Errorf("format=xml: got %d, %d gateway calls", w.Code, len(f.calls))
+	}
+}
+
+func TestScheduleManifestInvalidYAML(t *testing.T) {
+	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+		io.WriteString(w, "a: [unclosed\n")
+	}}
+	srv := f.server(t)
+	r := scheduleRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	w := doReq(r, "GET", "/api/schedules/roundtable/morning-digest/manifest?format=json", "")
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("got %d %s", w.Code, w.Body)
+	}
+}

@@ -101,7 +101,7 @@ func setupTestRouter() *mux.Router {
 	api.HandleFunc("/roundtables", roundTablesHandler(namespace)).Methods("GET")
 	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
 
-	api.HandleFunc("/config", configHandler(fleetPrefix, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
+	api.HandleFunc("/config", configHandler(fleetPrefix, namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
 
 	return r
 }
@@ -2036,7 +2036,7 @@ func TestConfigTraceURLTemplate(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			configHandler("fleet-a", traceTemplate(c.in))(w, httptest.NewRequest("GET", "/api/config", nil))
+			configHandler("fleet-a", "ns-a", traceTemplate(c.in))(w, httptest.NewRequest("GET", "/api/config", nil))
 			var resp map[string]string
 			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 				t.Fatal(err)

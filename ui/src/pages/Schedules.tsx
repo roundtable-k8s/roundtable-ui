@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarClock, ExternalLink, GitBranch, Link2, Shield, Target, Play, Pause, PlayCircle, Trash2, Zap } from 'lucide-react'
+import { CalendarClock, ExternalLink, GitBranch, Link2, Pencil, Plus, Shield, Target, Play, Pause, PlayCircle, Trash2, Zap } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
@@ -10,7 +10,7 @@ import { formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
-  firstLine, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL,
+  firstLine, scheduleEditPath, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL,
   type Schedule, type ScheduleList, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -19,6 +19,7 @@ const POLL_MS = 10000
 const btn = 'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50'
 const btnGold = `${btn} border-roundtable-gold/30 bg-roundtable-gold/10 text-roundtable-gold hover:bg-roundtable-gold/20`
 const btnGray = `${btn} border-roundtable-steel bg-roundtable-navy text-gray-300 hover:text-white`
+const btnLink = `${btnGray} no-underline`
 const btnRed = `${btn} border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20`
 
 function KindIcon({ kind }: { kind: string }) {
@@ -163,6 +164,11 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
                           <Pause className="w-3 h-3" aria-hidden /> Suspend
                         </button>}
                     {s.managedBy !== 'git' && (
+                      <Link to={scheduleEditPath(s)} className={btnLink} aria-label={`Edit ${s.name}`}>
+                        <Pencil className="w-3 h-3" aria-hidden /> Edit
+                      </Link>
+                    )}
+                    {s.managedBy !== 'git' && (
                       <button className={btnRed} disabled={busy === key} onClick={() => onDelete(s)} aria-label={`Delete ${s.name}`}>
                         <Trash2 className="w-3 h-3" aria-hidden /> Delete
                       </button>
@@ -284,6 +290,9 @@ export function SchedulesPage() {
           <Zap className="w-4 h-4" aria-hidden /> All triggers
         </Link>
         <RefreshButton onClick={refresh} loading={loading} />
+        <Link to="/schedules/new" className="inline-flex items-center gap-1.5 rounded-lg border border-roundtable-gold/30 bg-roundtable-gold/10 px-3 py-1.5 text-sm font-medium text-roundtable-gold hover:bg-roundtable-gold/20">
+          <Plus className="w-4 h-4" aria-hidden /> New schedule
+        </Link>
       </PageHeader>
 
       {notice && (
