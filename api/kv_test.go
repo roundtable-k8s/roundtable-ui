@@ -102,18 +102,16 @@ func TestKVHandlersMissingBucketNotCreated(t *testing.T) {
 	}
 }
 
-// TestKVRoutesAreGone asserts that no API route matches the removed /api/kv
-// paths in the router setupTestRouter builds. Production answers unmatched
-// paths with the SPA fallback (200 index.html, no /api guard), so this test
-// checks route matching, not the HTTP response.
+// TestKVRoutesAreGone asserts that the removed /api/kv paths answer 404 or 405
+// from the router main() builds, not the SPA fallback.
 func TestKVRoutesAreGone(t *testing.T) {
 	router := setupTestRouter()
 	for _, path := range []string{"/api/kv/anything", "/api/kv/buckets", "/api/kv/buckets/mission-results"} {
 		for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPost} {
-			req := httptest.NewRequest(method, path, nil)
-			var m mux.RouteMatch
-			if router.Match(req, &m) {
-				t.Errorf("%s %s matched route %v; the /api/kv routes were removed", method, path, m.Route.GetName())
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("%s %s: status %d, want 404; the /api/kv routes were removed", method, path, rec.Code)
 			}
 		}
 	}

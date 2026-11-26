@@ -251,12 +251,158 @@ func (rl *rateLimiterT) allow() bool {
 
 func (rl *rateLimiterT) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Probes and scrapes must never be throttled by page traffic
+		if r.URL.Path == "/api/health" || r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if !rl.allow() {
 			jsonError(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// routerDeps carries what the route table needs, so main() and the tests
+// build the same router.
+type routerDeps struct {
+	namespace, fleetPrefix, vaultPath string
+	briefingDirs                      []string
+	running                           *runningRegistry
+	tables                            *tableSource
+	activity                          *activityStore
+	chains                            *chainWatcher
+	cards                             *cardStore
+	tc                                *tableCache
+	sampler                           *queueSampler
+	gateway                           *gatewayClient
+	dispatchLimit                     *dispatchLimiter
+}
+
+// buildRouter registers every route and the JSON 404/405 answers for /api.
+// Middleware is installed by the caller. The SPA fallback serves every path
+// outside /api, so unknown /api paths reach mux's NotFound and
+// MethodNotAllowed handlers instead of index.html.
+func buildRouter(d routerDeps) *mux.Router {
+	r := mux.NewRouter()
+	// gorilla/mux 1.8 loses its own 405 detection inside subrouters (a later
+	// route's inherited /api prefix match clears the mismatch), so the
+	// not-found handler probes the other methods itself.
+	notFound := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var allow []string
+		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
+			probe := req.Clone(req.Context())
+			probe.Method = m
+			var match mux.RouteMatch
+			if r.Match(probe, &match) && match.Route != nil {
+				allow = append(allow, m)
+			}
+		}
+		if len(allow) > 0 {
+			w.Header().Set("Allow", strings.Join(allow, ", "))
+			jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		jsonError(w, "Not found", http.StatusNotFound)
+	})
+	r.NotFoundHandler = notFound
+	r.MethodNotAllowedHandler = notFound
+
+	// Prometheus metrics — root level so it stays outside /api auth
+	r.Handle("/metrics", promhttp.Handler()).Methods("GET")
+
+	api := r.PathPrefix("/api").Subrouter()
+
+	// Auth endpoint (handled in middleware, but register route for documentation)
+	api.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		// Handled by authMiddleware
+	}).Methods("POST")
+
+	// Fleet endpoints
+	api.HandleFunc("/fleet", fleetHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}", knightHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/logs", knightLogsHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/pods", knightPodsHandler(d.namespace, d.running)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(d.fleetPrefix)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/queues", queuesHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/queue/history", knightQueueHistoryHandler(d.sampler)).Methods("GET")
+	api.HandleFunc("/queues/history", queuesHistoryHandler(d.sampler)).Methods("GET")
+
+	// Task endpoints
+	api.HandleFunc("/tasks", taskHistoryHandler(d.tables)).Methods("GET")
+
+	// Dispatch and run-now go through the invoke gateway, not NATS (#247)
+	api.Handle("/tasks/dispatch", d.dispatchLimit.wrap(taskDispatchHandler(d.gateway))).Methods("POST")
+	api.HandleFunc("/tasks/dispatch/{taskId}", taskStatusHandler(d.gateway)).Methods("GET")
+	api.Handle("/chains/{name}/run", d.dispatchLimit.wrap(chainRunHandler(d.gateway))).Methods("POST")
+	api.HandleFunc("/chains/runs/{namespace}/{run}", chainRunStatusHandler(d.gateway)).Methods("GET")
+	api.Handle("/chains/runs/{namespace}/{run}/cancel", d.dispatchLimit.wrap(chainRunCancelHandler(d.gateway))).Methods("POST")
+
+	// Chat with a knight through the gateway: same auth and rate limit as dispatch
+	api.Handle("/chat/{knight}", d.dispatchLimit.wrap(chatSendHandler(d.gateway))).Methods("POST")
+	api.HandleFunc("/chat/knights", chatKnightsHandler(d.gateway)).Methods("GET")
+	api.HandleFunc("/chat/tasks/{taskId}", taskStatusHandler(d.gateway)).Methods("GET")
+	api.HandleFunc("/chat/tasks/{taskId}/events", chatEventsHandler(d.gateway)).Methods("GET")
+
+	// Dead letters: failed and lost tasks, retried through the gateway
+	api.HandleFunc("/dead-letters", deadLettersHandler(d.gateway)).Methods("GET")
+	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(d.gateway)).Methods("GET")
+	api.HandleFunc("/dead-letters/{taskId}/retry", deadLetterRetryHandler(d.gateway)).Methods("POST")
+
+	// Schedules: every gateway schedules route; run shares the dispatch rate limit (#300)
+	scheduleRoutes(api, d.gateway, d.dispatchLimit.wrap)
+
+	// Chain endpoints
+	api.HandleFunc("/chains", chainsHandler(d.namespace, d.running)).Methods("GET")
+	api.HandleFunc("/chain-groups", chainGroupsHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/chains/{name}", chainDetailHandler(d.namespace, d.running)).Methods("GET")
+	api.HandleFunc("/triggers", triggersHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/triggers/{namespace}/{name}", triggerDetailHandler(d.namespace)).Methods("GET")
+
+	// Mission endpoints
+	api.HandleFunc("/missions", missionsHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/missions/{name}", missionDetailHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/missions", missionCreateHandler(d.namespace)).Methods("POST")
+	api.HandleFunc("/missions/{name}", missionDeleteHandler(d.namespace)).Methods("DELETE")
+
+	// KV-backed result endpoints (lookup only, never create buckets)
+	api.HandleFunc("/missions/{name}/results", missionResultsHandler()).Methods("GET")
+	api.HandleFunc("/chains/{name}/steps/{step}/output", chainStepOutputHandler()).Methods("GET")
+
+	// RoundTable endpoints
+	api.HandleFunc("/roundtables", roundTablesHandler(d.namespace)).Methods("GET")
+	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(d.namespace)).Methods("GET")
+
+	// Briefing endpoints
+	api.HandleFunc("/briefings", briefingListHandler(d.vaultPath, d.briefingDirs)).Methods("GET")
+	api.HandleFunc("/briefings/{date}", briefingHandler(d.vaultPath, d.briefingDirs)).Methods("GET")
+
+	// Agent cards with live state and load (#251)
+	api.HandleFunc("/cards", cardsHandler(d.cards)).Methods("GET")
+
+	// In-flight tasks across all knight pods (#199)
+	api.HandleFunc("/running", runningHandler(d.running, d.namespace)).Methods("GET")
+
+	// WebSocket for real-time NATS events
+	api.HandleFunc("/ws", wsHandler(d.tables, d.running, d.activity, d.chains, d.cards, d.tc))
+
+	// Config endpoint to expose fleet prefix to frontend (#60) and the
+	// namespace the dashboard reads (the default for new schedules, #302)
+	api.HandleFunc("/config", configHandler(d.fleetPrefix, d.namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
+
+	// Health
+	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}).Methods("GET")
+
+	// Serve static UI files with SPA fallback for everything outside /api
+	r.MatcherFunc(func(req *http.Request, _ *mux.RouteMatch) bool {
+		return req.URL.Path != "/api" && !strings.HasPrefix(req.URL.Path, "/api/")
+	}).HandlerFunc(spaHandler("./static"))
+	return r
 }
 
 func main() {
@@ -386,106 +532,20 @@ func main() {
 	rateLimiter := newRateLimiter(100, time.Second) // 100 req/s
 
 	// Router
-	r := mux.NewRouter()
+	d := routerDeps{
+		namespace: namespace, fleetPrefix: fleetPrefix,
+		vaultPath: vaultPath, briefingDirs: briefingDirs,
+		running: running, tables: tables, activity: activity, chains: chains,
+		cards: cards, tc: tc, sampler: sampler,
+		gateway:       newGatewayClientFromEnv(),
+		dispatchLimit: newDispatchLimiter(),
+	}
+	r := buildRouter(d)
 	r.Use(tracingMiddleware)
 	r.Use(securityHeaders)
 	r.Use(metricsMiddleware)
 	r.Use(authMiddleware)
 	r.Use(rateLimiter.middleware)
-
-	// Prometheus metrics — root level so it stays outside /api auth
-	r.Handle("/metrics", promhttp.Handler()).Methods("GET")
-
-	api := r.PathPrefix("/api").Subrouter()
-
-	// Auth endpoint (handled in middleware, but register route for documentation)
-	api.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
-		// Handled by authMiddleware
-	}).Methods("POST")
-
-	// Fleet endpoints
-	api.HandleFunc("/fleet", fleetHandler(namespace)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}", knightHandler(namespace)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/logs", knightLogsHandler(namespace)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/pods", knightPodsHandler(namespace, running)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
-	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/queue/history", knightQueueHistoryHandler(sampler)).Methods("GET")
-	api.HandleFunc("/queues/history", queuesHistoryHandler(sampler)).Methods("GET")
-
-	// Task endpoints
-	api.HandleFunc("/tasks", taskHistoryHandler(tables)).Methods("GET")
-
-	// Dispatch and run-now go through the invoke gateway, not NATS (#247)
-	gateway := newGatewayClientFromEnv()
-	dispatchLimit := newDispatchLimiter()
-	api.Handle("/tasks/dispatch", dispatchLimit.wrap(taskDispatchHandler(gateway))).Methods("POST")
-	api.HandleFunc("/tasks/dispatch/{taskId}", taskStatusHandler(gateway)).Methods("GET")
-	api.Handle("/chains/{name}/run", dispatchLimit.wrap(chainRunHandler(gateway))).Methods("POST")
-	api.HandleFunc("/chains/runs/{namespace}/{run}", chainRunStatusHandler(gateway)).Methods("GET")
-	api.Handle("/chains/runs/{namespace}/{run}/cancel", dispatchLimit.wrap(chainRunCancelHandler(gateway))).Methods("POST")
-
-	// Chat with a knight through the gateway: same auth and rate limit as dispatch
-	api.Handle("/chat/{knight}", dispatchLimit.wrap(chatSendHandler(gateway))).Methods("POST")
-	api.HandleFunc("/chat/knights", chatKnightsHandler(gateway)).Methods("GET")
-	api.HandleFunc("/chat/tasks/{taskId}", taskStatusHandler(gateway)).Methods("GET")
-	api.HandleFunc("/chat/tasks/{taskId}/events", chatEventsHandler(gateway)).Methods("GET")
-
-	// Dead letters: failed and lost tasks, retried through the gateway
-	api.HandleFunc("/dead-letters", deadLettersHandler(gateway)).Methods("GET")
-	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(gateway)).Methods("GET")
-	api.HandleFunc("/dead-letters/{taskId}/retry", deadLetterRetryHandler(gateway)).Methods("POST")
-
-	// Schedules: every gateway schedules route; run shares the dispatch rate limit (#300)
-	scheduleRoutes(api, gateway, dispatchLimit.wrap)
-
-	// Chain endpoints
-	api.HandleFunc("/chains", chainsHandler(namespace, running)).Methods("GET")
-	api.HandleFunc("/chain-groups", chainGroupsHandler(namespace)).Methods("GET")
-	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, running)).Methods("GET")
-	api.HandleFunc("/triggers", triggersHandler(namespace)).Methods("GET")
-	api.HandleFunc("/triggers/{namespace}/{name}", triggerDetailHandler(namespace)).Methods("GET")
-
-	// Mission endpoints
-	api.HandleFunc("/missions", missionsHandler(namespace)).Methods("GET")
-	api.HandleFunc("/missions/{name}", missionDetailHandler(namespace)).Methods("GET")
-	api.HandleFunc("/missions", missionCreateHandler(namespace)).Methods("POST")
-	api.HandleFunc("/missions/{name}", missionDeleteHandler(namespace)).Methods("DELETE")
-
-	// KV-backed result endpoints (lookup only, never create buckets)
-	api.HandleFunc("/missions/{name}/results", missionResultsHandler()).Methods("GET")
-	api.HandleFunc("/chains/{name}/steps/{step}/output", chainStepOutputHandler()).Methods("GET")
-
-	// RoundTable endpoints
-	api.HandleFunc("/roundtables", roundTablesHandler(namespace)).Methods("GET")
-	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
-
-	// Briefing endpoints
-	api.HandleFunc("/briefings", briefingListHandler(vaultPath, briefingDirs)).Methods("GET")
-	api.HandleFunc("/briefings/{date}", briefingHandler(vaultPath, briefingDirs)).Methods("GET")
-
-	// Agent cards with live state and load (#251)
-	api.HandleFunc("/cards", cardsHandler(cards)).Methods("GET")
-
-	// In-flight tasks across all knight pods (#199)
-	api.HandleFunc("/running", runningHandler(running, namespace)).Methods("GET")
-
-	// WebSocket for real-time NATS events
-	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards, tc))
-
-	// Config endpoint to expose fleet prefix to frontend (#60) and the
-	// namespace the dashboard reads (the default for new schedules, #302)
-	api.HandleFunc("/config", configHandler(fleetPrefix, namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
-
-	// Health
-	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	}).Methods("GET")
-
-	// Serve static UI files with SPA fallback
-	r.PathPrefix("/").HandlerFunc(spaHandler("./static"))
 
 	// CORS — defaults to same-origin (no origins = same-origin only) (#57)
 	corsOpts := cors.Options{
