@@ -72,6 +72,7 @@ var (
 // KnightStatus represents a knight's current state
 type KnightStatus struct {
 	Name            string            `json:"name"`
+	Namespace       string            `json:"namespace"`
 	Domain          string            `json:"domain"`
 	Status          string            `json:"status"` // online, offline, starting
 	Ready           bool              `json:"ready"`
@@ -573,6 +574,7 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 		NATSPrefix:         natsPrefix,
 		Table:              tableOrNone(knightTableName(cr)),
 		Name:               cr.GetName(),
+		Namespace:          cr.GetNamespace(),
 		Domain:             getStr(spec, "domain"),
 		Status:             podStatus,
 		Ready:              ready,

@@ -84,6 +84,8 @@ export interface KnightIsolation {
 }
 
 export interface Knight {
+  /** Kubernetes namespace of the Knight; the gateway invoke body takes it. */
+  namespace?: string
   /** RoundTable the object belongs to; "none" when unset. List endpoints accept ?table=<name>. */
   table?: string
   name: string

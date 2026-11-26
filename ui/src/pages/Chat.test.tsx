@@ -3,7 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChatPage } from './Chat'
-import { parseKnightNames } from '../lib/chat'
+import { parseKnights } from '../lib/chat'
 import { ApiError } from '../lib/api'
 
 const apiPost = vi.fn()
@@ -82,6 +82,21 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('activity')).toHaveTextContent('t1')
   })
 
+  it('sends the knight namespace and labels same-named knights by namespace', async () => {
+    apiGet.mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/chat/knights'
+        ? { knights: [{ name: 'galahad', namespace: 'a' }, { name: 'galahad', namespace: 'b' }, { name: 'rt-ui', namespace: 'a' }] }
+        : taskStatus))
+    render(<MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter>)
+    expect(await screen.findByRole('option', { name: 'a/galahad' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'b/galahad' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'rt-ui' })).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'b/galahad')
+    await userEvent.type(await screen.findByLabelText('Message'), 'hi')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    expect(apiPost).toHaveBeenCalledWith('/api/chat/galahad', { message: 'hi', namespace: 'b' })
+  })
+
   it('lists knights from the gateway', async () => {
     render(<MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('option', { name: 'galahad' })).toBeInTheDocument())
@@ -91,8 +106,11 @@ describe('ChatPage', () => {
 
 describe('parseKnightNames', () => {
   it('accepts arrays, wrapped lists and strings', () => {
-    expect(parseKnightNames(['b', 'a'])).toEqual(['a', 'b'])
-    expect(parseKnightNames({ knights: [{ name: 'x' }, { name: 'x' }, {}] })).toEqual(['x'])
-    expect(parseKnightNames(null)).toEqual([])
+    expect(parseKnights(['b', 'a'])).toEqual([{ name: 'a' }, { name: 'b' }])
+    expect(parseKnights({ knights: [{ name: 'x' }, { name: 'x' }, {}] })).toEqual([{ name: 'x' }])
+    expect(parseKnights(null)).toEqual([])
+    expect(parseKnights([{ name: 'x', namespace: 'b' }, { name: 'x', namespace: 'a' }])).toEqual([
+      { name: 'x', namespace: 'a' }, { name: 'x', namespace: 'b' },
+    ])
   })
 })

@@ -27,14 +27,27 @@ export interface ChatTurn {
 export const isFinalStatus = (status: string | undefined) =>
   status === 'succeeded' || status === 'failed'
 
+export interface ChatKnight {
+  name: string
+  namespace?: string
+}
+
+/** Select-option key: `namespace/name` when the knight has a namespace. */
+export const knightKey = (k: ChatKnight) => (k.namespace ? `${k.namespace}/${k.name}` : k.name)
+
 /** GET /api/chat/knights answers {knights:[...]} or a bare array of names / objects. */
-export function parseKnightNames(data: unknown): string[] {
+export function parseKnights(data: unknown): ChatKnight[] {
   const list = Array.isArray(data) ? data : (data as { knights?: unknown })?.knights
   if (!Array.isArray(list)) return []
-  const names = list
-    .map((k) => (typeof k === 'string' ? k : (k as { name?: unknown })?.name))
-    .filter((n): n is string => typeof n === 'string' && n !== '')
-  return Array.from(new Set(names)).sort()
+  const out = new Map<string, ChatKnight>()
+  for (const k of list) {
+    const name = typeof k === 'string' ? k : (k as { name?: unknown })?.name
+    if (typeof name !== 'string' || name === '') continue
+    const ns = typeof k === 'string' ? undefined : (k as { namespace?: unknown }).namespace
+    const entry: ChatKnight = typeof ns === 'string' && ns !== '' ? { name, namespace: ns } : { name }
+    out.set(knightKey(entry), entry)
+  }
+  return Array.from(out.values()).sort((a, b) => knightKey(a).localeCompare(knightKey(b)))
 }
 
 export function mergeTurn(turn: ChatTurn, t: ChatTask): ChatTurn {

@@ -637,7 +637,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
             )}
           </div>
           {view.traceId && <div className="mb-2"><TraceLink traceId={view.traceId} /></div>}
-          {chain.invokable && <RunNow chain={chain.name} namespace={chain.namespace} />}
+          {chain.invokable && !chain.missionRef && !chain.runTemplate && <RunNow chain={chain.name} namespace={chain.namespace} />}
           {chain.runTemplate && !TERMINAL_PHASES.includes(chain.phase) && <CancelRun chain={chain} />}
           <StepDAG steps={steps} currentStep={view.currentStep} />
           <StepProgress steps={steps} />
