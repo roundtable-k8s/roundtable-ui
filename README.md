@@ -172,12 +172,11 @@ The dashboard provides full CRUD operations for Round Table Custom Resource Defi
 - **@xyflow/react** — interactive graph visualization for chains and architecture
 - **react-markdown** — markdown rendering for briefings
 - **lucide-react** — icon library (450+ icons)
-- **date-fns** — date formatting and manipulation
 - **Vitest** — unit testing framework
 - **Storybook 8** — component development and documentation
 
 ### Backend
-- **Go 1.23** — API server and orchestration logic
+- **Go** (version in `api/go.mod`) — API server and orchestration logic
 - **gorilla/mux** — HTTP routing and middleware
 - **gorilla/websocket** — WebSocket support for real-time events
 - **NATS Go Client** — NATS/JetStream integration

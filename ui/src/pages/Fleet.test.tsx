@@ -13,8 +13,9 @@ const k = (name: string, domain: string): Knight => ({
 })
 
 let knights: Knight[] = []
+let fleetError: string | null = null
 vi.mock('../hooks/useFleet', () => ({
-  useFleet: () => ({ knights, loading: false, error: null, refresh: vi.fn() }),
+  useFleet: () => ({ knights, loading: false, error: fleetError, refresh: vi.fn() }),
 }))
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
 let cards: CardMap = new Map()
@@ -29,6 +30,7 @@ const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.
 
 beforeEach(() => {
   knights = [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')]
+  fleetError = null
   cards = new Map([
     [cardKey('personal', 'galahad'), galahadCard],
     [cardKey('personal', 'patsy'), patsyCard],
@@ -184,5 +186,14 @@ describe('Fleet name/status filter, paging and focus (#401)', () => {
     render(<MemoryRouter initialEntries={['/fleet?knight=nobody']}><FleetPage /></MemoryRouter>)
     expect(screen.queryByTestId('drawer')).toBeNull()
     expect(names()).toHaveLength(3)
+  })
+})
+
+describe('Fleet error banner', () => {
+  it('suggests checking the API and its logs, not running it from source', () => {
+    fleetError = 'Failed to fetch'
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.getByText('⚠️ Failed to fetch')).toBeInTheDocument()
+    expect(screen.getByText('Check that the dashboard API is reachable and look at its pod logs.')).toBeInTheDocument()
   })
 })
