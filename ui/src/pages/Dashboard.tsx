@@ -10,7 +10,7 @@ import { fetchWithTimeout } from '../hooks/useKnightSession'
 import { useWebSocket, eventKey } from '../hooks/useWebSocket'
 import { useRunning } from '../hooks/useRunning'
 import { countByStatus } from '../lib/running'
-import { getKnightConfig, KNIGHT_NAMES } from '../lib/knights'
+import { getKnightConfig } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState } from '../components/ui'
 import { formatCost, formatTimestamp, until } from '../lib/format'
@@ -53,6 +53,8 @@ async function fetchSessionCosts(names: string[]): Promise<Record<string, number
 }
 
 export const DASHBOARD_CHAINS_URL = `/api/chains?limit=${CHAIN_LIST_LIMIT}`
+
+const FLEET_PANEL_MAX = 12
 
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
   const { table } = useTableFilter()
@@ -234,6 +236,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   ].filter(Boolean).join(' • ') || undefined
 
   const online = knights.filter(k => k.status === 'online').length
+  const fleetTiles = [...knights].sort((x, y) => x.name.localeCompare(y.name)).slice(0, FLEET_PANEL_MAX)
   const runningChains = chains.filter(c => c.phase === 'Running' || c.phase === 'StepRunning')
 
   return (
@@ -272,20 +275,27 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {KNIGHT_NAMES.map(name => {
-              const cfg = getKnightConfig(name)
-              const knight = knights.find(k => k.name === name)
-              const isOnline = knight?.status === 'online'
-              return (
-                <div key={name} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isOnline ? 'bg-green-500/5' : 'bg-gray-500/5'}`}>
-                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`} />
-                  <span className="text-sm">{cfg.emoji}</span>
-                  <span className={`text-sm capitalize ${isOnline ? 'text-gray-300' : 'text-gray-600'}`}>{name}</span>
-                </div>
-              )
-            })}
-          </div>
+          {fleetTiles.length === 0 ? (
+            <EmptyState title="No knights found" sub="The fleet API returned no knights." />
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {fleetTiles.map(knight => {
+                const cfg = getKnightConfig(knight.name)
+                const isOnline = knight.status === 'online'
+                return (
+                  <div key={knight.name} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isOnline ? 'bg-green-500/5' : 'bg-gray-500/5'}`}>
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`} />
+                    <span className="text-sm">{cfg.emoji}</span>
+                    <span className={`text-sm truncate ${isOnline ? 'text-gray-300' : 'text-gray-600'}`}>{knight.name}</span>
+                    <span className={`ml-auto text-xs ${isOnline ? 'text-green-400' : 'text-gray-500'}`}>{isOnline ? 'online' : 'offline'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {knights.length > FLEET_PANEL_MAX && (
+            <p className="mt-2 text-xs text-gray-500">+{knights.length - FLEET_PANEL_MAX} more — see View all</p>
+          )}
         </div>
 
         {/* Top Spenders */}

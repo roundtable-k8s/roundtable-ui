@@ -6,6 +6,7 @@ export interface KnightDisplayConfig {
   domain: string
 }
 
+/** Display defaults (emoji/colour) only — not the list of knights; the fleet API is. */
 export const KNIGHT_CONFIG: Record<string, KnightDisplayConfig> = {
   galahad: { emoji: '🛡️', color: 'text-red-400', title: 'Security', domain: 'security' },
   kay: { emoji: '📡', color: 'text-blue-400', title: 'Research', domain: 'research' },
@@ -57,29 +58,6 @@ export function buildKnightConfigFromFleet(knights: Array<{ name: string; domain
 
 export function getKnightConfig(name: string): KnightDisplayConfig {
   return KNIGHT_CONFIG[name] || { emoji: '🤖', color: 'text-gray-400', title: name, domain: name }
-}
-
-export function getKnightByDomain(domain: string) {
-  return Object.entries(KNIGHT_CONFIG).find(([, c]) => c.domain === domain)
-}
-
-/** Get (x, y) position for a knight on a circle */
-export function getKnightPosition(index: number, total: number, cx: number, cy: number, radius: number) {
-  const angle = (2 * Math.PI * index) / total - Math.PI / 2 // start from top
-  return {
-    x: cx + radius * Math.cos(angle),
-    y: cy + radius * Math.sin(angle),
-  }
-}
-
-/** All knight names in order (static config only; pass fleet data to buildKnightConfigFromFleet for dynamic names) */
-export const KNIGHT_NAMES = Object.keys(KNIGHT_CONFIG)
-
-/** Get all knight names including any dynamic ones from fleet data */
-export function getKnightNames(knights?: Array<{ name: string; domain: string }>): string[] {
-  if (!knights) return KNIGHT_NAMES
-  const dynamic = buildKnightConfigFromFleet(knights)
-  return Object.keys(dynamic)
 }
 
 /** Map domain -> knight name */

@@ -3,7 +3,7 @@ import { GitGraph, Wifi, WifiOff, Filter, Activity } from 'lucide-react'
 import { useWebSocket, type NatsEvent } from '../hooks/useWebSocket'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
-import { getKnightConfig, KNIGHT_CONFIG, knightNameForDomain } from '../lib/knights'
+import { getKnightConfig, knightNameForDomain } from '../lib/knights'
 import { parseEvent, parseEventData } from '../lib/events'
 import { FleetGraph } from '../components/FleetGraph'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
@@ -42,8 +42,17 @@ export function LivePage() {
     }
   }, [fleetKnights])
 
-  const knightNames = Object.keys(KNIGHT_CONFIG)
-  const domains = [...new Set(Object.values(KNIGHT_CONFIG).map(c => c.domain))]
+  // Filter options: the real fleet plus any knight/domain seen in events
+  const { knightNames, domains } = useMemo(() => {
+    const names = new Set(fleetKnights.map(k => k.name))
+    const doms = new Set(fleetKnights.map(k => k.domain).filter(Boolean))
+    for (const event of events) {
+      const parsed = parseEvent(event)
+      if (parsed.knight) names.add(parsed.knight)
+      if (parsed.domain) doms.add(parsed.domain)
+    }
+    return { knightNames: [...names].sort(), domains: [...doms].sort() }
+  }, [fleetKnights, events])
 
   // Knight online statuses from fleet API
   const knightStatuses = useMemo(() => {
