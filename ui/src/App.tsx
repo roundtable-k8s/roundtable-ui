@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare, Zap, CalendarClock } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
@@ -7,7 +7,7 @@ import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
 import { useTaskNotifications } from './hooks/useTaskNotifications'
 import { useTableFilter } from './hooks/useTableFilter'
 import { useTables } from './hooks/useTables'
-import { TableSelect } from './components/ui'
+import { TableSelect, EmptyState } from './components/ui'
 import { useOpenDeadLetters, deadLetterBadge } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
@@ -62,6 +62,12 @@ const navItems = [
   { path: '/chronicles', icon: BookOpen, label: 'Chronicles' },
 ]
 
+function isActivePath(pathname: string, path: string) {
+  return path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(path + '/')
+}
+
+const APP_TITLE = 'Round Table'
+
 export default function App() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -73,11 +79,35 @@ export default function App() {
   // Close sidebar on navigation (mobile)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
 
+  // Close the mobile sidebar on Escape
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSidebarOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [sidebarOpen])
+
+  // Page title from the nav label; focus <main> on route change (not on first load)
+  const mainRef = useRef<HTMLElement>(null)
+  const firstRender = useRef(true)
+  const current = navItems.find(n => isActivePath(location.pathname, n.path))
+  const pageLabel = current ? current.label : 'Page not found'
+  useEffect(() => { document.title = `${pageLabel} - ${APP_TITLE}` }, [pageLabel])
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return }
+    mainRef.current?.focus()
+  }, [location.pathname])
+
   return (
     <WebSocketProvider>
     <ToastProvider>
     <div className="flex h-screen">
       <NotificationWatcher />
+
+      <a href="#main" onClick={e => { e.preventDefault(); mainRef.current?.focus() }}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:rounded focus:bg-roundtable-gold focus:text-black">
+        Skip to content
+      </a>
 
       {/* Mobile header (#58) */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-roundtable-slate border-b border-roundtable-steel px-4 py-3 flex items-center justify-between">
@@ -85,18 +115,19 @@ export default function App() {
           <Swords className="w-6 h-6 text-roundtable-gold" />
           <span className="text-sm font-bold text-roundtable-gold">Round Table</span>
         </div>
-        <button onClick={() => setSidebarOpen(o => !o)} className="text-gray-400 p-1">
-          {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        <button type="button" onClick={() => setSidebarOpen(o => !o)} className="text-gray-400 p-1"
+          aria-label={sidebarOpen ? 'Close menu' : 'Open menu'} aria-expanded={sidebarOpen} aria-controls="main-nav">
+          {sidebarOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
         </button>
       </div>
 
       {/* Sidebar backdrop (mobile) */}
       {sidebarOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />
+        <div className="md:hidden fixed inset-0 bg-black/50 z-40" aria-hidden="true" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <nav className={`fixed md:relative z-40 h-full w-64 bg-roundtable-slate border-r border-roundtable-steel flex flex-col transition-transform duration-200 ${
+      <nav id="main-nav" aria-label="Main" className={`fixed md:relative z-40 h-full w-64 bg-roundtable-slate border-r border-roundtable-steel flex flex-col transition-transform duration-200 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
         <div className="p-6 border-b border-roundtable-steel hidden md:block">
@@ -111,10 +142,11 @@ export default function App() {
 
         <div className="flex-1 p-4 space-y-1 mt-14 md:mt-0">
           {navItems.map(({ path, icon: Icon, label }) => {
-            const active = location.pathname === path
+            const active = isActivePath(location.pathname, path)
             return (
               <Link
                 key={path}
+                aria-current={active ? 'page' : undefined}
                 to={table ? `${path}?table=${encodeURIComponent(table)}` : path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   active
@@ -142,7 +174,7 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto p-4 md:p-8 mt-14 md:mt-0">
+      <main id="main" ref={mainRef} tabIndex={-1} className="focus:outline-none flex-1 overflow-auto p-4 md:p-8 mt-14 md:mt-0">
         <ErrorBoundary>
           <div className="flex justify-end mb-4 empty:hidden">
             <TableSelect tables={tables} value={table} onChange={setTable} />
@@ -170,6 +202,12 @@ export default function App() {
             <Route path="/costs" element={<CostDashboardPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/architecture" element={<ArchitecturePage />} />
+            <Route path="*" element={
+              <div>
+                <EmptyState title="Page not found" sub="The page you asked for does not exist." />
+                <p className="text-center"><Link to="/" className="text-roundtable-gold underline">Back to Command Center</Link></p>
+              </div>
+            } />
           </Routes>
           </Suspense>
         </ErrorBoundary>
