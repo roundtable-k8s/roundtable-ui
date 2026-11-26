@@ -11,7 +11,7 @@ const tables = [
 ]
 const knights = [
   { name: 'galahad', domain: 'security', natsPrefix: 'fleet-a' },
-  { name: 'rt-ui', domain: 'ui', natsPrefix: 'rt-dev' },
+  { name: 'rt-ui', domain: 'ui', natsPrefix: 'rt-dev', namespace: 'team-b' },
 ]
 const events: NatsEvent[] = [
   { type: 'result', subject: 'fleet-a.results.t1', table: 'fleet-a', timestamp: '2026-11-24T10:00:00Z',
@@ -62,10 +62,22 @@ describe('TasksPage', () => {
     await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
     await userEvent.type(screen.getByLabelText('Quest'), 'fix it{Enter}')
     await waitFor(() => expect(apiPost).toHaveBeenCalled())
-    expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', { knight: 'rt-ui', task: 'fix it' })
+    expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', { knight: 'rt-ui', task: 'fix it', namespace: 'team-b' })
     expect(await screen.findByText('invoke-rt-ui-1')).toBeTruthy()
     expect(screen.getByTestId('dispatch-status').textContent).toBe('pending')
   })
+
+  it('stops polling a task after 5 consecutive failed polls and marks it unavailable', async () => {
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/tasks' ? Promise.resolve({ results: [], tables }) : Promise.reject(new Error('404')))
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
+    await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('status unavailable'), { timeout: 15000 })
+    const polls = () => apiGet.mock.calls.filter((c) => String(c[0]).startsWith('/api/tasks/dispatch/')).length
+    expect(polls()).toBe(5)
+    await new Promise((r) => setTimeout(r, 2500))
+    expect(polls()).toBe(5)
+  }, 20000)
 
   it('polls the task and shows its status and output', async () => {
     apiGet.mockImplementation((url: string) => {

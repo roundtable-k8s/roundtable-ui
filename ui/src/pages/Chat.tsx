@@ -8,15 +8,16 @@ import { UntrustedText } from '../components/UntrustedText'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
-import { isFinalStatus, mergeTurn, parseKnightNames, type ChatTask, type ChatTurn } from '../lib/chat'
+import { isFinalStatus, mergeTurn, knightKey, parseKnights, type ChatKnight, type ChatTask, type ChatTurn } from '../lib/chat'
 
 const POLL_MS = 2000
 
 export function ChatPage() {
   const [params, setParams] = useSearchParams()
   const knight = params.get('knight') ?? ''
+  const namespace = params.get('ns') ?? ''
   const runId = params.get('run') ?? ''
-  const [knights, setKnights] = useState<string[]>([])
+  const [knights, setKnights] = useState<ChatKnight[]>([])
   const [knightsError, setKnightsError] = useState<string | null>(null)
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [message, setMessage] = useState('')
@@ -28,7 +29,7 @@ export function ChatPage() {
 
   useEffect(() => {
     apiGet<unknown>('/api/chat/knights')
-      .then((d) => setKnights(parseKnightNames(d)))
+      .then((d) => setKnights(parseKnights(d)))
       .catch((e: Error) => setKnightsError(e.message))
   }, [])
 
@@ -72,6 +73,7 @@ export function ChatPage() {
     try {
       const t = await apiPost<ChatTask>(`/api/chat/${encodeURIComponent(knight)}`, {
         message: text,
+        ...(namespace ? { namespace } : {}),
         ...(runId ? { runId } : {}),
         ...(model.trim() ? { model: model.trim() } : {}),
       })
@@ -85,11 +87,16 @@ export function ChatPage() {
     }
   }
 
-  function pick(name: string) {
+  function pick(key: string) {
+    const k = knights.find((x) => knightKey(x) === key)
     setTurns([])
     setActivityTask(null)
-    update({ knight: name || null, run: null })
+    update({ knight: k?.name ?? null, ns: k?.namespace ?? null, run: null })
   }
+
+  const nameCount = new Map<string, number>()
+  for (const k of knights) nameCount.set(k.name, (nameCount.get(k.name) ?? 0) + 1)
+  const selectedKey = knightKey({ name: knight, namespace: namespace || undefined })
 
   const running = turns.some((t) => !isFinalStatus(t.status))
 
@@ -102,18 +109,22 @@ export function ChatPage() {
           Knight
           <select
             aria-label="Knight"
-            value={knight}
+            value={selectedKey}
             onChange={(e) => pick(e.target.value)}
             className="block mt-1 bg-roundtable-slate border border-roundtable-steel rounded px-3 py-2 text-gray-200"
           >
             <option value="">Select a knight…</option>
-            {knights.map((k) => <option key={k} value={k}>{k}</option>)}
+            {knights.map((k) => (
+              <option key={knightKey(k)} value={knightKey(k)}>
+                {(nameCount.get(k.name) ?? 0) > 1 ? knightKey(k) : k.name}
+              </option>
+            ))}
           </select>
         </label>
         {runId && (
           <>
             <span className="text-xs text-gray-500">Run <code>{sanitizeText(runId)}</code></span>
-            <button type="button" className="text-xs text-roundtable-gold hover:underline" onClick={() => pick(knight)}>
+            <button type="button" className="text-xs text-roundtable-gold hover:underline" onClick={() => pick(selectedKey)}>
               New conversation
             </button>
           </>

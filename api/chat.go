@@ -20,6 +20,8 @@ type chatRequest struct {
 	Message string `json:"message"`
 	RunID   string `json:"runId,omitempty"`
 	Model   string `json:"model,omitempty"`
+	// Namespace of the knight; the gateway defaults it when empty.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // chatSendHandler proxies POST /v1/knights/{knight}/invoke with
@@ -49,7 +51,14 @@ func chatSendHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid model", http.StatusBadRequest)
 			return
 		}
+		if req.Namespace != "" && !validKnightName.MatchString(req.Namespace) {
+			jsonError(w, "Invalid namespace", http.StatusBadRequest)
+			return
+		}
 		body := map[string]interface{}{"task": req.Message, "timeoutSeconds": 0}
+		if req.Namespace != "" {
+			body["namespace"] = req.Namespace
+		}
 		if req.Model != "" {
 			body["model"] = req.Model
 		}

@@ -279,6 +279,20 @@ describe('ChainsPage run now', () => {
     expect(link.getAttribute('href')).toBe('/chains?chain=doc-sweep-x1')
   })
 
+  it('offers no Run now on mission chains or run copies', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([{ ...fanOutChain(), invokable: true, missionRef: 'm1' }]) : Promise.reject(new Error('no KV')))
+    const { unmount } = renderPage('/chains?chain=doc-sweep')
+    expect(await screen.findAllByText('m1')).not.toHaveLength(0)
+    expect(screen.queryByTestId('run-now')).toBeNull()
+    unmount()
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([{ ...fanOutChain(), invokable: true, runTemplate: 'doc-sweep' }]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=doc-sweep')
+    await screen.findAllByText('doc-sweep')
+    expect(screen.queryByTestId('run-now')).toBeNull()
+  })
+
   it('shows the error when the run cannot be started', async () => {
     mockApiGet.mockImplementation((url: string) =>
       url === CHAINS_LIST_URL ? Promise.resolve([{ ...fanOutChain(), invokable: true }]) : Promise.reject(new Error('no KV')))

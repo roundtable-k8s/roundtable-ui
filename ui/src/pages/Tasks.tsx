@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { Scroll, Clock } from 'lucide-react'
 import { apiGet, apiPost } from '../lib/api'
@@ -33,7 +33,11 @@ interface DispatchedTask {
   output?: string
   error?: string
   timestamp: string
+  /** Set after repeated failed status polls; the task is no longer polled. */
+  unavailable?: boolean
 }
+
+const MAX_POLL_FAILURES = 5
 
 const isFinal = (status: string) => status === 'succeeded' || status === 'failed'
 
@@ -83,14 +87,26 @@ export function TasksPage() {
       .catch(() => {})
   }, [])
 
+  // Consecutive failed polls per task id
+  const failures = useRef(new Map<string, number>())
   // Poll dispatched tasks through the gateway until they finish
-  const pendingIds = results.filter((r) => !isFinal(r.status)).map((r) => r.taskId).join(',')
+  const pendingIds = results.filter((r) => !isFinal(r.status) && !r.unavailable).map((r) => r.taskId).join(',')
   useVisibleInterval(
     (signal) =>
       Promise.all(pendingIds.split(',').map((id) =>
         apiGet<GatewayTask>(`/api/tasks/dispatch/${encodeURIComponent(id)}`, { signal })
-          .then((t) => setResults((prev) => prev.map((r) => (r.taskId === id ? mergeTask(r, t) : r))))
-          .catch(() => {}),
+          .then((t) => {
+            failures.current.delete(id)
+            setResults((prev) => prev.map((r) => (r.taskId === id ? mergeTask(r, t) : r)))
+          })
+          .catch(() => {
+            if (signal.aborted) return
+            const n = (failures.current.get(id) ?? 0) + 1
+            failures.current.set(id, n)
+            if (n >= MAX_POLL_FAILURES) {
+              setResults((prev) => prev.map((r) => (r.taskId === id ? { ...r, unavailable: true } : r)))
+            }
+          }),
       )),
     POLL_MS,
     !!pendingIds,
@@ -102,7 +118,11 @@ export function TasksPage() {
     setDispatching(true)
 
     try {
-      const data = await apiPost<GatewayTask>('/api/tasks/dispatch', { knight, task })
+      const data = await apiPost<GatewayTask>('/api/tasks/dispatch', {
+        knight,
+        task,
+        ...(selected.namespace ? { namespace: selected.namespace } : {}),
+      })
       setResults((prev) => [mergeTask({
         taskId: data.taskId,
         knight,
@@ -194,7 +214,7 @@ export function TasksPage() {
                   <span className="font-medium text-white capitalize">{r.knight}</span>
                   {r.table && <TableBadge table={r.table} />}
                   <span data-testid="dispatch-status" className={`text-xs px-2 py-0.5 rounded ${statusClass(r.status)}`}>
-                    {r.status}
+                    {r.unavailable ? 'status unavailable' : r.status}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 text-gray-500 text-xs">

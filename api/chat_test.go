@@ -168,3 +168,23 @@ func TestChatEventsFlushThroughMetricsMiddleware(t *testing.T) {
 		t.Fatal("event not flushed while stream open")
 	}
 }
+
+func TestChatForwardsNamespace(t *testing.T) {
+	f := &fakeGateway{}
+	srv := f.server(t)
+	r := chatRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	if w := doReq(r, "POST", "/api/chat/galahad", `{"message":"hi","namespace":"team-b"}`); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	var b map[string]interface{}
+	json.Unmarshal([]byte(f.calls[0].body), &b)
+	if b["namespace"] != "team-b" {
+		t.Errorf("namespace not forwarded: %v", b)
+	}
+	if w := doReq(r, "POST", "/api/chat/galahad", `{"message":"hi","namespace":"a/b"}`); w.Code != http.StatusBadRequest {
+		t.Errorf("invalid namespace: got %d", w.Code)
+	}
+	if len(f.calls) != 1 {
+		t.Errorf("invalid namespace reached the gateway: %v", f.calls)
+	}
+}
