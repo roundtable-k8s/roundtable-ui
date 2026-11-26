@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -2122,5 +2124,107 @@ func TestStatusTraceIDPassThrough(t *testing.T) {
 		if got := parseMissionResource(obj).TraceID; got != c.want {
 			t.Errorf("mission traceId(%q) = %q, want %q", c.id, got, c.want)
 		}
+	}
+}
+
+func TestNewHTTPServerTimeouts(t *testing.T) {
+	srv := newHTTPServer(":0", http.NewServeMux())
+	if srv.ReadHeaderTimeout <= 0 || srv.IdleTimeout <= 0 {
+		t.Fatalf("timeouts must be set: %v %v", srv.ReadHeaderTimeout, srv.IdleTimeout)
+	}
+	if srv.WriteTimeout != 0 {
+		t.Fatal("WriteTimeout must stay unset (WebSocket/SSE are long-lived)")
+	}
+}
+
+func TestGracefulShutdownOrder(t *testing.T) {
+	var order []string
+	gracefulShutdown(
+		func(ctx context.Context) error { order = append(order, "shutdown"); return nil },
+		func(ctx context.Context) error {
+			if ctx.Err() != nil {
+				t.Error("shared context expired early")
+			}
+			order = append(order, "flush")
+			return errors.New("ignored")
+		},
+		time.Second,
+	)
+	if strings.Join(order, ",") != "shutdown,flush" {
+		t.Fatalf("order = %v", order)
+	}
+}
+
+type closeRecorderConn struct{ closed bool }
+
+func (c *closeRecorderConn) Close() error { c.closed = true; return nil }
+
+type recordingWSConn struct{ onWrite func(int, []byte) }
+
+func (r *recordingWSConn) SetWriteDeadline(time.Time) error { return nil }
+func (r *recordingWSConn) WriteMessage(mt int, d []byte) error {
+	r.onWrite(mt, d)
+	return nil
+}
+
+func TestCloseGoingAway(t *testing.T) {
+	var got []byte
+	var gotType int
+	rec := &recordingWSConn{onWrite: func(mt int, d []byte) { gotType, got = mt, d }}
+	ws := &wsWriter{conn: rec}
+	c := &closeRecorderConn{}
+	closeGoingAway(ws, c)
+	if !c.closed || gotType != websocket.CloseMessage || len(got) < 2 || int(got[0])<<8|int(got[1]) != websocket.CloseGoingAway {
+		t.Fatalf("closed=%v type=%d payload=%v", c.closed, gotType, got)
+	}
+}
+
+// TestWSShutdownSendsGoingAway runs the real handler behind httptest with a
+// real WebSocket client and checks that graceful shutdown waits for the 1001
+// close frame to be sent.
+func TestWSShutdownSendsGoingAway(t *testing.T) {
+	conn, _ := startCardsNATS(t)
+	oldNC, oldLife := nc, wsLife
+	nc, wsLife = conn, newWSLifecycle()
+	t.Cleanup(func() { nc, wsLife = oldNC, oldLife })
+
+	src := &tableSource{ttl: time.Hour, now: time.Now, ok: true}
+	srv := httptest.NewServer(wsHandler(src, nil, nil, nil, nil, nil))
+	defer srv.Close()
+
+	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	gotCode := make(chan int, 1)
+	go func() {
+		for {
+			if _, _, err := c.ReadMessage(); err != nil {
+				code := -1
+				var ce *websocket.CloseError
+				if errors.As(err, &ce) {
+					code = ce.Code
+				}
+				gotCode <- code
+				return
+			}
+		}
+	}()
+	time.Sleep(100 * time.Millisecond) // let the handler register
+
+	gracefulShutdown(func(ctx context.Context) error {
+		wsLife.begin()
+		wsLife.wait(ctx)
+		return nil
+	}, func(context.Context) error { return nil }, 5*time.Second)
+
+	select {
+	case code := <-gotCode:
+		if code != websocket.CloseGoingAway {
+			t.Fatalf("close code = %d, want 1001", code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no close frame received")
 	}
 }
