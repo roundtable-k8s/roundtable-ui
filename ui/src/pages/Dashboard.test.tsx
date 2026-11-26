@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { DashboardPage } from './Dashboard'
 import { useFleet } from '../hooks/useFleet'
+import { apiGet } from '../lib/api'
 
 // Mock the hooks
 vi.mock('../hooks/useFleet', () => ({
@@ -307,5 +308,20 @@ describe('DashboardPage truncated chain list', () => {
     await screen.findByText('c-0')
     expect(screen.queryByTestId('chains-truncated')).toBeNull()
     restore()
+  })
+
+  it('shows fleet and chain failures instead of zeros', async () => {
+    vi.mocked(useFleet).mockReturnValueOnce({ knights: [], loading: false, error: 'HTTP 500', refresh: vi.fn() } as never)
+    vi.mocked(apiGet).mockImplementation((url: string) =>
+      url.startsWith('/api/chains') ? Promise.reject(new Error('gateway down')) : Promise.resolve({}))
+    renderDashboard()
+    expect(screen.getByText(/Failed to load fleet: HTTP 500/)).toBeInTheDocument()
+    expect(await screen.findByText(/Failed to load chains: gateway down/)).toBeInTheDocument()
+  })
+
+  it('shows a spinner while the first load is pending', () => {
+    vi.mocked(useFleet).mockReturnValueOnce({ knights: [], loading: true, error: null, refresh: vi.fn() } as never)
+    renderDashboard()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })

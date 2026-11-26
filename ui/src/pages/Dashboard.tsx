@@ -12,7 +12,7 @@ import { useRunning } from '../hooks/useRunning'
 import { countByStatus } from '../lib/running'
 import { getKnightConfig, KNIGHT_NAMES } from '../lib/knights'
 import { parseEvent } from '../lib/events'
-import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState } from '../components/ui'
+import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
 import { formatCost, formatTimestamp, until } from '../lib/format'
 
 import type { Chain } from '../lib/types'
@@ -56,7 +56,7 @@ export const DASHBOARD_CHAINS_URL = `/api/chains?limit=${CHAIN_LIST_LIMIT}`
 
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
   const { table } = useTableFilter()
-  const { knights } = useFleet()
+  const { knights, loading: fleetLoading, error: fleetError } = useFleet()
   const { events, connected } = useWebSocket()
   const runningAll = useRunning()
   const running = useMemo(
@@ -64,6 +64,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     [runningAll, table],
   )
   const [chains, setChains] = useState<Chain[]>([])
+  const [chainsLoading, setChainsLoading] = useState(true)
+  const [chainsError, setChainsError] = useState<string | null>(null)
   const [chainTotal, setChainTotal] = useState<number | null>(null)
   const [sessionCosts, setSessionCosts] = useState<{ total: number; perKnight: Record<string, number> }>({ total: 0, perKnight: {} })
   const [costExpanded, setCostExpanded] = useState(defaultCostExpanded)
@@ -76,11 +78,18 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     apiGet<Chain[]>(withTable(DASHBOARD_CHAINS_URL, table)).then(data => {
       if (!alive) return
       setChains(data)
+      setChainsError(null)
+      setChainsLoading(false)
       // A full page means the list may be cut short: ask for the real total.
       if (data.length >= CHAIN_LIST_LIMIT) {
         fetchChainTotal(withTable(DASHBOARD_CHAINS_URL, table)).then(n => { if (alive) setChainTotal(n) })
       } else setChainTotal(null)
-    }).catch(() => {})
+    }).catch((e) => {
+      if (!alive) return
+      // keep any stale chains; just say the refresh failed
+      setChainsError(e instanceof Error ? e.message : 'Unknown error')
+      setChainsLoading(false)
+    })
     return () => { alive = false }
   }, [table])
 
@@ -243,6 +252,18 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
         title="Command Center"
         subtitle={<>Fleet status at a glance • {connected ? '🟢 Live' : '🔴 Disconnected'}</>}
       />
+
+      {(fleetError || chainsError) && (
+        <div className="mb-6 space-y-2" role="alert">
+          {fleetError && <ErrorBanner>Failed to load fleet: {fleetError}</ErrorBanner>}
+          {chainsError && <ErrorBanner>Failed to load chains: {chainsError}</ErrorBanner>}
+        </div>
+      )}
+      {((fleetLoading && knights.length === 0 && !fleetError) || (chainsLoading && !chainsError)) && (
+        <div className="mb-6 flex items-center gap-2 text-sm text-gray-400" role="status">
+          <Spinner size="sm" /> Loading…
+        </div>
+      )}
 
       {/* Top-level metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
