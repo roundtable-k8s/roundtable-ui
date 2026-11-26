@@ -645,3 +645,41 @@ func TestActivityFollowerFollowsPrefixes(t *testing.T) {
 		t.Fatal("event of removed table was delivered")
 	}
 }
+
+// On a table resync only the newly added prefixes are bootstrapped. A pod with
+// no Knight CR belongs to the default table, so it must not be asked on the
+// new table's subject (the old code used prefixes[0] as the fallback).
+func TestBootstrapRunningFallbackPrefixIsDefaultTable(t *testing.T) {
+	setupTestRouter()
+	ns := "fallback-namespace"
+	ctx := context.Background()
+	p := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "orphan-abc-1", Namespace: ns, Labels: map[string]string{
+			"app.kubernetes.io/name": "knight", "app.kubernetes.io/instance": "orphan",
+		}},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	if _, err := fakeK8sClient.CoreV1().Pods(ns).Create(ctx, p, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var asked []string
+	req := func(subject string, _ []byte, _ time.Duration) ([]byte, error) {
+		mu.Lock()
+		asked = append(asked, subject)
+		mu.Unlock()
+		return nil, errors.New("timeout")
+	}
+	reg, _ := newTestRegistry(10)
+
+	// Resync adds only "chelonian"; the CR-less pod's default is "fleet-a".
+	bootstrapRunning(ctx, reg, ns, []string{"chelonian"}, "fleet-a", req, time.Second)
+	if len(asked) != 0 {
+		t.Fatalf("asked %v; CR-less pod must not be asked on the new table's prefix", asked)
+	}
+	// When its default prefix is the one being bootstrapped, it is asked there.
+	bootstrapRunning(ctx, reg, ns, []string{"fleet-a"}, "fleet-a", req, time.Second)
+	if len(asked) != 1 || asked[0] != "fleet-a.introspect.Orphan.orphan-abc-1" {
+		t.Fatalf("asked %v, want one request on the default prefix", asked)
+	}
+}

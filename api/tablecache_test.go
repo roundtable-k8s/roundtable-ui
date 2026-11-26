@@ -78,18 +78,32 @@ func TestTableCacheRunRefreshesWithoutWaitingForTick(t *testing.T) {
 
 func TestTableCacheRunDoesNotBlockCaller(t *testing.T) {
 	release := make(chan struct{})
+	started := make(chan struct{})
 	c := newTableCache(func(ctx context.Context) map[string]string {
+		close(started)
 		<-release
-		return nil
+		return map[string]string{"t": "p"}
 	}, time.Hour, time.Second)
 	done := make(chan struct{})
 	finished := make(chan struct{})
-	start := time.Now()
 	go func() { c.run(done); close(finished) }()
-	if time.Since(start) > 100*time.Millisecond || c.get() != nil {
-		t.Fatal("blocked or non-nil before refresh")
+	// The first lookup is in flight (blocked) yet get() returns immediately, nil.
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("run never started the first lookup")
+	}
+	if c.get() != nil {
+		t.Fatal("get() non-nil before the first lookup finished")
 	}
 	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for c.get() == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("cache never populated by run")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	close(done)
 	<-finished
 }
