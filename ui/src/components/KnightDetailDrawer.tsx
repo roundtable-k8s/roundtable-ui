@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
@@ -256,6 +257,12 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              to={`/chat?knight=${encodeURIComponent(knight.name)}${knight.namespace ? `&ns=${encodeURIComponent(knight.namespace)}` : ''}`}
+              className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-roundtable-gold px-1 transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" /> Chat
+            </Link>
             <button onClick={() => knight && refreshAll(knight.name)} className="text-gray-400 hover:text-roundtable-gold p-1 transition-colors" title="Refresh" aria-label="Refresh">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>

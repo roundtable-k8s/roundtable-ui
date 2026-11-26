@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { ChatPage } from './Chat'
+import { ChatPage, STALE_TURN_MS } from './Chat'
 import { parseKnights } from '../lib/chat'
 import { ApiError } from '../lib/api'
 
@@ -113,6 +113,63 @@ describe('ChatPage', () => {
     render(<MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('option', { name: 'galahad' })).toBeInTheDocument())
     expect(screen.getByRole('option', { name: 'rt-ui' })).toBeInTheDocument()
+  })
+})
+
+describe('ChatPage selection, races and stale turns', () => {
+  const knightsResp = (list: unknown[]) => apiGet.mockImplementation((url: string) =>
+    Promise.resolve(url === '/api/chat/knights' ? { knights: list } : taskStatus))
+
+  it('preselects the only knight with that name when ns is missing', async () => {
+    knightsResp([{ name: 'alice', namespace: 'team-a' }, { name: 'bob', namespace: 'team-a' }])
+    render(<MemoryRouter initialEntries={['/chat?knight=alice']}><ChatPage /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByLabelText('Knight')).toHaveValue('team-a/alice'))
+    await userEvent.type(await screen.findByLabelText('Message'), 'hi')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    expect(apiPost).toHaveBeenCalledWith('/api/chat/alice', { message: 'hi', namespace: 'team-a' }, expect.anything())
+  })
+
+  it('does not guess when several knights share the name', async () => {
+    knightsResp([{ name: 'alice', namespace: 'a' }, { name: 'alice', namespace: 'b' }])
+    render(<MemoryRouter initialEntries={['/chat?knight=alice']}><ChatPage /></MemoryRouter>)
+    expect(await screen.findByRole('option', { name: 'Pick the namespace' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Knight')).toHaveValue('')
+  })
+
+  it('ignores a send that resolves after the knight was switched', async () => {
+    let resolve!: (v: unknown) => void
+    apiPost.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hi')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    await act(async () => { resolve({ taskId: 't9', runId: 'old-run', status: 'pending' }) })
+    expect(screen.queryAllByTestId('chat-turn')).toHaveLength(0)
+    expect(screen.queryByText('old-run')).not.toBeInTheDocument()
+  })
+
+  it('shows a stale notice and re-enables Send after two minutes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await user.type(await screen.findByLabelText('Message'), 'hi')
+    await user.click(screen.getByRole('button', { name: /send/i }))
+    await screen.findByRole('status')
+    await user.type(screen.getByLabelText('Message'), 'again')
+    expect(screen.getByRole('button', { name: /send/i })).toBeDisabled()
+    expect(screen.queryByText(/Still waiting/)).not.toBeInTheDocument()
+    await act(async () => { vi.advanceTimersByTime(STALE_TURN_MS + 1000) })
+    expect(screen.getByText(/Still waiting/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /failed & lost/i })).toHaveAttribute('href', '/failed')
+    expect(screen.getByRole('button', { name: /send/i })).toBeEnabled()
+  })
+
+  it('retries the knights fetch', async () => {
+    apiGet.mockRejectedValueOnce(new Error('down'))
+    render(<MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter>)
+    expect(await screen.findByText(/down/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('option', { name: 'galahad' })).toBeInTheDocument()
   })
 })
 

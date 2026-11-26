@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { MessageSquare, Send, Activity } from 'lucide-react'
 import { apiGet, apiPost, ApiError } from '../lib/api'
 import { SubmissionKey } from '../lib/submissionKey'
@@ -12,6 +12,8 @@ import { sanitizeText } from '../lib/untrusted'
 import { isFinalStatus, mergeTurn, knightKey, parseKnights, type ChatKnight, type ChatTask, type ChatTurn } from '../lib/chat'
 
 const POLL_MS = 2000
+/** After this long without a result the turn is flagged and Send is re-enabled. */
+export const STALE_TURN_MS = 2 * 60 * 1000
 
 export function ChatPage() {
   const [params, setParams] = useSearchParams()
@@ -28,12 +30,35 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null)
   const [activityTask, setActivityTask] = useState<string | null>(null)
   const nextId = useRef(1)
+  // Bumped whenever the conversation is reset, so a late send response can tell it is stale.
+  const generation = useRef(0)
+  const [staleIds, setStaleIds] = useState<Set<number>>(new Set())
+  const staleTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
+  const [knightsAttempt, setKnightsAttempt] = useState(0)
 
   useEffect(() => {
-    apiGet<unknown>('/api/chat/knights')
+    const ctrl = new AbortController()
+    setKnightsError(null)
+    apiGet<unknown>('/api/chat/knights', { signal: ctrl.signal })
       .then((d) => setKnights(parseKnights(d)))
-      .catch((e: Error) => setKnightsError(e.message))
+      .catch((e: Error) => { if (!ctrl.signal.aborted) setKnightsError(e.message) })
+    return () => ctrl.abort()
+  }, [knightsAttempt])
+
+  useEffect(() => {
+    const timers = staleTimers.current
+    return () => { timers.forEach(clearTimeout); timers.clear() }
   }, [])
+
+  // Flag each turn that is still working after STALE_TURN_MS.
+  useEffect(() => {
+    for (const t of turns) {
+      if (isFinalStatus(t.status) || staleTimers.current.has(t.id)) continue
+      staleTimers.current.set(t.id, setTimeout(() => {
+        setStaleIds((s) => new Set(s).add(t.id))
+      }, STALE_TURN_MS))
+    }
+  }, [turns])
 
   const update = useCallback((next: Record<string, string | null>) => {
     setParams((prev) => {
@@ -72,6 +97,7 @@ export function ChatPage() {
     setSending(true)
     setError(null)
     const id = nextId.current++
+    const gen = generation.current
     try {
       const payload = {
         message: text,
@@ -82,34 +108,56 @@ export function ChatPage() {
       const key = submission.current.next(JSON.stringify([knight, payload]))
       const t = await apiPost<ChatTask>(`/api/chat/${encodeURIComponent(knight)}`, payload, { headers: { 'Idempotency-Key': key } })
       submission.current.settle()
+      // The user switched knight (or started a new conversation) while this was in flight.
+      if (gen !== generation.current) return
       setTurns((ts) => [...ts, mergeTurn({ id, message: text, status: 'pending' }, t)])
       if (t.runId && t.runId !== runId) update({ run: t.runId })
       setMessage('')
     } catch (e) {
       submission.current.settle(e)
-      setError(e instanceof Error ? e.message : 'Send failed')
+      if (gen === generation.current) setError(e instanceof Error ? e.message : 'Send failed')
     } finally {
-      setSending(false)
+      if (gen === generation.current) setSending(false)
     }
   }
 
   function pick(key: string) {
     const k = knights.find((x) => knightKey(x) === key)
+    generation.current++
+    staleTimers.current.forEach(clearTimeout)
+    staleTimers.current.clear()
+    setStaleIds(new Set())
     setTurns([])
+    setSending(false)
+    setError(null)
     setActivityTask(null)
     update({ knight: k?.name ?? null, ns: k?.namespace ?? null, run: null })
   }
 
   const nameCount = new Map<string, number>()
   for (const k of knights) nameCount.set(k.name, (nameCount.get(k.name) ?? 0) + 1)
-  const selectedKey = knightKey({ name: knight, namespace: namespace || undefined })
+  // Links without `ns` resolve to the only knight with that name.
+  const sameName = namespace ? [] : knights.filter((k) => k.name === knight)
+  const resolved = sameName.length === 1 ? sameName[0] : undefined
+  const ambiguous = !!knight && !namespace && sameName.length > 1
+  const selectedKey = ambiguous ? '' : resolved ? knightKey(resolved) : knightKey({ name: knight, namespace: namespace || undefined })
+  const resolvedNs = resolved?.namespace
+  useEffect(() => {
+    if (resolvedNs) update({ ns: resolvedNs })
+  }, [resolvedNs, update])
 
-  const running = turns.some((t) => !isFinalStatus(t.status))
+  // A stale turn no longer blocks Send; it keeps polling in the background.
+  const running = turns.some((t) => !isFinalStatus(t.status) && !staleIds.has(t.id))
 
   return (
     <div className="space-y-4 max-w-3xl">
       <PageHeader icon={MessageSquare} title="Chat" subtitle="Talk to one knight through the gateway; every message in a conversation shares one run." />
-      {knightsError && <ErrorBanner>{knightsError}</ErrorBanner>}
+      {knightsError && (
+        <ErrorBanner>
+          {knightsError}{' '}
+          <button type="button" className="underline" onClick={() => setKnightsAttempt((n) => n + 1)}>Retry</button>
+        </ErrorBanner>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm text-gray-400">
           Knight
@@ -119,7 +167,7 @@ export function ChatPage() {
             onChange={(e) => pick(e.target.value)}
             className="block mt-1 bg-roundtable-slate border border-roundtable-steel rounded px-3 py-2 text-gray-200"
           >
-            <option value="">Select a knight…</option>
+            <option value="">{ambiguous ? 'Pick the namespace' : 'Select a knight…'}</option>
             {knights.map((k) => (
               <option key={knightKey(k)} value={knightKey(k)}>
                 {(nameCount.get(k.name) ?? 0) > 1 ? knightKey(k) : k.name}
@@ -157,6 +205,11 @@ export function ChatPage() {
                     <UntrustedText text={t.output ?? ''} as="p" className="text-sm text-gray-200 whitespace-pre-wrap break-words" />
                   ) : (
                     <p role="status" className="text-sm text-blue-400">{knight} is working…</p>
+                  )}
+                  {!isFinalStatus(t.status) && staleIds.has(t.id) && (
+                    <p className="mt-1 text-xs text-yellow-400">
+                      Still waiting. The knight may be offline, check <Link to="/failed" className="underline">Failed &amp; lost</Link>.
+                    </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500">
                     {t.model && <span>Model {sanitizeText(t.model)}</span>}
