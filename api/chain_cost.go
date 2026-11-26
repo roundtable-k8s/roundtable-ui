@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -170,12 +169,12 @@ func missionChainIndex(ctx context.Context, client dynamic.Interface, namespace 
 	if client == nil {
 		return out
 	}
-	list, err := client.Resource(chainGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	items, err := cachedList(ctx, client, chainGVR, namespace)
 	if err != nil {
 		return out
 	}
 	knights := knightInfoMap(ctx, client, namespace)
-	for _, item := range list.Items {
+	for _, item := range items {
 		out[item.GetName()] = parseChainResource(item.Object, knights)
 	}
 	return out
