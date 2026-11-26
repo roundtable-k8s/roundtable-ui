@@ -1053,6 +1053,13 @@ func newTableCache(lookup func(ctx context.Context) map[string]string, interval,
 	return &tableCache{lookup: lookup, interval: interval, timeout: timeout}
 }
 
+// newKnightTableCache builds the process-wide knight-to-table cache.
+func newKnightTableCache(namespace string) *tableCache {
+	return newTableCache(func(ctx context.Context) map[string]string {
+		return knightTables(ctx, namespace)
+	}, 30*time.Second, 3*time.Second)
+}
+
 // get returns the cached map (nil before the first successful refresh).
 func (c *tableCache) get() map[string]string {
 	c.mu.RLock()

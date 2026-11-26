@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Chain list pagination, filters and slim payload (#275).
@@ -229,7 +227,7 @@ func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc 
 			return
 		}
 
-		list, err := dynClient.Resource(chainGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		items, err := cachedList(r.Context(), dynClient, chainGVR, namespace)
 		if err != nil {
 			slog.Error("Chain list error", "error", err)
 			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
@@ -237,9 +235,9 @@ func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc 
 		}
 
 		knights := getKnightInfoMap(r.Context(), namespace)
-		all := make([]ChainSummary, 0, len(list.Items))
+		all := make([]ChainSummary, 0, len(items))
 		filter := tableFilter(r)
-		for _, item := range list.Items {
+		for _, item := range items {
 			c := parseChainResource(item.Object, knights)
 			if !tableMatches(filter, c.RoundTableRef) {
 				continue
@@ -314,14 +312,14 @@ func chainGroupsHandler(namespace string) http.HandlerFunc {
 			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
 			return
 		}
-		list, err := dynClient.Resource(chainGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		items, err := cachedList(r.Context(), dynClient, chainGVR, namespace)
 		if err != nil {
 			slog.Error("Chain list error", "error", err)
 			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
 			return
 		}
-		all := make([]ChainSummary, 0, len(list.Items))
-		for _, item := range list.Items {
+		all := make([]ChainSummary, 0, len(items))
+		for _, item := range items {
 			md := getNestedMap(item.Object, "metadata")
 			all = append(all, ChainSummary{
 				Name:        getStr(md, "name"),

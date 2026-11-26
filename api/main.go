@@ -351,6 +351,10 @@ func main() {
 	// optionally narrow them to one table (#239).
 	tables := newTableSourceFromEnv(namespace)
 	fleetPrefix := tables.defaultPrefix()
+	// One knight-to-table cache for all WebSocket connections.
+	tc := newKnightTableCache(namespace)
+	tc.refresh()
+	go tc.run(runningCtx.Done())
 	startRunningRegistry(runningCtx, running, activity, tables.prefixes, namespace)
 
 	// Live chain updates over WS (#228)
@@ -463,7 +467,7 @@ func main() {
 	api.HandleFunc("/running", runningHandler(running, namespace)).Methods("GET")
 
 	// WebSocket for real-time NATS events
-	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards))
+	api.HandleFunc("/ws", wsHandler(tables, running, activity, chains, cards, tc))
 
 	// Config endpoint to expose fleet prefix to frontend (#60) and the
 	// namespace the dashboard reads (the default for new schedules, #302)
@@ -600,7 +604,7 @@ func fleetHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
-		crList, err := dynClient.Resource(knightGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		crItems, err := cachedList(r.Context(), dynClient, knightGVR, namespace)
 		if err != nil {
 			slog.Error("K8s knight CR list error", "error", err)
 			jsonError(w, "Failed to list fleet", http.StatusInternalServerError)
@@ -614,9 +618,9 @@ func fleetHandler(namespace string) http.HandlerFunc {
 		tableDefaults := tableDefaultsByName(r.Context(), namespace)
 		filter := tableFilter(r)
 
-		knights := make([]KnightStatus, 0, len(crList.Items))
-		for i := range crList.Items {
-			cr := &crList.Items[i]
+		knights := make([]KnightStatus, 0, len(crItems))
+		for i := range crItems {
+			cr := &crItems[i]
 			if !tableMatches(filter, knightTableName(cr)) {
 				continue
 			}
@@ -1243,7 +1247,7 @@ func briefingHandler(vaultPath string, dirs []string) http.HandlerFunc {
 	}
 }
 
-func wsHandler(src *tableSource, running *runningRegistry, activity *activityStore, chains *chainWatcher, cards *cardStore) http.HandlerFunc {
+func wsHandler(src *tableSource, running *runningRegistry, activity *activityStore, chains *chainWatcher, cards *cardStore, tc *tableCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check NATS health BEFORE upgrading (#19). Upgrading first and then
 		// closing makes the client fire onopen (UI shows "Connected") before
@@ -1336,11 +1340,7 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 			// Tag tasks with their table like GET /api/running. The lookup
 			// happens here and in a background loop, never inside the
 			// registry callback (which runs under its lock).
-			tc := newTableCache(func(ctx context.Context) map[string]string {
-				return knightTables(ctx, envOr("NAMESPACE", "roundtable"))
-			}, 30*time.Second, 3*time.Second)
-			tc.refresh()
-			go tc.run(done)
+			// The cache is process-wide (shared by every connection).
 			unsubRunning = running.subscribe(func(d RunningDelta) {
 				tbl := tc.get()
 				safeWrite(true, runningWSEvent(withTables(d, tbl)))
