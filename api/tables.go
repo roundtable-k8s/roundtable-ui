@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -63,7 +64,12 @@ type tableSource struct {
 	cached  []TableInfo
 	fetched time.Time
 	ok      bool // cached came from a successful list
+
+	inflight *tableFlight // non-nil while a discovery runs
 }
+
+// tableFlight marks one in-progress discovery; done closes when it finishes.
+type tableFlight struct{ done chan struct{} }
 
 func newTableSource(namespace, envPrefix, envStream string) *tableSource {
 	return &tableSource{
@@ -91,26 +97,74 @@ func (s *tableSource) defaultPrefix() string {
 }
 
 // tables returns the tables the dashboard covers, sorted by name. Never empty.
+// The lock is not held while the RoundTable list runs: concurrent callers
+// share one in-flight discovery, and a caller holding a cached copy (even a
+// stale one) while a refresh is under way returns that copy immediately.
 func (s *tableSource) tables(ctx context.Context) []TableInfo {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.ok && s.now().Sub(s.fetched) < s.ttl {
+		out := append([]TableInfo(nil), s.cached...)
+		s.mu.Unlock()
+		return out
+	}
+	if f := s.inflight; f != nil {
+		if s.ok {
+			out := append([]TableInfo(nil), s.cached...)
+			s.mu.Unlock()
+			return out
+		}
+		s.mu.Unlock()
+		select {
+		case <-f.done:
+		case <-ctx.Done():
+		}
+		return s.afterDiscovery()
+	}
+	f := &tableFlight{done: make(chan struct{})}
+	s.inflight = f
+	s.mu.Unlock()
+
+	discovered, err := s.discover(ctx)
+
+	s.mu.Lock()
+	if err == nil {
+		s.cached = resolveTables(discovered, s.envPrefix, s.envStream)
+		s.fetched = s.now()
+		s.ok = true
+	}
+	s.inflight = nil
+	close(f.done)
+	s.mu.Unlock()
+	if err != nil {
+		slog.WarnContext(ctx, "Tables: RoundTable list failed", "error", err, "cached", s.hasCache())
+	}
+	return s.afterDiscovery()
+}
+
+func (s *tableSource) hasCache() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ok
+}
+
+// afterDiscovery returns the last good list, or the FLEET_PREFIX fallback
+// when no list has ever succeeded.
+func (s *tableSource) afterDiscovery() []TableInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ok {
 		return append([]TableInfo(nil), s.cached...)
 	}
-	discovered, err := s.discover(ctx)
-	if err != nil {
-		if s.ok {
-			// Keep serving the last good list through a transient API error.
-			slog.WarnContext(ctx, "Tables: RoundTable list failed, using cached tables", "error", err)
-			return append([]TableInfo(nil), s.cached...)
-		}
-		slog.WarnContext(ctx, "Tables: RoundTable list failed, using FLEET_PREFIX fallback", "error", err)
-		return resolveTables(nil, s.envPrefix, s.envStream)
+	return resolveTables(nil, s.envPrefix, s.envStream)
+}
+
+// tablesHandler serves GET /api/tables: the covered tables, without touching
+// NATS.
+func tablesHandler(src *tableSource) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"tables": src.tables(r.Context())})
 	}
-	s.cached = resolveTables(discovered, s.envPrefix, s.envStream)
-	s.fetched = s.now()
-	s.ok = true
-	return append([]TableInfo(nil), s.cached...)
 }
 
 // prefixes returns the distinct NATS prefixes of all tables.

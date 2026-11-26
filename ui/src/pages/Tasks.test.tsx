@@ -34,7 +34,7 @@ beforeEach(() => {
   apiPost.mockReset()
   apiGet.mockReset()
   apiGet.mockImplementation((url: string) =>
-    Promise.resolve(url === '/api/tasks' ? { results: [], tables } : { taskId: 'invoke-rt-ui-1', status: 'pending' }))
+    Promise.resolve(url === '/api/tables' ? { tables } : { taskId: 'invoke-rt-ui-1', status: 'pending' }))
   apiPost.mockResolvedValue({ taskId: 'invoke-rt-ui-1', runId: 'r1', status: 'pending', roundTable: 'dev' })
 })
 
@@ -94,7 +94,7 @@ describe('TasksPage', () => {
 
   it('stops polling a task after 5 consecutive failed polls and marks it unavailable', async () => {
     apiGet.mockImplementation((url: string) =>
-      url === '/api/tasks' ? Promise.resolve({ results: [], tables }) : Promise.reject(new Error('404')))
+      url === '/api/tables' ? Promise.resolve({ tables }) : Promise.reject(new Error('404')))
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
     await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('status unavailable'), { timeout: 15000 })
@@ -106,7 +106,7 @@ describe('TasksPage', () => {
 
   it('polls the task and shows its status and output', async () => {
     apiGet.mockImplementation((url: string) => {
-      if (url === '/api/tasks') return Promise.resolve({ results: [], tables })
+      if (url === '/api/tables') return Promise.resolve({ tables })
       return Promise.resolve({ taskId: 'invoke-rt-ui-1', status: 'succeeded', output: 'page fixed' })
     })
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
