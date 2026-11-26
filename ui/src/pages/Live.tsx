@@ -17,17 +17,24 @@ export function LivePage() {
   const [filterKnight, setFilterKnight] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   const [filterDomain, setFilterDomain] = useState<string>('')
-  const [selectedKnight, setSelectedKnight] = useState<Knight | null>(null)
+  // Selection is a key plus a fallback for knights absent from the fleet; the
+  // fleet entry is looked up each render so the drawer stays live.
+  // namespace is undefined for a knight clicked before it was in the fleet:
+  // match by name alone so it picks up the real entry once the poll lands.
+  const [selected, setSelected] = useState<{ name: string; namespace?: string; fallback: Knight } | null>(null)
+  const selectedKnight = selected
+    ? fleetKnights.find(k => k.name === selected.name && (selected.namespace === undefined || k.namespace === selected.namespace)) ?? selected.fallback
+    : null
   const [activityTask, setActivityTask] = useState<{ taskId: string; knight?: string } | null>(null)
 
   const handleKnightClick = useCallback((knightName: string) => {
     const fleet = fleetKnights.find(k => k.name === knightName)
     if (fleet) {
-      setSelectedKnight(fleet)
+      setSelected({ name: fleet.name, namespace: fleet.namespace, fallback: fleet })
     } else {
       // Build a minimal Knight object for knights not in fleet response
       const cfg = getKnightConfig(knightName)
-      setSelectedKnight({
+      setSelected({ name: knightName, fallback: {
         name: knightName,
         domain: cfg.domain,
         status: 'offline',
@@ -38,7 +45,7 @@ export function LivePage() {
         skills: 0,
         nixTools: 0,
         labels: {},
-      })
+      } })
     }
   }, [fleetKnights])
 
@@ -201,7 +208,7 @@ export function LivePage() {
       </div>
 
       {/* Knight detail drawer */}
-      <KnightDetailDrawer knight={selectedKnight} onClose={() => setSelectedKnight(null)} />
+      <KnightDetailDrawer knight={selectedKnight} onClose={() => setSelected(null)} />
 
       {/* Task activity drawer (#214) */}
       {activityTask && (

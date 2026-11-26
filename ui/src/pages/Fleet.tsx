@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Zap, Crown, DollarSign, TrendingUp, ShieldOff } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
@@ -18,10 +18,22 @@ import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as S
 /** The knight's table for card lookup; undefined when unset or "none". */
 const tableOf = (k: { table?: string }) => (k.table && k.table !== 'none' ? k.table : undefined)
 
+const knightKey = (k: { namespace?: string; name: string }) => `${k.namespace ?? ''}/${k.name}`
+
 export function FleetPage() {
   const { knights, loading, error, refresh } = useFleet()
   const { table } = useTableFilter()
-  const [selectedKnight, setSelectedKnight] = useState<Knight | null>(null)
+  // Keep the selection as a key and derive the object from the latest poll so
+  // the open drawer follows the live fleet entry.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const selectedKnight = useMemo(
+    () => (selectedKey ? knights.find((k) => knightKey(k) === selectedKey) ?? null : null),
+    [knights, selectedKey],
+  )
+  // The selected knight vanished from the fleet: close the drawer.
+  useEffect(() => {
+    if (selectedKey && !loading && !selectedKnight) setSelectedKey(null)
+  }, [selectedKey, selectedKnight, loading])
   const { events } = useWebSocket()
   const { cards } = useCards()
   const [skillFilter, setSkillFilter] = useState<SkillFilterValue>({})
@@ -267,7 +279,7 @@ export function FleetPage() {
             <KnightCard
               key={knight.name}
               knight={knight}
-              onClick={() => setSelectedKnight(knight)}
+              onClick={() => setSelectedKey(knightKey(knight))}
               activity={knightActivity[knight.name]}
               card={cardForKnight(cards, knight.name, tableOf(knight))}
               showTable={!table}
@@ -284,7 +296,7 @@ export function FleetPage() {
       {/* Knight detail drawer */}
       <KnightDetailDrawer
         knight={selectedKnight}
-        onClose={() => setSelectedKnight(null)}
+        onClose={() => setSelectedKey(null)}
         card={selectedKnight ? cardForKnight(cards, selectedKnight.name, tableOf(selectedKnight)) : undefined}
       />
     </div>

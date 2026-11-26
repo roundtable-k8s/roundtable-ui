@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { apiFetch } from '../lib/api'
 
 // Matches pi-knight's introspect stats response (src/introspect.ts buildStats)
@@ -99,57 +99,76 @@ export function useKnightSession() {
   const [tree, setTree] = useState<SessionTreeNode[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Latest request id per kind: a response for an older request (another
+  // knight, or a superseded refresh) must not overwrite newer state.
+  const latest = useRef({ stats: 0, recent: 0, tree: 0 })
 
   const fetchStats = useCallback(async (knight: string, timeoutMs = SESSION_TIMEOUT_MS) => {
+    const id = ++latest.current.stats
+    const stale = () => id !== latest.current.stats
     setLoading(true)
     setError(null)
     try {
-      const res = await fetchWithTimeout(`/api/fleet/${knight}/session?type=stats`, timeoutMs)
+      const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(knight)}/session?type=stats`, timeoutMs)
       if (!res) {
         // Knight doesn't support introspect - not an error
+        if (stale()) return
         setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
         return
       }
       if (!res.ok) {
+        if (stale()) return
         setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
         return
       }
       const data = await res.json()
+      if (stale()) return
       setStats({ ...data, supported: true })
     } catch (e) {
       // Graceful failure - return null instead of throwing
+      if (stale()) return
       setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
       setError(null)  // Don't show error for unsupported knights
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }, [])
 
   const fetchRecent = useCallback(async (knight: string, limit = 20, timeoutMs = SESSION_TIMEOUT_MS) => {
+    const id = ++latest.current.recent
+    const stale = () => id !== latest.current.recent
     try {
-      const res = await fetchWithTimeout(`/api/fleet/${knight}/session?type=recent&limit=${limit}`, timeoutMs)
+      const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(knight)}/session?type=recent&limit=${limit}`, timeoutMs)
       if (!res || !res.ok) {
+        if (stale()) return
         setRecent([])
         return
       }
       const data = await res.json()
+      if (stale()) return
       setRecent(data.entries || [])
     } catch (e) {
+      if (stale()) return
       setRecent([])
       setError(null)
     }
   }, [])
 
   const fetchTree = useCallback(async (knight: string, timeoutMs = SESSION_TIMEOUT_MS) => {
+    const id = ++latest.current.tree
+    const stale = () => id !== latest.current.tree
     try {
-      const res = await fetchWithTimeout(`/api/fleet/${knight}/session?type=tree`, timeoutMs)
+      const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(knight)}/session?type=tree`, timeoutMs)
       if (!res || !res.ok) {
+        if (stale()) return
         setTree([])
         return
       }
       const data = await res.json()
+      if (stale()) return
       setTree(data.nodes || [])
     } catch (e) {
+      if (stale()) return
       setTree([])
       setError(null)
     }

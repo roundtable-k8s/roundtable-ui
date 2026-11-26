@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
@@ -204,6 +204,17 @@ const entryTypeColors: Record<string, string> = {
   compaction: 'bg-red-500/20 text-red-400',
 }
 
+function statusLabel(k: Knight): string {
+  switch (k.status) {
+    case 'scaled-to-zero': return 'Scaled to zero'
+    case 'starting': return 'Starting'
+    case 'busy': return 'Busy'
+    case 'online': return 'Online'
+    case 'offline': return 'Offline'
+    default: return k.ready ? 'Online' : 'Offline'
+  }
+}
+
 export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const { stats, recent, loading, error, fetchStats, fetchRecent } = useKnightSession()
   const [recentLoading, setRecentLoading] = useState(false)
@@ -211,14 +222,22 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const [knightDetail, setKnightDetail] = useState<Knight | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
+  const detailAbort = useRef<AbortController | null>(null)
+
   const fetchKnightDetail = async (knightName: string) => {
+    // One detail request at a time: abort the previous one (other knight or
+    // an earlier refresh) so its late response can't be rendered.
+    detailAbort.current?.abort()
+    const controller = new AbortController()
+    detailAbort.current = controller
     setDetailLoading(true)
     try {
-      setKnightDetail(await apiGet<Knight>(`/api/fleet/${knightName}`))
+      const detail = await apiGet<Knight>(`/api/fleet/${encodeURIComponent(knightName)}`, { signal: controller.signal })
+      if (!controller.signal.aborted) setKnightDetail(detail)
     } catch (e) {
-      console.error('Failed to fetch knight detail:', e)
+      if (!controller.signal.aborted) console.error('Failed to fetch knight detail:', e)
     } finally {
-      setDetailLoading(false)
+      if (!controller.signal.aborted) setDetailLoading(false)
     }
   }
 
@@ -230,15 +249,21 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
     setRecentLoading(false)
   }
 
+  // Keyed on the knight's identity, not the object: the fleet poll hands the
+  // drawer a fresh object every 10 s and that must not refetch or reset it.
+  const knightName = knight?.name
+  const knightNamespace = knight?.namespace
   useEffect(() => {
-    if (knight) {
+    if (knightName) {
       // Clear the previous knight's detail so a slow/failed fetch can't show
       // knight A's skills and config under knight B's name
       setKnightDetail(null)
-      refreshAll(knight.name)
+      refreshAll(knightName)
       setLogsExpanded(false)
     }
-  }, [knight])
+    return () => detailAbort.current?.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [knightName, knightNamespace])
 
   if (!knight) return null
 
@@ -275,8 +300,8 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
         <div className="p-4 space-y-6">
           {/* Status bar */}
           <div className="flex items-center gap-3 flex-wrap">
-            <span className={`w-2.5 h-2.5 rounded-full ${knight.status === 'scaled-to-zero' ? 'bg-gray-500' : knight.ready ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-            <span className="text-sm text-gray-300">{knight.status === 'scaled-to-zero' ? 'Scaled to zero' : knight.ready ? 'Online' : 'Offline'}</span>
+            <span className={`w-2.5 h-2.5 rounded-full ${knight.status === 'scaled-to-zero' ? 'bg-gray-500' : knight.status === 'starting' ? 'bg-amber-500' : knight.ready ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+            <span className="text-sm text-gray-300">{statusLabel(knight)}</span>
             <span className="text-xs text-gray-500">•</span>
             <span className="text-xs text-gray-500">{formatAge(knight.createdAt, knight.age)} {knight.ready ? 'uptime' : 'age'}</span>
             <span className="text-xs text-gray-500">•</span>
