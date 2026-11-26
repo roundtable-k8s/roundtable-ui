@@ -75,3 +75,11 @@ describe('TriggerDetailPage', () => {
     expect(within(section).getByRole('link', { name: 'run-2' })).toHaveAttribute('href', '/chains?chain=run-2')
   })
 })
+
+describe('TriggersPage links', () => {
+  it('links to the Schedules page', async () => {
+    mockApiGet.mockResolvedValue([])
+    render(<MemoryRouter><TriggersPage /></MemoryRouter>)
+    expect(await screen.findByRole('link', { name: /Schedules/ })).toHaveAttribute('href', '/schedules')
+  })
+})

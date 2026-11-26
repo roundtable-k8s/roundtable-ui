@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
-import { Zap, ArrowLeft, ExternalLink } from 'lucide-react'
+import { Zap, ArrowLeft, ExternalLink, CalendarClock } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
@@ -89,6 +89,9 @@ export function TriggersPage() {
   return (
     <div>
       <PageHeader icon={Zap} title="Triggers" subtitle="What starts your chains: schedules, NATS subjects and webhooks">
+        <Link to="/schedules" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
+          <CalendarClock className="w-4 h-4" aria-hidden /> Schedules
+        </Link>
         <RefreshButton onClick={refresh} loading={loading} />
       </PageHeader>
       {error && <div className="mb-4"><ErrorBanner>Failed to load triggers: {error}</ErrorBanner></div>}

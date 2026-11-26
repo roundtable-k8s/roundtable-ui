@@ -61,6 +61,11 @@ type TriggerSummary struct {
 
 	Source      TriggerSource `json:"source"`
 	TargetChain string        `json:"targetChain"`
+	// TargetKnight is spec.target.knight.name for a knight target.
+	TargetKnight string `json:"targetKnight,omitempty"`
+	// Task is what a firing sends: the knight target's task, the mission
+	// target's objective, else spec.input (all Go templates, unrendered).
+	Task string `json:"task,omitempty"`
 	// Concurrency policy (Allow, Forbid, Replace) and maxActive (0 = default).
 	ConcurrencyPolicy string `json:"concurrencyPolicy"`
 	MaxActive         int    `json:"maxActive,omitempty"`
@@ -137,6 +142,15 @@ func parseTriggerResource(obj map[string]interface{}) TriggerSummary {
 		ActiveRuns:        []string{},
 		Conditions:        []TriggerCondition{},
 		Ready:             "unknown",
+	}
+	target := getNestedMap(spec, "target")
+	if k := getNestedMap(target, "knight"); k != nil {
+		t.TargetKnight = getStr(k, "name")
+		t.Task = getStr(k, "task")
+	} else if m := getNestedMap(target, "mission"); m != nil {
+		t.Task = getStr(m, "objective")
+	} else {
+		t.Task = getStr(spec, "input")
 	}
 	if t.ConcurrencyPolicy == "" {
 		t.ConcurrencyPolicy = "Allow"
