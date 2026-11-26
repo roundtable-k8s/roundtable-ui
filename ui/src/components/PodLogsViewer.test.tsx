@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { PodLogsViewer, ALL_PODS } from './PodLogsViewer'
 import type { KnightPodsResponse } from '../lib/podLogs'
 
@@ -119,14 +119,39 @@ describe('PodLogsViewer', () => {
     expect(screen.getByTestId('pod-logs')).not.toHaveTextContent('Error')
   })
 
+  it('names the container the shown skipped rows were fetched with, not the live selector', async () => {
+    apiGet.mockResolvedValue({
+      pods: [pod('galahad-abc-1'), pod('galahad-abc-3', { containers: [{ name: 'knight', ready: true, restartCount: 0, hasPrevious: false }] })],
+      default: 'galahad-abc-1',
+    })
+    render(<PodLogsViewer knightName="galahad" />)
+    await waitFor(() => expect(apiGetText).toHaveBeenCalled())
+    fireEvent.change(screen.getByLabelText('Pod'), { target: { value: ALL_PODS } })
+    await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('[abc-1]'))
+    fireEvent.change(screen.getByLabelText('Container'), { target: { value: 'nats-sidecar' } })
+    await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('skipped: no container "nats-sidecar"'))
+    // A slow fetch for the next container must not relabel the shown result.
+    const releases: ((v: string) => void)[] = []
+    apiGetText.mockImplementation(() => new Promise<string>((r) => { releases.push(r) }))
+    fireEvent.change(screen.getByLabelText('Container'), { target: { value: 'knight' } })
+    await waitFor(() => expect(apiGetText).toHaveBeenCalled())
+    await act(async () => { releases.forEach((r) => r('2026-11-24T10:00:01Z late line\n')) })
+    await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('late line'))
+    expect(screen.getByTestId('pod-logs')).not.toHaveTextContent('skipped: no container')
+  })
+
   it('refresh fetches logs exactly once', async () => {
     render(<PodLogsViewer knightName="galahad" />)
     await waitFor(() => expect(screen.getByTestId('pod-logs')).toHaveTextContent('galahad-abc-2'))
     apiGetText.mockClear()
     apiGet.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(apiGetText).toHaveBeenCalledTimes(1))
+    // Flush the pods reload and any request it might trigger before the final counts.
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
     expect(apiGet).toHaveBeenCalledTimes(1)
+    expect(apiGetText).toHaveBeenCalledTimes(1)
     expect(lastUrl()).toBe('/api/fleet/galahad/logs?pod=galahad-abc-2')
   })
 
