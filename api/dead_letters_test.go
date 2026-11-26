@@ -11,7 +11,7 @@ import (
 )
 
 type gwCall struct {
-	method, path, query, auth, body string
+	method, path, query, auth, body, idem string
 }
 
 func deadLetterRouter(t *testing.T, status int, resp string) (*mux.Router, *[]gwCall) {
@@ -19,7 +19,7 @@ func deadLetterRouter(t *testing.T, status int, resp string) (*mux.Router, *[]gw
 	var calls []gwCall
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
-		calls = append(calls, gwCall{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), string(b)})
+		calls = append(calls, gwCall{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), string(b), r.Header.Get("Idempotency-Key")})
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		io.WriteString(w, resp)

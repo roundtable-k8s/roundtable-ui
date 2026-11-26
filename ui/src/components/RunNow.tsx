@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { Link as RouterLink } from 'react-router-dom'
 import { Play } from 'lucide-react'
 import { apiGet, apiPost } from '../lib/api'
+import { SubmissionKey } from '../lib/submissionKey'
 import { sanitizeText } from '../lib/untrusted'
 
 const POLL_MS = 3000
@@ -23,6 +24,7 @@ interface ChainRun {
 export function RunNow({ chain, namespace }: { chain: string; namespace: string }) {
   const [input, setInput] = useState('')
   const [starting, setStarting] = useState(false)
+  const submission = useRef(new SubmissionKey())
   const [run, setRun] = useState<ChainRun | null>(null)
   const [error, setError] = useState('')
 
@@ -40,13 +42,17 @@ export function RunNow({ chain, namespace }: { chain: string; namespace: string 
   )
 
   const start = async () => {
+    if (starting) return
     setStarting(true)
     setError('')
     try {
       const body: { input?: string; namespace?: string } = { namespace }
       if (input.trim()) body.input = input
-      setRun(await apiPost<ChainRun>(`/api/chains/${encodeURIComponent(chain)}/run`, body))
+      const key = submission.current.next(JSON.stringify([chain, body]))
+      setRun(await apiPost<ChainRun>(`/api/chains/${encodeURIComponent(chain)}/run`, body, { headers: { 'Idempotency-Key': key } }))
+      submission.current.settle()
     } catch (e) {
+      submission.current.settle(e)
       setError(e instanceof Error ? e.message : 'Failed to start the run')
     } finally {
       setStarting(false)

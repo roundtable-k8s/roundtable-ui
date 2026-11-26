@@ -73,9 +73,23 @@ describe('TasksPage', () => {
     await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
     await userEvent.type(screen.getByLabelText('Quest'), 'fix it{Enter}')
     await waitFor(() => expect(apiPost).toHaveBeenCalled())
-    expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', { knight: 'rt-ui', task: 'fix it', namespace: 'team-b' })
+    expect(apiPost).toHaveBeenCalledWith('/api/tasks/dispatch', { knight: 'rt-ui', task: 'fix it', namespace: 'team-b' }, { headers: { 'Idempotency-Key': expect.any(String) } })
     expect(await screen.findByText('invoke-rt-ui-1')).toBeTruthy()
     expect(screen.getByTestId('dispatch-status').textContent).toBe('pending')
+  })
+
+  it('keeps the key for a retry after a 5xx and ignores a click while in flight', async () => {
+    apiPost.mockRejectedValueOnce(Object.assign(new Error('bad gateway'), { status: 502 }))
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    await userEvent.type(screen.getByLabelText('Quest'), 'fix it')
+    const btn = screen.getByRole('button', { name: /dispatch/i })
+    await userEvent.click(btn)
+    await waitFor(() => expect(btn).not.toBeDisabled())
+    await userEvent.click(btn)
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2))
+    const keys = apiPost.mock.calls.map((c) => c[2].headers['Idempotency-Key'])
+    expect(keys[1]).toBe(keys[0])
   })
 
   it('stops polling a task after 5 consecutive failed polls and marks it unavailable', async () => {

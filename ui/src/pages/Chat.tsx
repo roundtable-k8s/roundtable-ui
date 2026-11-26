@@ -3,6 +3,7 @@ import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { useSearchParams } from 'react-router-dom'
 import { MessageSquare, Send, Activity } from 'lucide-react'
 import { apiGet, apiPost, ApiError } from '../lib/api'
+import { SubmissionKey } from '../lib/submissionKey'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
 import { UntrustedText } from '../components/UntrustedText'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
@@ -23,6 +24,7 @@ export function ChatPage() {
   const [message, setMessage] = useState('')
   const [model, setModel] = useState('')
   const [sending, setSending] = useState(false)
+  const submission = useRef(new SubmissionKey())
   const [error, setError] = useState<string | null>(null)
   const [activityTask, setActivityTask] = useState<string | null>(null)
   const nextId = useRef(1)
@@ -71,16 +73,20 @@ export function ChatPage() {
     setError(null)
     const id = nextId.current++
     try {
-      const t = await apiPost<ChatTask>(`/api/chat/${encodeURIComponent(knight)}`, {
+      const payload = {
         message: text,
         ...(namespace ? { namespace } : {}),
         ...(runId ? { runId } : {}),
         ...(model.trim() ? { model: model.trim() } : {}),
-      })
+      }
+      const key = submission.current.next(JSON.stringify([knight, payload]))
+      const t = await apiPost<ChatTask>(`/api/chat/${encodeURIComponent(knight)}`, payload, { headers: { 'Idempotency-Key': key } })
+      submission.current.settle()
       setTurns((ts) => [...ts, mergeTurn({ id, message: text, status: 'pending' }, t)])
       if (t.runId && t.runId !== runId) update({ run: t.runId })
       setMessage('')
     } catch (e) {
+      submission.current.settle(e)
       setError(e instanceof Error ? e.message : 'Send failed')
     } finally {
       setSending(false)

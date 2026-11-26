@@ -486,7 +486,8 @@ func main() {
 	// CORS — defaults to same-origin (no origins = same-origin only) (#57)
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Idempotency-Key"},
+		ExposedHeaders:   []string{"Idempotent-Replay"},
 		AllowCredentials: false,
 	}
 	if origins := envOr("ALLOWED_ORIGINS", ""); origins != "" {

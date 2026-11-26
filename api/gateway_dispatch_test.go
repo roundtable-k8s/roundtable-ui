@@ -25,7 +25,7 @@ type fakeGateway struct {
 func (f *fakeGateway) server(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
-		c := gwCall{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), string(b)}
+		c := gwCall{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), string(b), r.Header.Get("Idempotency-Key")}
 		f.mu.Lock()
 		f.calls = append(f.calls, c)
 		f.mu.Unlock()
@@ -328,5 +328,84 @@ func TestChainRunCancelValidation(t *testing.T) {
 	}
 	if len(f.calls) != 0 {
 		t.Errorf("invalid requests reached the gateway: %v", f.calls)
+	}
+}
+
+func doReqKey(r http.Handler, target, body string, hdr map[string]string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("POST", target, strings.NewReader(body))
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestIdempotencyKeyForwarded(t *testing.T) {
+	cases := []struct{ name, target, body string }{
+		{"dispatch", "/api/tasks/dispatch", `{"knight":"galahad","task":"go"}`},
+		{"chain run", "/api/chains/nightly/run", `{}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Fake gateway: the first call creates work, a repeat of the key replays.
+			seen := map[string]bool{}
+			created := 0
+			f := &fakeGateway{}
+			f.handler = func(call gwCall, w http.ResponseWriter) {
+				if call.idem != "" && seen[call.idem] {
+					w.Header().Set("Idempotent-Replay", "true")
+				} else {
+					created++
+					seen[call.idem] = true
+				}
+				w.WriteHeader(http.StatusAccepted)
+				io.WriteString(w, `{"taskId":"t1","runId":"run-1"}`)
+			}
+			srv := f.server(t)
+			r := dispatchRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+			h := map[string]string{"Idempotency-Key": " abc "}
+
+			w1 := doReqKey(r, c.target, c.body, h)
+			w2 := doReqKey(r, c.target, c.body, h)
+			if w1.Code != 202 || w2.Code != 202 {
+				t.Fatalf("got %d %d", w1.Code, w2.Code)
+			}
+			if f.calls[0].idem != "abc" || f.calls[1].idem != "abc" {
+				t.Errorf("gateway keys %q %q", f.calls[0].idem, f.calls[1].idem)
+			}
+			if created != 1 {
+				t.Errorf("work created %d times", created)
+			}
+			if w1.Header().Get("Idempotent-Replay") != "" || w2.Header().Get("Idempotent-Replay") != "true" {
+				t.Errorf("replay headers %q %q", w1.Header().Get("Idempotent-Replay"), w2.Header().Get("Idempotent-Replay"))
+			}
+
+			// No header: nothing is sent.
+			doReqKey(r, c.target, c.body, nil)
+			if last := f.calls[len(f.calls)-1]; last.idem != "" {
+				t.Errorf("unexpected key %q", last.idem)
+			}
+		})
+	}
+}
+
+func TestIdempotencyKeyInvalid(t *testing.T) {
+	for _, k := range []string{"   ", strings.Repeat("a", 256), "café", "a\x7fb", "a\tb"} {
+		f := &fakeGateway{}
+		srv := f.server(t)
+		r := dispatchRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+		for _, c := range [][2]string{
+			{"/api/tasks/dispatch", `{"knight":"galahad","task":"go"}`},
+			{"/api/chains/nightly/run", `{}`},
+		} {
+			w := doReqKey(r, c[0], c[1], map[string]string{"Idempotency-Key": k})
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("key %q on %s: got %d", k, c[0], w.Code)
+			}
+		}
+		if len(f.calls) != 0 {
+			t.Errorf("key %q reached the gateway", k)
+		}
 	}
 }
