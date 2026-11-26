@@ -49,7 +49,7 @@ describe('KnightDetailDrawer', () => {
     rerender(<KnightDetailDrawer knight={k('bors')} onClose={() => {}} />)
     await waitFor(() => expect(resolvers['/api/fleet/bors']).toBeDefined())
     await act(async () => {
-      resolvers['/api/fleet/arthur'](json(k('arthur', { skillsList: [{ name: 'a-only-skill', description: '' }] } as Partial<Knight>)))
+      resolvers['/api/fleet/arthur'](json(k('arthur', { skillsList: ['a-only-skill'] })))
     })
     expect(screen.queryByText('a-only-skill')).not.toBeInTheDocument()
   })

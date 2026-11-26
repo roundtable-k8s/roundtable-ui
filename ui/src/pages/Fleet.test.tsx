@@ -19,7 +19,10 @@ vi.mock('../hooks/useFleet', () => ({
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
 let cards: CardMap = new Map()
 vi.mock('../hooks/useCards', () => ({ useCards: () => ({ cards, loading: false, unavailable: false }) }))
-vi.mock('../components/KnightDetailDrawer', () => ({ KnightDetailDrawer: () => null }))
+vi.mock('../components/KnightDetailDrawer', () => ({
+  KnightDetailDrawer: ({ knight }: { knight: Knight | null }) =>
+    knight ? <div data-testid="drawer">{`${knight.name}:${knight.restarts}`}</div> : null,
+}))
 
 const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)
 
@@ -107,5 +110,27 @@ describe('Fleet card of the knight\'s own table', () => {
     render(<MemoryRouter><FleetPage /></MemoryRouter>)
     await user.click(screen.getByRole('button', { name: 'ops' }))
     expect(names()).toEqual(['galahad'])
+  })
+})
+
+describe('Fleet detail drawer follows the live fleet', () => {
+  it('shows the restart count from the next poll', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    await user.click(screen.getByRole('heading', { level: 3, name: 'galahad' }))
+    expect(screen.getByTestId('drawer')).toHaveTextContent('galahad:0')
+    knights = knights.map((x) => (x.name === 'galahad' ? { ...x, restarts: 7 } : x))
+    rerender(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.getByTestId('drawer')).toHaveTextContent('galahad:7')
+  })
+
+  it('closes when the next poll no longer includes the knight', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    await user.click(screen.getByRole('heading', { level: 3, name: 'galahad' }))
+    expect(screen.getByTestId('drawer')).toBeInTheDocument()
+    knights = knights.filter((x) => x.name !== 'galahad')
+    rerender(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.queryByTestId('drawer')).not.toBeInTheDocument()
   })
 })

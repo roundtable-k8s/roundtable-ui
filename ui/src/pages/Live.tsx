@@ -11,8 +11,6 @@ import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 
-const knightKey = (k: { namespace?: string; name: string }) => `${k.namespace ?? ''}/${k.name}`
-
 export function LivePage() {
   const { events, connected } = useWebSocket()
   const { knights: fleetKnights, error: fleetError } = useFleet()
@@ -21,20 +19,22 @@ export function LivePage() {
   const [filterDomain, setFilterDomain] = useState<string>('')
   // Selection is a key plus a fallback for knights absent from the fleet; the
   // fleet entry is looked up each render so the drawer stays live.
-  const [selected, setSelected] = useState<{ key: string; fallback: Knight } | null>(null)
+  // namespace is undefined for a knight clicked before it was in the fleet:
+  // match by name alone so it picks up the real entry once the poll lands.
+  const [selected, setSelected] = useState<{ name: string; namespace?: string; fallback: Knight } | null>(null)
   const selectedKnight = selected
-    ? fleetKnights.find(k => knightKey(k) === selected.key) ?? selected.fallback
+    ? fleetKnights.find(k => k.name === selected.name && (selected.namespace === undefined || k.namespace === selected.namespace)) ?? selected.fallback
     : null
   const [activityTask, setActivityTask] = useState<{ taskId: string; knight?: string } | null>(null)
 
   const handleKnightClick = useCallback((knightName: string) => {
     const fleet = fleetKnights.find(k => k.name === knightName)
     if (fleet) {
-      setSelected({ key: knightKey(fleet), fallback: fleet })
+      setSelected({ name: fleet.name, namespace: fleet.namespace, fallback: fleet })
     } else {
       // Build a minimal Knight object for knights not in fleet response
       const cfg = getKnightConfig(knightName)
-      setSelected({ key: `/${knightName}`, fallback: {
+      setSelected({ name: knightName, fallback: {
         name: knightName,
         domain: cfg.domain,
         status: 'offline',
