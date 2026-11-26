@@ -32,7 +32,7 @@ describe('fetchWithTimeout', () => {
   it('passes an abort signal to apiFetch', async () => {
     mockFetch.mockResolvedValue(new Response('ok'))
     await fetchWithTimeout('/x')
-    expect(mockFetch).toHaveBeenCalledWith('/x', { signal: expect.any(AbortSignal) })
+    expect(mockFetch).toHaveBeenCalledWith('/x', { signal: expect.any(AbortSignal), timeoutMs: 0 })
   })
 
   it('returns null when the timeout fires first', async () => {

@@ -80,7 +80,8 @@ export async function fetchWithTimeout(url: string, timeoutMs = SESSION_TIMEOUT_
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   
   try {
-    const res = await apiFetch(url, { signal: controller.signal })
+    // timeoutMs: 0 — this helper's own timer decides, so an AbortError here means "no answer in time"
+    const res = await apiFetch(url, { signal: controller.signal, timeoutMs: 0 })
     clearTimeout(timeout)
     return res
   } catch (e) {
