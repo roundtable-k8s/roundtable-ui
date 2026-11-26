@@ -301,7 +301,7 @@ func queuesHandler(namespace string) http.HandlerFunc {
 			jsonError(w, "JetStream not available", http.StatusServiceUnavailable)
 			return
 		}
-		crList, err := dynClient.Resource(knightGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		crItems, err := cachedList(r.Context(), dynClient, knightGVR, namespace)
 		if err != nil {
 			slog.Error("K8s knight CR list error", "error", err)
 			jsonError(w, "Failed to list knights", http.StatusInternalServerError)
@@ -313,10 +313,10 @@ func queuesHandler(namespace string) http.HandlerFunc {
 
 		// Look up knights concurrently, a few at a time.
 		filter := tableFilter(r)
-		items := make([]*unstructured.Unstructured, 0, len(crList.Items))
-		for i := range crList.Items {
-			if tableMatches(filter, knightTableName(&crList.Items[i])) {
-				items = append(items, &crList.Items[i])
+		items := make([]*unstructured.Unstructured, 0, len(crItems))
+		for i := range crItems {
+			if tableMatches(filter, knightTableName(&crItems[i])) {
+				items = append(items, &crItems[i])
 			}
 		}
 		out := make([]KnightQueue, len(items))

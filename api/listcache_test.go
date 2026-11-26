@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -11,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -57,5 +60,64 @@ func TestTriggersServedFromWatchCache(t *testing.T) {
 	}
 	if n := lists.Load(); n != 1 {
 		t.Fatalf("watch update caused extra list calls: %d", n)
+	}
+}
+
+func TestCachedListFailedSyncRemembered(t *testing.T) {
+	t.Cleanup(resetListCache)
+	fc := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{triggerGVR: "TriggerList"})
+	fc.PrependWatchReactor("*", func(k8stesting.Action) (bool, watch.Interface, error) {
+		return true, nil, errors.New("watch forbidden")
+	})
+	// The informer's initial list also fails, so it can never sync.
+	var informerLists atomic.Int32
+	fc.PrependReactor("list", "triggers", func(k8stesting.Action) (bool, runtime.Object, error) {
+		informerLists.Add(1)
+		return true, nil, errors.New("list unavailable")
+	})
+	oldTimeout := listCacheSyncTimeoutVar
+	listCacheSyncTimeoutVar = 300 * time.Millisecond
+	t.Cleanup(func() { listCacheSyncTimeoutVar = oldTimeout })
+
+	start := time.Now()
+	_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")
+	first := time.Since(start)
+	if first < 250*time.Millisecond {
+		t.Fatalf("first read should wait for the sync timeout, took %v", first)
+	}
+	start = time.Now()
+	_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")
+	if d := time.Since(start); d > 150*time.Millisecond {
+		t.Fatalf("second read should skip the wait, took %v", d)
+	}
+}
+
+func TestResetListCacheStopsInformers(t *testing.T) {
+	fc := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{triggerGVR: "TriggerList"})
+	if _, err := cachedList(context.Background(), fc, triggerGVR, "roundtable"); err != nil {
+		t.Fatal(err)
+	}
+	resetListCache()
+	listCacheMu.Lock()
+	n := len(listCacheInformers)
+	listCacheMu.Unlock()
+	if n != 0 {
+		t.Fatalf("registry not cleared: %d", n)
+	}
+}
+
+func TestSharedTableCacheOneLookup(t *testing.T) {
+	var lookups atomic.Int32
+	tc := newTableCache(func(context.Context) map[string]string {
+		lookups.Add(1)
+		return map[string]string{"galahad": "t"}
+	}, time.Hour, time.Second)
+	tc.refresh()
+	// Two "connections" read the same cache.
+	a, b := tc.get(), tc.get()
+	if a["galahad"] != "t" || b["galahad"] != "t" || lookups.Load() != 1 {
+		t.Fatalf("lookups=%d", lookups.Load())
 	}
 }

@@ -40,6 +40,7 @@ func setupTriggerRouter(t *testing.T, objs ...map[string]interface{}) *mux.Route
 	t.Helper()
 	old := dynClient
 	t.Cleanup(func() { dynClient = old })
+	t.Cleanup(resetListCache)
 	dynClient = fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{triggerGVR: "TriggerList", chainGVR: "ChainList"})
 	for _, o := range objs {
