@@ -1,11 +1,16 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Crown, Shield, DollarSign, ChevronDown, Layers, Settings, CheckSquare } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { inTable } from '../lib/tables'
 import type { RoundTable } from '../lib/types'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, PhaseBadge, ProgressBar } from '../components/ui'
 
 export function RoundTablesPage() {
-  const { data: roundTables, loading, error, refresh } = usePolledFetch<RoundTable[]>('/api/roundtables', 15000, [])
+  const { data: allTables, loading, error, refresh } = usePolledFetch<RoundTable[]>('/api/roundtables', 15000, [])
+  const { table } = useTableFilter()
+  const roundTables = allTables.filter(rt => inTable(table, rt.name))
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
 
   const toggleCard = (name: string) => {
@@ -71,6 +76,22 @@ export function RoundTablesPage() {
                       <span className="text-green-400 font-medium">{rt.knightsReady}</span>
                       <span className="text-gray-500"> / {rt.knightsTotal}</span>
                     </div>
+                  </div>
+
+                  <p className="text-xs text-gray-500" data-testid={`breakdown-${rt.name}`}>
+                    {rt.knightsReady} ready, {rt.knightsScaledToZero ?? 0} asleep, {rt.knightsSuspended ?? 0} suspended, {rt.knightsNotReady ?? 0} not ready
+                  </p>
+
+                  {/* Planner */}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Mission planning</span>
+                    {rt.plannerEnabled !== false && rt.plannerKnight ? (
+                      <span>
+                        Planner: <Link to={`/fleet?table=${encodeURIComponent(rt.name)}`} className="text-roundtable-gold hover:underline">{rt.plannerKnight}</Link>
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">Planner: none</span>
+                    )}
                   </div>
 
                   {/* Knight readiness bar */}
