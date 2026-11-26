@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/gorilla/mux"
@@ -39,7 +40,7 @@ func taskDispatchHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid knight name", http.StatusBadRequest)
 			return
 		}
-		if len(req.Task) == 0 || len(req.Task) > maxDispatchTaskLen {
+		if strings.TrimSpace(req.Task) == "" || utf8.RuneCountInString(req.Task) > maxDispatchTaskLen {
 			jsonError(w, "Task must be 1-10000 characters", http.StatusBadRequest)
 			return
 		}

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gorilla/mux"
 )
@@ -39,7 +41,7 @@ func chatSendHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		if len(req.Message) == 0 || len(req.Message) > maxDispatchTaskLen {
+		if strings.TrimSpace(req.Message) == "" || utf8.RuneCountInString(req.Message) > maxDispatchTaskLen {
 			jsonError(w, "Message must be 1-10000 characters", http.StatusBadRequest)
 			return
 		}

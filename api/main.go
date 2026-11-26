@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -1901,7 +1902,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 
 		// Validate objective
 		objective, _ := reqBody["objective"].(string)
-		if len(objective) == 0 || len(objective) > 1000 {
+		if n := utf8.RuneCountInString(objective); strings.TrimSpace(objective) == "" || n > 1000 {
 			jsonError(w, "Objective required (1-1000 chars)", http.StatusBadRequest)
 			return
 		}
@@ -1969,8 +1970,8 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 			metav1.CreateOptions{},
 		)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Mission create error", "error", err)
-			jsonError(w, fmt.Sprintf("Failed to create mission: %v", err), http.StatusInternalServerError)
+			code, msg := k8sErrorStatus(r.Context(), err, "create")
+			jsonError(w, msg, code)
 			return
 		}
 
@@ -2001,8 +2002,8 @@ func missionDeleteHandler(namespace string) http.HandlerFunc {
 
 		err := dynClient.Resource(missionGVR).Namespace(namespace).Delete(r.Context(), name, metav1.DeleteOptions{})
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Mission delete error", "error", err)
-			jsonError(w, "Failed to delete mission", http.StatusInternalServerError)
+			code, msg := k8sErrorStatus(r.Context(), err, "delete")
+			jsonError(w, msg, code)
 			return
 		}
 
