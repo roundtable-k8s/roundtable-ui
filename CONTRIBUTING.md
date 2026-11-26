@@ -60,6 +60,8 @@ and writes the bundle to `api/static`.
 
 ## Code Style
 
+- Add a dependency to `ui/package.json` only when code imports it, and commit the updated `ui/package-lock.json` with it
+
 - Go: standard conventions (`gofmt`, `go vet`); structured logging with `log/slog`
 - TypeScript: follow the existing patterns in `ui/src` (pages, components, hooks, `lib`)
 - Write tests for new functionality: `*_test.go` next to the Go code, `*.test.ts(x)` next to the frontend code
