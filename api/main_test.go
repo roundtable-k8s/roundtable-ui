@@ -73,40 +73,14 @@ func setupTestRouter() *mux.Router {
 			knightGVR:     "KnightList",
 		})
 
-	// Create router with test handlers
-	r := mux.NewRouter()
-	api := r.PathPrefix("/api").Subrouter()
-
-	namespace := "test-namespace"
-	fleetPrefix := "fleet-a"
-
-	// Register handlers (without auth middleware for testing)
-	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	}).Methods("GET")
-
-	api.HandleFunc("/fleet", fleetHandler(namespace)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}", knightHandler(namespace)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(fleetPrefix)).Methods("GET")
-	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(namespace)).Methods("GET")
-	api.HandleFunc("/queues", queuesHandler(namespace)).Methods("GET")
-
-	api.HandleFunc("/tasks/dispatch", taskDispatchHandler(&gatewayClient{http: http.DefaultClient})).Methods("POST")
-
-	api.HandleFunc("/chains", chainsHandler(namespace, nil)).Methods("GET")
-	api.HandleFunc("/chains/{name}", chainDetailHandler(namespace, nil)).Methods("GET")
-
-	api.HandleFunc("/missions", missionsHandler(namespace)).Methods("GET")
-	api.HandleFunc("/missions/{name}", missionDetailHandler(namespace)).Methods("GET")
-	api.HandleFunc("/missions", missionCreateHandler(namespace)).Methods("POST")
-	api.HandleFunc("/missions/{name}", missionDeleteHandler(namespace)).Methods("DELETE")
-
-	api.HandleFunc("/roundtables", roundTablesHandler(namespace)).Methods("GET")
-	api.HandleFunc("/roundtables/{name}", roundTableDetailHandler(namespace)).Methods("GET")
-
-	api.HandleFunc("/config", configHandler(fleetPrefix, namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
-
-	return r
+	// Same route table as main(), without the middleware
+	return buildRouter(routerDeps{
+		namespace:     "test-namespace",
+		fleetPrefix:   "fleet-a",
+		vaultPath:     "/vault",
+		gateway:       &gatewayClient{http: http.DefaultClient},
+		dispatchLimit: newDispatchLimiter(),
+	})
 }
 
 // makeTestKnightCR builds a minimal Knight CR for handler tests.
