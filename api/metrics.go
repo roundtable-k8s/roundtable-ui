@@ -16,6 +16,16 @@ var (
 		Help: "HTTP requests served, by route template, method, and status code.",
 	}, []string{"route", "method", "code"})
 
+	wsConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "roundtable_ui_ws_connections",
+		Help: "Open WebSocket connections.",
+	})
+
+	wsRejectedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "roundtable_ui_ws_rejected_total",
+		Help: "WebSocket connections rejected because WS_MAX_CONNECTIONS was reached.",
+	})
+
 	httpRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "roundtable_ui_http_request_duration_seconds",
 		Help:    "HTTP request latency, by route template and method.",

@@ -278,6 +278,7 @@ The dashboard API server is configured via environment variables:
 | `TRACE_URL_TEMPLATE` | Trace viewer URL for the "View trace" links: an http(s) URL containing `{traceId}`. Anything else is ignored with a warning. Returned as `traceUrlTemplate` by `GET /api/config`. See [Tracing](#tracing) | _(unset)_ |
 | `ACTIVITY_PREFIXES` | Comma-separated NATS prefixes whose `<prefix>.activity.>` events feed the running-tasks view | the prefix of every discovered table |
 | `ACTIVITY_HEARTBEAT_INTERVAL` | The knights' heartbeat interval as a Go duration (e.g. `10s`); running entries go stale after 3x this. Invalid or <= 0 values fall back to the default | `10s` |
+| `WS_MAX_CONNECTIONS` | Maximum concurrent WebSocket connections; further upgrades get 503 with `Retry-After: 5`. `0` = unlimited. Exposed as the `roundtable_ui_ws_connections` gauge and `roundtable_ui_ws_rejected_total` counter | `200` |
 | `OTEL_SDK_DISABLED` | `true` (case-insensitive) turns trace export off | _(unset)_ |
 | `OTEL_TRACES_EXPORTER` | `none` turns trace export off | _(unset)_ |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector endpoint; setting it (or the traces one below) enables trace export | _(unset: no export)_ |
