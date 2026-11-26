@@ -107,4 +107,39 @@ describe('usePolledFetch', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     expect(mockGet).toHaveBeenCalledTimes(1)
   })
+
+  it('returns initial data and loading on the very first render after a url change', async () => {
+    mockGet.mockImplementation((url: string) =>
+      url === '/api/a' ? Promise.resolve(['from-a']) : new Promise(() => {}))
+    const { result, rerender } = renderHook(({ url }) => usePolledFetch<string[]>(url, 60000, []), {
+      initialProps: { url: '/api/a' },
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.data).toEqual(['from-a'])
+
+    // No timer or promise has run since the rerender.
+    rerender({ url: '/api/b' })
+    expect(result.current.data).toEqual([])
+    expect(result.current.loading).toBe(true)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('does not stack requests when one never resolves', async () => {
+    mockGet.mockReturnValue(new Promise(() => {}))
+    renderHook(() => usePolledFetch('/x', 1000, {}))
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(mockGet).toHaveBeenCalledTimes(1)
+  })
+
+  it('aborts the pending request on url change and unmount', async () => {
+    mockGet.mockReturnValue(new Promise(() => {}))
+    const { rerender, unmount } = renderHook(({ u }) => usePolledFetch(u, 1000, {}), { initialProps: { u: '/a' } })
+    const first = (mockGet.mock.calls[0][1] as { signal: AbortSignal }).signal
+    rerender({ u: '/b' })
+    expect(first.aborted).toBe(true)
+    expect(mockGet).toHaveBeenCalledTimes(2)
+    const second = (mockGet.mock.calls[1][1] as { signal: AbortSignal }).signal
+    unmount()
+    expect(second.aborted).toBe(true)
+  })
 })
