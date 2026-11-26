@@ -42,3 +42,30 @@ describe('MissionWizard accessibility', () => {
     expect(screen.queryByRole('button', { name: 'Remove knight' })).toBeNull()
   })
 })
+
+describe('MissionWizard validation', () => {
+  it('cannot reach Review with an empty name, and posts nothing', async () => {
+    vi.mocked(apiPost).mockClear()
+    const user = userEvent.setup()
+    render(<MissionWizard onClose={() => {}} onCreated={() => {}} />)
+    await user.type(screen.getByLabelText('Objective'), 'do it')
+    expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Advanced' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(screen.queryByRole('button', { name: /dispatch/i })).toBeNull()
+    expect(apiPost).not.toHaveBeenCalled()
+  })
+
+  it('shows a message for a cleared TTL and blocks the steps after it', async () => {
+    const user = userEvent.setup()
+    render(<MissionWizard onClose={() => {}} onCreated={() => {}} />)
+    await user.type(screen.getByLabelText('Mission Name'), 'm1')
+    await user.type(screen.getByLabelText('Objective'), 'do it')
+    await user.clear(screen.getByLabelText('TTL (seconds)'))
+    expect(screen.getByText('TTL must be between 60 and 604800 seconds')).toBeInTheDocument()
+    expect(screen.getByLabelText('TTL (seconds)')).toHaveAttribute('aria-describedby', 'wiz-err-ttl')
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled()
+  })
+})
