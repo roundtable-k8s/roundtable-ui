@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { RoundTablesPage } from './RoundTables'
 import type { RoundTable } from '../lib/types'
 
 const base = { namespace: 'ns', phase: 'Ready', knightsReady: 3, knightsTotal: 5, natsPrefix: 'p', costBudgetUSD: '', totalCost: '0' }
 const tables: RoundTable[] = [
-  { ...base, name: 'roundtable-dev', plannerKnight: 'dev-planner', plannerEnabled: true, knightsScaledToZero: 2, knightsSuspended: 0, knightsNotReady: 0 },
-  { ...base, name: 'personal', plannerEnabled: false, knightsSuspended: 1 },
+  { ...base, name: 'roundtable-dev', plannerKnight: 'dev-planner', plannerEnabled: true, knightsScaledToZero: 2, knightsSuspended: 0, knightsNotReady: 0, policies: { costBudgetUSD: '', maxConcurrentPlanTasks: 6, maxMissions: 3 } },
+  { ...base, name: 'personal', plannerEnabled: false, knightsSuspended: 1, policies: { costBudgetUSD: '', maxConcurrentPlanTasks: 0, maxMissions: 0 } },
 ]
 
 vi.mock('../hooks/usePolledFetch', () => ({
@@ -32,5 +32,14 @@ describe('RoundTablesPage planner and breakdown', () => {
     renderPage('/roundtables?table=personal')
     expect(screen.queryByText('roundtable-dev')).toBeNull()
     expect(screen.getByText('personal')).toBeTruthy()
+  })
+  it('shows Max Concurrent Plan Tasks, unlimited for 0, and no removed policies', () => {
+    renderPage()
+    screen.getAllByText('More details').forEach(b => fireEvent.click(b))
+    const rows = screen.getAllByText('Max Concurrent Plan Tasks').map(e => e.parentElement?.textContent)
+    expect(rows).toContain('Max Concurrent Plan Tasks6')
+    expect(rows).toContain('Max Concurrent Plan Tasksunlimited')
+    expect(screen.queryByText('Max Knights')).toBeNull()
+    expect(screen.queryByText('Max Concurrent Tasks')).toBeNull()
   })
 })

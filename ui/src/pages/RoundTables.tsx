@@ -187,16 +187,12 @@ export function RoundTablesPage() {
                       </h4>
                       <div className="bg-roundtable-navy rounded-lg p-3 space-y-1.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">Max Concurrent Tasks</span>
-                          <span className="text-gray-300">{rt.policies.maxConcurrentTasks}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
                           <span className="text-gray-500">Cost Budget</span>
                           <span className="text-roundtable-gold">${rt.policies.costBudgetUSD}</span>
                         </div>
                         <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">Max Knights</span>
-                          <span className="text-gray-300">{rt.policies.maxKnights}</span>
+                          <span className="text-gray-500">Max Concurrent Plan Tasks</span>
+                          <span className="text-gray-300">{rt.policies.maxConcurrentPlanTasks || 'unlimited'}</span>
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">Max Missions</span>
