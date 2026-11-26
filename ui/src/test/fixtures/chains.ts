@@ -30,6 +30,7 @@ export function fanOutChain(): Chain {
         name: 'publish', knight: 'galahad', domain: 'docs', phase: 'Skipped',
         startTime: null, completionTime: null, result: null, dependsOn: ['review-each'], retryCount: 0,
         skipReason: 'WhenFalse', when: "steps['review-each'].failed == 0",
+        skipMessage: "when evaluated to false: steps['review-each'].failed == 0",
       },
     ],
   }

@@ -205,7 +205,7 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 		}
 		status, b, err := g.do(r.Context(), http.MethodGet, p+"/manifest", nil, nil)
 		if err != nil {
-			slog.Error("gateway request failed", "path", p+"/manifest", "error", err)
+			slog.ErrorContext(r.Context(), "gateway request failed", "path", p+"/manifest", "error", err)
 			jsonError(w, "Gateway unreachable", http.StatusBadGateway)
 			return
 		}
@@ -216,7 +216,7 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 		if format == "json" {
 			j, err := yaml.YAMLToJSON(b)
 			if err != nil {
-				slog.Error("gateway manifest is not YAML", "path", p+"/manifest", "error", err)
+				slog.ErrorContext(r.Context(), "gateway manifest is not YAML", "path", p+"/manifest", "error", err)
 				jsonError(w, "Gateway returned an invalid manifest", http.StatusBadGateway)
 				return
 			}

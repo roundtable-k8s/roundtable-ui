@@ -87,7 +87,7 @@ describe('ChainsPage fan-out', () => {
   it('shows why a step was skipped', async () => {
     renderPage('/chains?chain=doc-sweep')
     const step = await screen.findByRole('region', { name: 'step publish' })
-    expect(step).toHaveTextContent("Skipped: when condition was false: steps['review-each'].failed == 0")
+    expect(step).toHaveTextContent("Skipped: when evaluated to false: steps['review-each'].failed == 0")
   })
 })
 
@@ -494,6 +494,52 @@ describe('ChainsPage cancel run', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel run' }))
     expect(mockPost).not.toHaveBeenCalled()
     confirm.mockRestore()
+  })
+
+  it('shows "Cancel requested" and disables the button after a successful cancel', async () => {
+    const mockPost = vi.mocked(apiPost)
+    mockPost.mockReset()
+    mockPost.mockResolvedValue({})
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    open(runCopy('Running'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel run' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Cancel requested')
+    expect(screen.getByRole('button', { name: 'Cancel run' })).toBeDisabled()
+    confirm.mockRestore()
+  })
+})
+
+describe('ChainsPage detail refetch', () => {
+  it('does not refetch /api/chains/{name} on a poll while phase and step are unchanged', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    connected = false
+    const slim = (): Chain => ({ ...prPipelineChain(), slim: true, steps: [] })
+    const detailCalls = () => mockApiGet.mock.calls.filter(c => String(c[0]).startsWith('/api/chains/pr-pipeline')).length
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([slim()])
+        : url.startsWith('/api/chains/pr-pipeline') ? Promise.resolve(prPipelineChain())
+        : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=pr-pipeline')
+    // One fetch for the ?chain= focus, one for the expanded slim card.
+    await waitFor(() => expect(detailCalls()).toBe(2))
+    await act(async () => { vi.advanceTimersByTime(FALLBACK_POLL_MS) })
+    await waitFor(() => expect(listCalls()).toBe(2))
+    expect(detailCalls()).toBe(2)
+  })
+})
+
+describe('ChainsPage schedule', () => {
+  it('shows the Scheduled badge and schedule summary', async () => {
+    const next = new Date(Date.now() + 3 * 3600_000).toISOString()
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL
+        ? Promise.resolve([{ ...fanOutChain(), name: 'nightly', schedule: '0 6 * * *', timeZone: 'UTC', nextScheduledAt: next }, prPipelineChain()])
+        : Promise.reject(new Error('no KV')))
+    renderPage('/chains')
+    const badge = await screen.findByTestId('scheduled-badge')
+    expect(badge).toHaveTextContent('Scheduled')
+    expect(screen.getByTestId('schedule-summary')).toHaveTextContent(/^next in 3h/)
+    expect(screen.getAllByTestId('scheduled-badge')).toHaveLength(1)
   })
 })
 

@@ -19,7 +19,7 @@ import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
 import {
   appendPage, applyChainUpdate, elapsedLabel, fanOutCounts, formatBytes, heartbeatLabel, loopLabel, loopRounds, roundFailed,
-  parseChainUpdate, runGroupSummary, runningHref, scheduleSummary, skipReasonText, sortScheduledFirst, sortedItems, upsertNewestFirst, type ChainUpdate,
+  isTerminalPhase, parseChainUpdate, runGroupSummary, runningHref, scheduleSummary, skipReasonText, sortScheduledFirst, sortedItems, upsertNewestFirst, type ChainUpdate,
 } from '../lib/chains'
 
 /** Slow fallback poll, only while the live feed is disconnected. */
@@ -301,11 +301,10 @@ function LoopBodySteps({ steps }: { steps: ChainLoopStep[] }) {
               <td className="px-2 py-1 text-gray-300">{s.name}</td>
               <td className="px-2 py-1"><PhaseBadge phase={s.phase} /></td>
               <LiveTaskCells t={s} />
-              <td className="px-2 py-1 text-red-400 max-w-xs truncate">{s.error ? sanitizeText(s.error) : ''}</td>
             </tr>
             {(s.error || s.outputSummary) && (
               <tr>
-                <td colSpan={8} className="px-2 pb-1">
+                <td colSpan={6} className="px-2 pb-1">
                   {s.error && <UntrustedText as="pre" text={s.error} className="whitespace-pre-wrap text-red-400" collapseAfter={1000} />}
                   {s.outputSummary && <UntrustedText as="pre" text={s.outputSummary} className="whitespace-pre-wrap text-gray-400" collapseAfter={1000} />}
                 </td>
@@ -488,24 +487,28 @@ function useChainDetail(chain: Chain, expanded: boolean): { view: Chain | null; 
         if (e?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load chain')
       })
     return () => controller.abort()
-  }, [expanded, chain])
+  // Keyed on identity, phase and step rather than the object: the list poll
+  // hands over a new object each time.
+  }, [expanded, chain.slim, chain.name, chain.namespace, chain.phase, chain.currentStep])
   if (!chain.slim) return { view: chain, error: '' }
   return { view: detail && detail.name === chain.name ? detail : null, error }
 }
-
-const TERMINAL_PHASES = ['Succeeded', 'Completed', 'Failed', 'PartiallySucceeded', 'Cancelled', 'Canceled', 'TimedOut']
 
 /** "Cancel run" for a gateway-started run copy that has not finished. The
  *  gateway answers 404/409 for runs it cannot cancel; the message is shown. */
 function CancelRun({ chain }: { chain: Chain }) {
   const [cancelling, setCancelling] = useState(false)
+  // Phase at the time cancel was requested; the button stays disabled until it changes.
+  const [requestedAt, setRequestedAt] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const requested = requestedAt !== null && requestedAt === chain.phase
   const cancel = async () => {
     if (!window.confirm(`Cancel run ${chain.name}? Unfinished steps fail; tasks already sent to knights are not recalled.`)) return
     setCancelling(true)
     setError('')
     try {
       await apiPost(`/api/chains/runs/${encodeURIComponent(chain.namespace)}/${encodeURIComponent(chain.name)}/cancel`, {})
+      setRequestedAt(chain.phase)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to cancel the run')
     } finally {
@@ -516,12 +519,13 @@ function CancelRun({ chain }: { chain: Chain }) {
     <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="cancel-run">
       <button
         onClick={cancel}
-        disabled={cancelling}
+        disabled={cancelling || requested}
         className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium transition-colors disabled:opacity-50"
       >
         <Square className="w-3.5 h-3.5" />
         {cancelling ? 'Cancelling…' : 'Cancel run'}
       </button>
+      {requested && <span role="status" className="text-sm text-gray-400">Cancel requested</span>}
       {error && <span role="alert" className="text-sm text-red-400">{sanitizeText(error)}</span>}
     </div>
   )
@@ -638,7 +642,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
           </div>
           {view.traceId && <div className="mb-2"><TraceLink traceId={view.traceId} /></div>}
           {chain.invokable && !chain.missionRef && !chain.runTemplate && <RunNow chain={chain.name} namespace={chain.namespace} />}
-          {chain.runTemplate && !TERMINAL_PHASES.includes(chain.phase) && <CancelRun chain={chain} />}
+          {chain.runTemplate && !isTerminalPhase(chain.phase) && <CancelRun chain={chain} />}
           <StepDAG steps={steps} currentStep={view.currentStep} />
           <StepProgress steps={steps} />
           {steps.length > 0 && <RunCostTable chain={view} />}
@@ -894,6 +898,7 @@ export function ChainsPage() {
     if (!focusDetail || focusDetail.runTemplate || chains.some(c => c.name === focusDetail.name)) return chains
     return [focusDetail, ...chains]
   }, [chains, focusDetail])
+  const sortedChains = useMemo(() => sortScheduledFirst(shownChains), [shownChains])
   const shownGroups = useMemo(() => {
     const t = focusDetail?.runTemplate
     if (!t || groups.some(g => g.template === t)) return groups
@@ -935,7 +940,7 @@ export function ChainsPage() {
       )}
 
       <div className="space-y-3">
-        {sortScheduledFirst(shownChains).map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
+        {sortedChains.map(chain => <ChainCard key={`${chain.namespace}/${chain.name}`} chain={chain} focused={chain.name === focusChain} />)}
       </div>
 
       {shownGroups.length > 0 && (
