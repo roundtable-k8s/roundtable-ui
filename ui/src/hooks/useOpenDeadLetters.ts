@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { inTable } from '../lib/tables'
-import { apiGet } from '../lib/api'
+import { apiGet, ApiError } from '../lib/api'
 import { DEAD_LETTERS_URL, type DeadLetter } from '../lib/deadLetters'
 
 /** The gateway lists at most this many dead letters by default, so a count this high may be cut short. */
@@ -31,7 +31,12 @@ export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLett
           const capped = all.length >= DEAD_LETTER_CAP || (typeof d.total === 'number' && d.total > all.length)
           setState({ count, capped, total: !table && typeof d.total === 'number' ? d.total : undefined })
         })
-        .catch(() => { if (alive) setState((prev) => ({ ...prev, error: true })) })
+        .catch((e) => {
+          if (!alive) return
+          // 503 means the API has no GATEWAY_URL: nothing to count, not a failure (an unreachable gateway is 502).
+          if (e instanceof ApiError && e.status === 503) setState({ count: 0, capped: false })
+          else setState((prev) => ({ ...prev, error: true }))
+        })
     poll()
     const id = setInterval(poll, intervalMs)
     return () => { alive = false; clearInterval(id) }

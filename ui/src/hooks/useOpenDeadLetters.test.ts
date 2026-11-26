@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
+import { ApiError } from '../lib/api'
 import { useOpenDeadLetters, deadLetterBadge } from './useOpenDeadLetters'
 
 const apiGet = vi.fn()
-vi.mock('../lib/api', () => ({ apiGet: (...a: unknown[]) => apiGet(...a) }))
+vi.mock('../lib/api', async (orig) => ({
+  ...(await orig<typeof import('../lib/api')>()),
+  apiGet: (...a: unknown[]) => apiGet(...a),
+}))
 
 describe('useOpenDeadLetters', () => {
   it('counts only the selected table, filtering in the browser', async () => {
@@ -43,5 +47,20 @@ describe('useOpenDeadLetters', () => {
     const { result } = renderHook(() => useOpenDeadLetters('', 20))
     await waitFor(() => expect(result.current.count).toBe(1))
     expect(result.current.error).toBeUndefined()
+  })
+
+  it('treats 503 (gateway not configured) as nothing to count, not an error', async () => {
+    apiGet.mockRejectedValue(new ApiError(503, 'Gateway not configured (set GATEWAY_URL)'))
+    const { result } = renderHook(() => useOpenDeadLetters(''))
+    await waitFor(() => expect(apiGet).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 20))
+    expect(result.current.error).toBeUndefined()
+    expect(deadLetterBadge(result.current).text).toBe('0')
+  })
+
+  it('treats 502 (gateway unreachable) as an error', async () => {
+    apiGet.mockRejectedValue(new ApiError(502, 'Gateway unreachable'))
+    const { result } = renderHook(() => useOpenDeadLetters(''))
+    await waitFor(() => expect(result.current.error).toBe(true))
   })
 })

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
@@ -88,9 +88,16 @@ function renderDashboard(props = {}) {
   )
 }
 
+const defaultFleet = vi.mocked(useFleet).getMockImplementation()!
+const defaultApiGet = vi.mocked(apiGet).getMockImplementation()!
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+  afterEach(() => {
+    vi.mocked(useFleet).mockImplementation(defaultFleet)
+    vi.mocked(apiGet).mockImplementation(defaultApiGet)
   })
 
   it('renders the dashboard title', () => {
@@ -223,6 +230,29 @@ describe('DashboardPage', () => {
       expect(screen.getByText('Week')).toBeInTheDocument()
     })
   })
+
+  it('shows fleet and chain failures instead of zeros', async () => {
+    vi.mocked(useFleet).mockReturnValue({ knights: [], loading: false, error: 'HTTP 500', refresh: vi.fn() } as never)
+    vi.mocked(apiGet).mockImplementation((url: string) =>
+      url.startsWith('/api/chains') ? Promise.reject(new Error('gateway down')) : Promise.resolve({}))
+    renderDashboard()
+    expect(screen.getByText(/Failed to load fleet: HTTP 500/)).toBeInTheDocument()
+    expect(await screen.findByText(/Failed to load chains: gateway down/)).toBeInTheDocument()
+  })
+
+  it('shows a spinner while the first load is pending', () => {
+    vi.mocked(useFleet).mockReturnValue({ knights: [], loading: true, error: null, refresh: vi.fn() } as never)
+    renderDashboard()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.queryByText('0/0')).not.toBeInTheDocument()
+    expect(screen.getByText('…')).toBeInTheDocument()
+  })
+
+  it('shows no spinner once the fleet has loaded', async () => {
+    renderDashboard()
+    expect(await screen.findByText('2/2')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+  })
 })
 
 describe('DashboardPage session cost refresh (#152)', () => {
@@ -308,20 +338,5 @@ describe('DashboardPage truncated chain list', () => {
     await screen.findByText('c-0')
     expect(screen.queryByTestId('chains-truncated')).toBeNull()
     restore()
-  })
-
-  it('shows fleet and chain failures instead of zeros', async () => {
-    vi.mocked(useFleet).mockReturnValueOnce({ knights: [], loading: false, error: 'HTTP 500', refresh: vi.fn() } as never)
-    vi.mocked(apiGet).mockImplementation((url: string) =>
-      url.startsWith('/api/chains') ? Promise.reject(new Error('gateway down')) : Promise.resolve({}))
-    renderDashboard()
-    expect(screen.getByText(/Failed to load fleet: HTTP 500/)).toBeInTheDocument()
-    expect(await screen.findByText(/Failed to load chains: gateway down/)).toBeInTheDocument()
-  })
-
-  it('shows a spinner while the first load is pending', () => {
-    vi.mocked(useFleet).mockReturnValueOnce({ knights: [], loading: true, error: null, refresh: vi.fn() } as never)
-    renderDashboard()
-    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })
