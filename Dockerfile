@@ -2,7 +2,7 @@
 FROM node:22-alpine AS ui-builder
 WORKDIR /build/ui
 COPY ui/package.json ui/package-lock.json* ./
-RUN npm install
+RUN npm ci
 COPY ui/ .
 # Build outputs to /build/api/static via vite config
 RUN mkdir -p /build/api/static && npm run build
