@@ -11,23 +11,30 @@ import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 
+const knightKey = (k: { namespace?: string; name: string }) => `${k.namespace ?? ''}/${k.name}`
+
 export function LivePage() {
   const { events, connected } = useWebSocket()
   const { knights: fleetKnights, error: fleetError } = useFleet()
   const [filterKnight, setFilterKnight] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   const [filterDomain, setFilterDomain] = useState<string>('')
-  const [selectedKnight, setSelectedKnight] = useState<Knight | null>(null)
+  // Selection is a key plus a fallback for knights absent from the fleet; the
+  // fleet entry is looked up each render so the drawer stays live.
+  const [selected, setSelected] = useState<{ key: string; fallback: Knight } | null>(null)
+  const selectedKnight = selected
+    ? fleetKnights.find(k => knightKey(k) === selected.key) ?? selected.fallback
+    : null
   const [activityTask, setActivityTask] = useState<{ taskId: string; knight?: string } | null>(null)
 
   const handleKnightClick = useCallback((knightName: string) => {
     const fleet = fleetKnights.find(k => k.name === knightName)
     if (fleet) {
-      setSelectedKnight(fleet)
+      setSelected({ key: knightKey(fleet), fallback: fleet })
     } else {
       // Build a minimal Knight object for knights not in fleet response
       const cfg = getKnightConfig(knightName)
-      setSelectedKnight({
+      setSelected({ key: `/${knightName}`, fallback: {
         name: knightName,
         domain: cfg.domain,
         status: 'offline',
@@ -38,7 +45,7 @@ export function LivePage() {
         skills: 0,
         nixTools: 0,
         labels: {},
-      })
+      } })
     }
   }, [fleetKnights])
 
@@ -201,7 +208,7 @@ export function LivePage() {
       </div>
 
       {/* Knight detail drawer */}
-      <KnightDetailDrawer knight={selectedKnight} onClose={() => setSelectedKnight(null)} />
+      <KnightDetailDrawer knight={selectedKnight} onClose={() => setSelected(null)} />
 
       {/* Task activity drawer (#214) */}
       {activityTask && (
