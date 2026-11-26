@@ -311,8 +311,8 @@ export function TaskActivityPanel({ taskId, hint, extra, onClose }: TaskActivity
   }
 
   return (
-    <Drawer onClose={onClose} widthClass="w-full max-w-2xl">
-      <div className="flex flex-col h-full" role="dialog" aria-label={`Task activity ${taskId}`}>
+    <Drawer onClose={onClose} label={`Task activity ${taskId}`} widthClass="w-full max-w-2xl">
+      <div className="flex flex-col h-full">
         <div className="p-6 pb-3 border-b border-roundtable-steel">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">

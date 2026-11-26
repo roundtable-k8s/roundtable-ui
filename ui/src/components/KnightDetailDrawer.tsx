@@ -241,7 +241,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const skills = knightDetail?.skillsList ?? knight.skillsList ?? []
 
   return (
-    <Drawer onClose={onClose} widthClass="w-[520px]">
+    <Drawer onClose={onClose} label={`${knight.name} details`} widthClass="w-[520px]">
         {/* Header */}
         <div className="sticky top-0 bg-roundtable-slate border-b border-roundtable-steel p-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
@@ -252,10 +252,10 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => knight && refreshAll(knight.name)} className="text-gray-400 hover:text-roundtable-gold p-1 transition-colors" title="Refresh">
+            <button onClick={() => knight && refreshAll(knight.name)} className="text-gray-400 hover:text-roundtable-gold p-1 transition-colors" title="Refresh" aria-label="Refresh">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+            <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white p-1">
               <X className="w-5 h-5" />
             </button>
           </div>

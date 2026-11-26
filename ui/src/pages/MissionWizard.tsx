@@ -137,7 +137,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   ]
 
   return (
-    <Modal onClose={onClose} title="Create Mission" icon={<Target className="w-5 h-5 text-roundtable-gold" />}>
+    <Modal onClose={onClose} closeOnEscape={false} title="Create Mission" icon={<Target className="w-5 h-5 text-roundtable-gold" />}>
         {/* Step indicators */}
         <div className="flex items-center gap-2 px-6 pt-4">
           {steps.map((s, i) => (
