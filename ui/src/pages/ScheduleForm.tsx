@@ -6,7 +6,7 @@ import { useCards } from '../hooks/useCards'
 import { useTables } from '../hooks/useTables'
 import { PageHeader, ErrorBanner, Spinner } from '../components/ui'
 import { sanitizeText } from '../lib/untrusted'
-import { scheduleUrl, type Schedule } from '../lib/schedules'
+import { scheduleApi, type Schedule } from '../lib/schedules'
 import { CRON_PRESETS, CronError, formatInZone, nextRuns } from '../lib/cron'
 import {
   buildRequest, emptyForm, fieldMessage, formFieldFor, formFromManifest, manifestYaml,
@@ -138,8 +138,8 @@ export function ScheduleFormPage() {
     const ref = { namespace: params.namespace as string, name: params.name as string }
     setLoading(true)
     Promise.all([
-      apiGet<Schedule>(scheduleUrl(ref)),
-      apiGet<TriggerManifest>(`${scheduleUrl(ref, 'manifest')}?format=json`),
+      apiGet<Schedule>(scheduleApi(ref.namespace, ref.name)),
+      apiGet<TriggerManifest>(`${scheduleApi(ref.namespace, ref.name, 'manifest')}?format=json`),
     ]).then(([view, manifest]) => {
       setManagedBy(view.managedBy)
       setBase(manifest)
@@ -199,7 +199,7 @@ export function ScheduleFormPage() {
     setErrors({})
     try {
       const body = buildRequest(form, base?.spec)
-      if (editing) await apiPut(scheduleUrl({ namespace: params.namespace as string, name: params.name as string }), body)
+      if (editing) await apiPut(scheduleApi(params.namespace as string, params.name as string), body)
       else await apiPost('/api/schedules', body)
       navigate('/schedules')
     } catch (e) {

@@ -180,12 +180,6 @@ export function scheduleKey(s: { namespace: string; name: string }): string {
   return `${s.namespace}/${s.name}`
 }
 
-/** /api/schedules/{namespace}/{name}[/action] */
-export function scheduleUrl(s: { namespace: string; name: string }, action = ''): string {
-  const base = `/api/schedules/${encodeURIComponent(s.namespace)}/${encodeURIComponent(s.name)}`
-  return action ? `${base}/${action}` : base
-}
-
 /** The dashboard route of the edit form (#302). Git-managed schedules have none. */
 export function scheduleEditPath(s: { namespace: string; name: string }): string {
   return `/schedules/${encodeURIComponent(s.namespace)}/${encodeURIComponent(s.name)}/edit`
