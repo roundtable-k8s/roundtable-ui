@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -284,6 +286,11 @@ func TestWriteLogTail_ReadError(t *testing.T) {
 }
 
 func TestKnightLogs_ListErrorIs500(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
 	r, fc := setupLogsRouter(t, nil)
 	fc.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("apiserver down")
@@ -294,5 +301,23 @@ func TestKnightLogs_ListErrorIs500(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "Failed to list pods") {
 		t.Errorf("body %q", w.Body.String())
+	}
+
+	found := false
+	for _, raw := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var line map[string]any
+		if err := json.Unmarshal([]byte(raw), &line); err != nil {
+			continue
+		}
+		if line["msg"] != "List knight pods failed" {
+			continue
+		}
+		found = true
+		if line["level"] != "ERROR" || line["knight"] != "galahad" {
+			t.Errorf("log line %v: want level ERROR and knight galahad", line)
+		}
+	}
+	if !found {
+		t.Errorf("no \"List knight pods failed\" log line; logs: %s", buf.String())
 	}
 }
