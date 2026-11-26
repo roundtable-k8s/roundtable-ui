@@ -20,6 +20,12 @@ function setup(entries: DeadLetter[], onRetry = vi.fn().mockResolvedValue(result
 }
 
 describe('DeadLettersView', () => {
+  it('keeps the rows visible under an error', () => {
+    render(<MemoryRouter><DeadLettersView entries={[lost]} error="refresh failed" onRetry={vi.fn()} onLoadDetail={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByText('refresh failed')).toBeInTheDocument()
+    expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(1)
+  })
+
   it('shows an empty state', () => {
     setup([])
     expect(screen.getByText('No failed or lost tasks')).toBeInTheDocument()

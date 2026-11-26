@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { FailedTasksPage } from './FailedTasks'
@@ -35,7 +35,7 @@ describe('FailedTasksPage', () => {
   it('lists the dead letters', async () => {
     renderPage()
     expect(await screen.findAllByTestId('dead-letter-row')).toHaveLength(2)
-    expect(apiGet).toHaveBeenCalledWith('/api/dead-letters')
+    expect(apiGet).toHaveBeenCalledWith('/api/dead-letters', expect.anything())
     expect(screen.getByText('deadline exceeded')).toBeInTheDocument()
   })
 
@@ -86,5 +86,58 @@ describe('FailedTasksPage', () => {
     await userEvent.click(screen.getAllByRole('button', { name: /^Retry$/ })[0])
     expect(await screen.findByText(/Retry failed: already retried/)).toBeInTheDocument()
     expect(apiGet).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a slow response that a newer request superseded', async () => {
+    let resolveA!: (v: unknown) => void
+    apiGet.mockImplementationOnce(() => new Promise((r) => { resolveA = r }))
+    apiGet.mockResolvedValueOnce({ deadLetters: letters })
+    renderPage('/failed?table=fleet-a')
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(1))
+    // a second request (refresh) aborts the first; the first resolving late must not win
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
+    const rows = await screen.findAllByTestId('dead-letter-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('galahad')
+    await act(async () => { resolveA({ deadLetters: [dl({ taskId: 'old', table: 'fleet-a', knight: 'stale-knight' })] }) })
+    expect(screen.queryByText('stale-knight')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(1)
+  })
+
+  it('shows the cap note when total exceeds the list', async () => {
+    apiGet.mockResolvedValue({ deadLetters: letters, total: 250 })
+    renderPage()
+    expect(await screen.findByTestId('dead-letters-cap')).toHaveTextContent('Showing the newest 2 of 250')
+  })
+
+  it('shows the cap note for a full list without a total', async () => {
+    apiGet.mockResolvedValue({ deadLetters: Array.from({ length: 100 }, (_, i) => dl({ taskId: `t${i}` })) })
+    renderPage()
+    expect(await screen.findByTestId('dead-letters-cap')).toHaveTextContent('Showing the newest 100')
+  })
+
+  it('shows no cap note when everything is listed', async () => {
+    apiGet.mockResolvedValue({ deadLetters: letters, total: 2 })
+    renderPage()
+    await screen.findAllByTestId('dead-letter-row')
+    expect(screen.queryByTestId('dead-letters-cap')).not.toBeInTheDocument()
+  })
+
+  it('keeps the rows when a refresh fails and clears the error on success', async () => {
+    renderPage()
+    await screen.findAllByTestId('dead-letter-row')
+    apiGet.mockRejectedValueOnce(new Error('gateway down'))
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
+    expect(await screen.findByText(/gateway down/)).toBeInTheDocument()
+    expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(2)
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
+    await waitFor(() => expect(screen.queryByText(/gateway down/)).not.toBeInTheDocument())
+  })
+
+  it('the state select passes ?state= to the gateway', async () => {
+    renderPage()
+    await screen.findAllByTestId('dead-letter-row')
+    await userEvent.selectOptions(screen.getByLabelText('State'), 'open')
+    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith('/api/dead-letters?state=open', expect.anything()))
   })
 })
