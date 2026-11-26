@@ -65,3 +65,9 @@ export async function apiPost<T>(url: string, body: unknown): Promise<T> {
   if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<T>
 }
+
+/** DELETE url; the response body, if any, is ignored. Throws ApiError on non-2xx. */
+export async function apiDelete(url: string): Promise<void> {
+  const res = await apiFetch(url, { method: 'DELETE' })
+  if (!res.ok) throw await toApiError(res)
+}
