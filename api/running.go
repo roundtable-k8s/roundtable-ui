@@ -584,6 +584,8 @@ func listKnightPods(ctx context.Context, namespace string, prefixFor map[string]
 	if k8sClient == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not available")
 	}
+	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
+	defer cancel()
 	pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app.kubernetes.io/name=knight",
 	})
@@ -619,6 +621,8 @@ func knightPrefixes(ctx context.Context, namespace string) map[string]string {
 	if dynClient == nil {
 		return out
 	}
+	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
+	defer cancel()
 	list, err := dynClient.Resource(knightGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.WarnContext(ctx, "Running: knight CR list failed", "error", err)

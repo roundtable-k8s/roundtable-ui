@@ -272,6 +272,7 @@ The dashboard API server is configured via environment variables:
 | `GATEWAY_TOKEN_FILE` | File whose first line is the gateway bearer token; re-read when the gateway answers 401 (token rotation). Takes precedence over `GATEWAY_TOKEN` | _(none)_ |
 | `GATEWAY_TOKEN` | Optional bearer token sent to the gateway | _(none)_ |
 | `DISPATCH_RATE` / `DISPATCH_BURST` | Rate limit (requests/sec, bucket size) of dispatch and run-now; rate <= 0 disables it | `2` / `10` |
+| `KUBE_QPS` / `KUBE_BURST` | Client-side rate limit (requests/sec, bucket size) of the Kubernetes client, shared by all handlers, informers and watchers. Invalid or <= 0 values fall back. Non-watch requests also time out after 20s and handlers bound their Kubernetes calls to 10s | `20` / `40` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication. The `?api_key=` query form is accepted on `/api/ws` only; use the `Authorization` header elsewhere | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
 | `LOG_LEVEL` | Only `debug` is special (debug logging); any other value, or unset, logs at info | _(unset = info)_ |

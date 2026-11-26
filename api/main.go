@@ -493,6 +493,7 @@ func main() {
 		}
 	}
 	if err == nil {
+		applyKubeClientLimits(config)
 		// Assign globals only on success — a typed-nil client would defeat the
 		// k8sClient != nil availability checks in handlers
 		if cs, csErr := kubernetes.NewForConfig(config); csErr != nil {
@@ -791,9 +792,11 @@ func fleetHandler(namespace string) http.HandlerFunc {
 
 		// One pod list and one metrics list per request cycle, grouped by
 		// knight instance name — never per knight (#182).
-		podsByName := knightPodsByName(r.Context(), namespace)
-		metrics := listPodMetrics(r.Context(), namespace)
-		tableDefaults := tableDefaultsByName(r.Context(), namespace)
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		podsByName := knightPodsByName(kctx, namespace)
+		metrics := listPodMetrics(kctx, namespace)
+		tableDefaults := tableDefaultsByName(kctx, namespace)
 		filter := tableFilter(r)
 
 		knights := make([]KnightStatus, 0, len(crItems))
@@ -868,7 +871,9 @@ func knightHandler(namespace string) http.HandlerFunc {
 		}
 
 		// Fetch Knight CR first — it is the authoritative source
-		crObj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		crObj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
 		if err != nil {
 			writeGetError(w, r, err, "Knight", "knight", name)
 			return
@@ -878,7 +883,7 @@ func knightHandler(namespace string) http.HandlerFunc {
 		// Prefer the ready pod so rollouts show the new pod, matching fleetHandler.
 		var pods []*corev1.Pod
 		if k8sClient != nil {
-			podList, podErr := k8sClient.CoreV1().Pods(namespace).List(r.Context(), metav1.ListOptions{
+			podList, podErr := k8sClient.CoreV1().Pods(namespace).List(kctx, metav1.ListOptions{
 				LabelSelector: fmt.Sprintf("app.kubernetes.io/name=knight,app.kubernetes.io/instance=%s", name),
 			})
 			if podErr == nil {
@@ -907,9 +912,9 @@ func knightHandler(namespace string) http.HandlerFunc {
 		detail := KnightDetail{
 			KnightStatus: buildKnightStatus(crObj, podPtr, scaling),
 		}
-		detail.Pods = buildKnightPods(pods, listPodMetrics(r.Context(), namespace))
+		detail.Pods = buildKnightPods(pods, listPodMetrics(kctx, namespace))
 		detail.Scaling = scaling
-		detail.Isolation = buildKnightIsolation(crObj, podPtr, tableDefaultsFor(r.Context(), namespace, knightTableName(crObj)))
+		detail.Isolation = buildKnightIsolation(crObj, podPtr, tableDefaultsFor(kctx, namespace, knightTableName(crObj)))
 		if podPtr != nil {
 			pod := podPtr
 			detail.Node = pod.Spec.NodeName
@@ -2387,7 +2392,9 @@ func roundTablesHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
-		list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(kctx, metav1.ListOptions{})
 		if err != nil {
 			slog.ErrorContext(r.Context(), "RoundTable list error", "error", err)
 			jsonError(w, "Failed to list roundtables", http.StatusInternalServerError)
@@ -2751,6 +2758,25 @@ func wsAcquire() bool {
 func wsRelease() {
 	wsOpenConns.Add(-1)
 	wsConnections.Dec()
+}
+
+// kubeClientTimeout bounds every non-watch Kubernetes request (#411).
+const kubeClientTimeout = 20 * time.Second
+
+// applyKubeClientLimits sets the client timeout and the shared rate limit;
+// KUBE_QPS / KUBE_BURST override the defaults 20 / 40 (invalid or <= 0 values
+// fall back). Watches use their own timeouts and are unaffected.
+func applyKubeClientLimits(cfg *rest.Config) {
+	cfg.Timeout = kubeClientTimeout
+	cfg.QPS = float32(envPositiveInt("KUBE_QPS", 20))
+	cfg.Burst = envPositiveInt("KUBE_BURST", 40)
+}
+
+func envPositiveInt(key string, def int) int {
+	if n, err := strconv.Atoi(os.Getenv(key)); err == nil && n > 0 {
+		return n
+	}
+	return def
 }
 
 func envOr(key, def string) string {

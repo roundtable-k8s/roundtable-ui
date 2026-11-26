@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -88,6 +89,16 @@ type KnightScaling struct {
 	ReadyReplicas   int32 `json:"readyReplicas"`
 	// LastScaleTime is when the autoscaler last changed the count.
 	LastScaleTime string `json:"lastScaleTime,omitempty"`
+}
+
+// k8sRequestTimeout bounds the Kubernetes calls a request makes, so a stalled
+// API server answers with an error instead of hanging (#411). A variable so
+// tests can shorten it.
+var k8sRequestTimeout = 10 * time.Second
+
+// k8sCtx returns the request context with the Kubernetes call deadline.
+func k8sCtx(r *http.Request) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(r.Context(), k8sRequestTimeout)
 }
 
 // knightPodsByName lists all knight pods in the namespace once and groups them
