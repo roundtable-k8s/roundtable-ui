@@ -119,7 +119,6 @@ Properly registers custom resource list kinds for dynamic client:
 - `/api/tasks/dispatch` - Task dispatch (requires NATS connection)
 - `/api/missions/{name}/results` - NATS KV integration
 - `/api/chains/{name}/steps/{step}/output` - Chain step output
-- `/api/kv/*` - Key-value store endpoints
 - `/api/ws` - WebSocket handler (complex, needs gorilla/websocket mocking)
 
 ### Integration Tests Not Covered
