@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTables } from '../hooks/useTables'
+import { validateMissionForm, firstInvalidStep, stepOfField } from '../lib/missionForm'
 import { Target, Plus, X, ArrowLeft, Rocket, Brain, Settings } from 'lucide-react'
 import { apiPost } from '../lib/api'
 import { Modal, ErrorBanner } from '../components/ui'
@@ -8,8 +10,8 @@ interface MissionForm {
   objective: string
   roundTableRef: string
   costBudgetUSD: string
-  ttl: number
-  timeout: number
+  ttl: string
+  timeout: string
   knights: { name: string; role: string }[]
   metaMission: boolean
   // Advanced options
@@ -21,11 +23,11 @@ interface MissionForm {
   // Planner options (only for metaMission)
   planner: {
     knightRef: string
-    timeout: number
+    timeout: string
     context: string
     allowSkillGeneration: boolean
-    maxChains: number
-    maxKnights: number
+    maxChains: string
+    maxKnights: string
   }
 }
 
@@ -34,8 +36,8 @@ const INITIAL_FORM: MissionForm = {
   objective: '',
   roundTableRef: '',
   costBudgetUSD: '1.00',
-  ttl: 3600,
-  timeout: 300,
+  ttl: '3600',
+  timeout: '300',
   knights: [{ name: '', role: '' }],
   metaMission: false,
   successCriteria: '',
@@ -45,11 +47,11 @@ const INITIAL_FORM: MissionForm = {
   retainResults: true,
   planner: {
     knightRef: '',
-    timeout: 300,
+    timeout: '300',
     context: '',
     allowSkillGeneration: false,
-    maxChains: 5,
-    maxKnights: 10,
+    maxChains: '5',
+    maxKnights: '10',
   },
 }
 
@@ -63,13 +65,27 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const tables = useTables()
+  const errors = validateMissionForm(form)
+  const invalidStep = firstInvalidStep(errors)
+  const touch = (key: string) => setTouched(t => (t[key] ? t : { ...t, [key]: true }))
+  const shown = (key: string) => (touched[key] ? errors[key] : undefined)
+  const errId = (key: string) => `wiz-err-${key.replace('.', '-')}`
+  /** aria props for a field with a validation message. */
+  const aria = (key: string) => shown(key) ? { 'aria-invalid': true as const, 'aria-describedby': errId(key) } : {}
+  const fieldError = (k: string) => shown(k)
+    ? <p id={errId(k)} className="text-xs text-red-400 mt-1">{errors[k]}</p>
+    : null
 
   const updateField = <K extends keyof MissionForm>(key: K, value: MissionForm[K]) => {
     setForm(f => ({ ...f, [key]: value }))
+    touch(key as string)
   }
 
   const updatePlanner = <K extends keyof MissionForm['planner']>(key: K, value: MissionForm['planner'][K]) => {
     setForm(f => ({ ...f, planner: { ...f.planner, [key]: value } }))
+    touch(`planner.${key}`)
   }
 
   const addKnight = () => {
@@ -81,6 +97,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   }
 
   const updateKnight = (idx: number, field: 'name' | 'role', value: string) => {
+    touch('knights')
+    touch(`knights.${idx}`)
     setForm(f => ({
       ...f,
       knights: f.knights.map((k, i) => i === idx ? { ...k, [field]: value } : k),
@@ -88,6 +106,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   }
 
   const handleSubmit = async () => {
+    if (invalidStep >= 0) return
     setSubmitting(true)
     setError(null)
     try {
@@ -95,9 +114,9 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
         name: form.name,
         objective: form.objective,
         roundTableRef: { name: form.roundTableRef },
-        costBudgetUSD: form.costBudgetUSD,
-        ttlSeconds: form.ttl,
-        timeoutSeconds: form.timeout,
+        costBudgetUSD: form.costBudgetUSD.trim(),
+        ttlSeconds: Number(form.ttl),
+        timeoutSeconds: Number(form.timeout),
         knights: form.metaMission ? [] : form.knights.filter(k => k.name.trim()),
         metaMission: form.metaMission,
         successCriteria: form.successCriteria || undefined,
@@ -112,11 +131,11 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
         body.planner = {
           // omitted -> the operator uses the table's planner
           knightRef: form.planner.knightRef.trim() ? { name: form.planner.knightRef.trim() } : undefined,
-          timeoutSeconds: form.planner.timeout,
+          timeoutSeconds: Number(form.planner.timeout),
           context: form.planner.context || undefined,
           allowSkillGeneration: form.planner.allowSkillGeneration,
-          maxChains: form.planner.maxChains,
-          maxKnights: form.planner.maxKnights,
+          maxChains: Number(form.planner.maxChains),
+          maxKnights: Number(form.planner.maxKnights),
         }
       }
 
@@ -130,9 +149,9 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   }
 
   const steps = [
-    { title: 'Basics', valid: form.name.trim() && form.objective.trim() },
-    { title: 'Knights', valid: form.metaMission || form.knights.some(k => k.name.trim()) },
-    { title: 'Advanced', valid: true },
+    { title: 'Basics', valid: !Object.keys(errors).some(k => stepOfField(k) === 0) },
+    { title: 'Knights', valid: !Object.keys(errors).some(k => stepOfField(k) === 1) },
+    { title: 'Advanced', valid: !Object.keys(errors).some(k => stepOfField(k) === 2) },
     { title: 'Review', valid: true },
   ]
 
@@ -144,7 +163,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
             <button
               key={s.title}
               onClick={() => setStep(i)}
-              className={`flex-1 text-center text-xs py-2 rounded-lg transition-colors ${
+              disabled={invalidStep >= 0 && i > invalidStep}
+              className={`flex-1 text-center text-xs py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 i === step
                   ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
                   : i < step
@@ -166,28 +186,48 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                 <input id="wiz-mission-name"
                   value={form.name}
                   onChange={e => updateField('name', e.target.value)}
+                  onBlur={() => touch('name')}
+                  {...aria('name')}
                   placeholder="e.g. code-review-sprint"
                   className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                 />
+                {fieldError('name')}
               </div>
               <div>
                 <label htmlFor="wiz-objective" className="block text-sm text-gray-300 mb-1">Objective</label>
                 <textarea id="wiz-objective"
                   value={form.objective}
                   onChange={e => updateField('objective', e.target.value)}
+                  onBlur={() => touch('objective')}
+                  {...aria('objective')}
                   placeholder="Describe the mission objective..."
                   rows={3}
                   className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50 resize-none"
                 />
+                {fieldError('objective')}
               </div>
               <div>
                 <label htmlFor="wiz-roundtable-reference" className="block text-sm text-gray-300 mb-1">RoundTable Reference</label>
-                <input id="wiz-roundtable-reference"
-                  value={form.roundTableRef}
-                  onChange={e => updateField('roundTableRef', e.target.value)}
-                  placeholder="e.g. fleet-a"
-                  className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
-                />
+                {tables.length > 0 ? (
+                  <select id="wiz-roundtable-reference"
+                    value={form.roundTableRef}
+                    onChange={e => updateField('roundTableRef', e.target.value)}
+                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
+                  >
+                    <option value="">(none)</option>
+                    {form.roundTableRef && !tables.includes(form.roundTableRef) && (
+                      <option value={form.roundTableRef}>{form.roundTableRef}</option>
+                    )}
+                    {tables.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                ) : (
+                  <input id="wiz-roundtable-reference"
+                    value={form.roundTableRef}
+                    onChange={e => updateField('roundTableRef', e.target.value)}
+                    placeholder="e.g. fleet-a"
+                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
+                  />
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-2 p-3 bg-roundtable-navy/50 border border-roundtable-steel rounded-lg">
@@ -213,26 +253,35 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   <input id="wiz-cost-budget"
                     value={form.costBudgetUSD}
                     onChange={e => updateField('costBudgetUSD', e.target.value)}
+                    onBlur={() => touch('costBudgetUSD')}
+                    {...aria('costBudgetUSD')}
                     className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
                   />
+                  {fieldError('costBudgetUSD')}
                 </div>
                 <div>
                   <label htmlFor="wiz-ttl" className="block text-sm text-gray-300 mb-1">TTL (seconds)</label>
                   <input id="wiz-ttl"
                     type="number"
                     value={form.ttl}
-                    onChange={e => updateField('ttl', parseInt(e.target.value) || 0)}
+                    onChange={e => updateField('ttl', e.target.value)}
+                    onBlur={() => touch('ttl')}
+                    {...aria('ttl')}
                     className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
                   />
+                  {fieldError('ttl')}
                 </div>
                 <div>
                   <label htmlFor="wiz-timeout" className="block text-sm text-gray-300 mb-1">Timeout (seconds)</label>
                   <input id="wiz-timeout"
                     type="number"
                     value={form.timeout}
-                    onChange={e => updateField('timeout', parseInt(e.target.value) || 0)}
+                    onChange={e => updateField('timeout', e.target.value)}
+                    onBlur={() => touch('timeout')}
+                    {...aria('timeout')}
                     className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
                   />
+                  {fieldError('timeout')}
                 </div>
               </div>
             </>
@@ -242,12 +291,14 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
             <>
               <p className="text-sm text-gray-400">Assign knights to this mission:</p>
               {form.knights.map((knight, idx) => (
-                <div key={idx} className="flex items-center gap-2">
+                <div key={idx}>
+                <div className="flex items-center gap-2">
                   <input
                     value={knight.name}
                     onChange={e => updateKnight(idx, 'name', e.target.value)}
                     aria-label="Knight name"
                     placeholder="Knight name"
+                    {...aria(`knights.${idx}`)}
                     className="flex-1 px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                   />
                   <input
@@ -263,7 +314,10 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                     </button>
                   )}
                 </div>
+                  {fieldError(`knights.${idx}`)}
+                </div>
               ))}
+              {errors.knights && <p id="wiz-err-knights" className="text-xs text-red-400">{errors.knights}</p>}
               <button
                 onClick={addKnight}
                 className="flex items-center gap-1 text-sm text-roundtable-gold hover:text-yellow-300"
@@ -382,9 +436,11 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                       <input id="wiz-planner-timeout"
                         type="number"
                         value={form.planner.timeout}
-                        onChange={e => updatePlanner('timeout', parseInt(e.target.value) || 300)}
+                        onChange={e => updatePlanner('timeout', e.target.value)}
                         className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
-                      />
+                      {...aria('planner.timeout')}
+                        />
+                      {fieldError('planner.timeout')}
                     </div>
                     <div>
                       <label htmlFor="wiz-max-chains" className="block text-xs text-gray-400 mb-1">Max Chains</label>
@@ -393,9 +449,11 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                         min="1"
                         max="20"
                         value={form.planner.maxChains}
-                        onChange={e => updatePlanner('maxChains', parseInt(e.target.value) || 5)}
+                        onChange={e => updatePlanner('maxChains', e.target.value)}
                         className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
-                      />
+                      {...aria('planner.maxChains')}
+                        />
+                      {fieldError('planner.maxChains')}
                     </div>
                     <div>
                       <label htmlFor="wiz-max-knights" className="block text-xs text-gray-400 mb-1">Max Knights</label>
@@ -404,9 +462,11 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                         min="1"
                         max="50"
                         value={form.planner.maxKnights}
-                        onChange={e => updatePlanner('maxKnights', parseInt(e.target.value) || 10)}
+                        onChange={e => updatePlanner('maxKnights', e.target.value)}
                         className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
-                      />
+                      {...aria('planner.maxKnights')}
+                        />
+                      {fieldError('planner.maxKnights')}
                     </div>
                   </div>
 
@@ -506,7 +566,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || invalidStep >= 0}
               className="flex items-center gap-2 px-4 py-2 bg-roundtable-gold/20 border border-roundtable-gold/30 text-roundtable-gold rounded-lg text-sm font-medium hover:bg-roundtable-gold/30 disabled:opacity-50"
             >
               <Rocket className="w-4 h-4" />
