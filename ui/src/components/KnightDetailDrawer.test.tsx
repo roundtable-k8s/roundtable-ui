@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { KnightDetailDrawer } from './KnightDetailDrawer'
 import type { Knight } from '../hooks/useFleet'
 
@@ -29,24 +30,24 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200
 
 describe('KnightDetailDrawer', () => {
   it('follows the live knight object without refetching', async () => {
-    const { rerender } = render(<KnightDetailDrawer knight={k('galahad', { restarts: 1 })} onClose={() => {}} />)
+    const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { restarts: 1 })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText('1 restarts')).toBeInTheDocument()
     const calls = fetchMock.mock.calls.length
-    rerender(<KnightDetailDrawer knight={k('galahad', { restarts: 5 })} onClose={() => {}} />)
+    rerender(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { restarts: 5 })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText('5 restarts')).toBeInTheDocument()
     expect(fetchMock.mock.calls.length).toBe(calls)
   })
 
   it('reads Starting for a starting knight', () => {
-    render(<KnightDetailDrawer knight={k('galahad', { status: 'starting', ready: false })} onClose={() => {}} />)
+    render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { status: 'starting', ready: false })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText('Starting')).toBeInTheDocument()
     expect(screen.queryByText('Offline')).not.toBeInTheDocument()
   })
 
   it("ignores a slow detail response for knight A after B was opened", async () => {
-    const { rerender } = render(<KnightDetailDrawer knight={k('arthur')} onClose={() => {}} />)
+    const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('arthur')} onClose={() => {}} /></MemoryRouter>)
     await waitFor(() => expect(resolvers['/api/fleet/arthur']).toBeDefined())
-    rerender(<KnightDetailDrawer knight={k('bors')} onClose={() => {}} />)
+    rerender(<MemoryRouter><KnightDetailDrawer knight={k('bors')} onClose={() => {}} /></MemoryRouter>)
     await waitFor(() => expect(resolvers['/api/fleet/bors']).toBeDefined())
     await act(async () => {
       resolvers['/api/fleet/arthur'](json(k('arthur', { skillsList: ['a-only-skill'] })))
@@ -55,7 +56,7 @@ describe('KnightDetailDrawer', () => {
   })
 
   it('encodes the knight name in the detail URL', async () => {
-    render(<KnightDetailDrawer knight={k('a/b')} onClose={() => {}} />)
+    render(<MemoryRouter><KnightDetailDrawer knight={k('a/b')} onClose={() => {}} /></MemoryRouter>)
     await waitFor(() => expect(resolvers['/api/fleet/a%2Fb']).toBeDefined())
   })
 })
