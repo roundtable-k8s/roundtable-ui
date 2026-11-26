@@ -1,11 +1,17 @@
 import { describe, it, expect, vi } from 'vitest'
-import { apiGet } from '../lib/api'
+import { apiGet, ApiError } from '../lib/api'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MissionCard } from './MissionCard'
 import type { Mission } from '../hooks/useMissions'
 
-vi.mock('../lib/api', () => ({ apiGet: vi.fn(() => Promise.reject(new Error('none'))) }))
+vi.mock('../lib/api', () => ({
+  apiGet: vi.fn(() => Promise.reject(new Error('none'))),
+  ApiError: class ApiError extends Error {
+    status: number
+    constructor(status: number, message: string) { super(message); this.status = status }
+  },
+}))
 
 function mission(over: Partial<Mission> = {}): Mission {
   return {
@@ -71,5 +77,53 @@ describe('MissionCard trace link', () => {
     render(<MissionCard mission={mission()} />)
     await Promise.resolve()
     expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  })
+})
+
+describe('MissionCard details link and timing', () => {
+  it('renders view details and a pointer cursor only with onClick', () => {
+    const { container, rerender } = render(<MissionCard mission={mission()} />)
+    expect(screen.queryByText(/view details/)).toBeNull()
+    expect(container.firstElementChild!.className).not.toContain('cursor-pointer')
+    rerender(<MissionCard mission={mission()} onClick={() => {}} />)
+    expect(screen.getByText(/view details/)).toBeInTheDocument()
+    expect(container.firstElementChild!.className).toContain('cursor-pointer')
+  })
+
+  it('does not show a duration ending at expiresAt when completedAt is missing', () => {
+    render(<MissionCard mission={mission({ startedAt: '2026-01-01T00:00:00Z', expiresAt: '2026-01-01T05:00:00Z' })} />)
+    expect(screen.getByText('Finished (time unknown)')).toBeInTheDocument()
+    expect(screen.queryByText(/Duration/)).toBeNull()
+  })
+
+  it('treats CleaningUp as finished only with completedAt', () => {
+    const { unmount } = render(<MissionCard mission={mission({ phase: 'CleaningUp', startedAt: '2026-01-01T00:00:00Z' })} />)
+    expect(screen.queryByRole('button', { name: /results/ })).toBeNull()
+    unmount()
+    render(<MissionCard mission={mission({ phase: 'CleaningUp', completedAt: '2026-01-01T00:01:00Z' })} />)
+    expect(screen.getByRole('button', { name: /results/ })).toBeInTheDocument()
+  })
+
+  it('sets aria-expanded on toggles', async () => {
+    render(<MissionCard mission={mission({ successCriteria: 'ok' })} />)
+    const b = screen.getByRole('button', { name: /Success Criteria/ })
+    expect(b).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(b)
+    expect(b).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+describe('MissionCard results', () => {
+  it('encodes the name; 404 is "No results", others are errors', async () => {
+    const get = vi.mocked(apiGet)
+    get.mockRejectedValueOnce(new ApiError(404, 'not found'))
+    render(<MissionCard mission={mission({ name: 'a/b' })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'results' }))
+    expect(await screen.findByText('No results stored yet')).toBeInTheDocument()
+    expect(get.mock.calls.at(-1)![0]).toBe('/api/missions/a%2Fb/results')
+    await userEvent.click(screen.getByRole('button', { name: 'hide results' }))
+    get.mockRejectedValueOnce(new ApiError(500, 'kaput'))
+    await userEvent.click(screen.getByRole('button', { name: 'results' }))
+    expect(await screen.findByText('Could not load results: kaput')).toBeInTheDocument()
   })
 })

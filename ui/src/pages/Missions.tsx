@@ -129,7 +129,7 @@ export function MissionsPage() {
       )}
 
       {/* Empty State */}
-      {!loading && missions.length === 0 && (
+      {!loading && !error && missions.length === 0 && (
         <EmptyState icon={Target} title="No missions found." sub="Create a mission to get started." />
       )}
 

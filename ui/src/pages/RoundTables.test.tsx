@@ -10,8 +10,9 @@ const tables: RoundTable[] = [
   { ...base, name: 'personal', plannerEnabled: false, knightsSuspended: 1, policies: { costBudgetUSD: '', maxConcurrentPlanTasks: 0, maxMissions: 0 } },
 ]
 
+let fetchState: { data: RoundTable[]; error: string | null } = { data: tables, error: null }
 vi.mock('../hooks/usePolledFetch', () => ({
-  usePolledFetch: () => ({ data: tables, loading: false, error: null, refresh: vi.fn() }),
+  usePolledFetch: () => ({ ...fetchState, loading: false, refresh: vi.fn() }),
 }))
 
 const renderPage = (url = '/roundtables') =>
@@ -41,5 +42,15 @@ describe('RoundTablesPage planner and breakdown', () => {
     expect(rows).toContain('Max Concurrent Plan Tasksunlimited')
     expect(screen.queryByText('Max Knights')).toBeNull()
     expect(screen.queryByText('Max Concurrent Tasks')).toBeNull()
+  })
+})
+
+describe('RoundTablesPage load failure', () => {
+  it('shows the error and no empty state', () => {
+    fetchState = { data: [], error: 'boom' }
+    renderPage()
+    expect(screen.getByText(/Failed to load round tables: boom/)).toBeTruthy()
+    expect(screen.queryByText('No round tables found.')).toBeNull()
+    fetchState = { data: tables, error: null }
   })
 })
