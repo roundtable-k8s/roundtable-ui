@@ -85,13 +85,15 @@ func TestScaleEventsListUsesFieldSelectorAndLimit(t *testing.T) {
 func TestApplyKubeClientLimits(t *testing.T) {
 	cfg := &rest.Config{}
 	applyKubeClientLimits(cfg)
-	if cfg.Timeout != 20*time.Second || cfg.QPS != 20 || cfg.Burst != 40 {
+	// A client timeout would cut every watch stream; it must stay unset.
+	if cfg.Timeout != 0 || cfg.QPS != 20 || cfg.Burst != 40 {
 		t.Fatalf("defaults: %v %v %v", cfg.Timeout, cfg.QPS, cfg.Burst)
 	}
-	t.Setenv("KUBE_QPS", "50")
+	cfg.Timeout = 20 * time.Second
+	t.Setenv("KUBE_QPS", "7.5")
 	t.Setenv("KUBE_BURST", "bogus")
 	applyKubeClientLimits(cfg)
-	if cfg.QPS != 50 || cfg.Burst != 40 {
+	if cfg.Timeout != 0 || cfg.QPS != 7.5 || cfg.Burst != 40 {
 		t.Fatalf("override: %v %v", cfg.QPS, cfg.Burst)
 	}
 }

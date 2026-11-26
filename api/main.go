@@ -2760,16 +2760,24 @@ func wsRelease() {
 	wsConnections.Dec()
 }
 
-// kubeClientTimeout bounds every non-watch Kubernetes request (#411).
-const kubeClientTimeout = 20 * time.Second
-
-// applyKubeClientLimits sets the client timeout and the shared rate limit;
-// KUBE_QPS / KUBE_BURST override the defaults 20 / 40 (invalid or <= 0 values
-// fall back). Watches use their own timeouts and are unaffected.
+// applyKubeClientLimits sets the shared rate limit; KUBE_QPS / KUBE_BURST
+// override the defaults 20 / 40 (invalid or <= 0 values fall back).
+//
+// It deliberately sets no rest.Config.Timeout: client-go turns that into the
+// HTTP client timeout, which also covers reading a watch's streaming body and
+// would cut every watch (chain watcher, list-cache informers) after that long.
+// Request deadlines come from the per-handler contexts instead (#411).
 func applyKubeClientLimits(cfg *rest.Config) {
-	cfg.Timeout = kubeClientTimeout
-	cfg.QPS = float32(envPositiveInt("KUBE_QPS", 20))
+	cfg.Timeout = 0
+	cfg.QPS = envPositiveFloat("KUBE_QPS", 20)
 	cfg.Burst = envPositiveInt("KUBE_BURST", 40)
+}
+
+func envPositiveFloat(key string, def float32) float32 {
+	if f, err := strconv.ParseFloat(os.Getenv(key), 32); err == nil && f > 0 {
+		return float32(f)
+	}
+	return def
 }
 
 func envPositiveInt(key string, def int) int {
