@@ -170,8 +170,6 @@ export function runResultText(r: ScheduleRunResult): string {
   return parts.join('\n\n')
 }
 
-export type ScheduleManagedBy = ManagedBy
-
 export interface ScheduleList {
   schedules: Schedule[]
 }
@@ -180,12 +178,6 @@ export const SCHEDULE_DOCS_URL = 'https://github.com/roundtable-k8s/roundtable/b
 
 export function scheduleKey(s: { namespace: string; name: string }): string {
   return `${s.namespace}/${s.name}`
-}
-
-/** /api/schedules/{namespace}/{name}[/action] */
-export function scheduleUrl(s: { namespace: string; name: string }, action = ''): string {
-  const base = `/api/schedules/${encodeURIComponent(s.namespace)}/${encodeURIComponent(s.name)}`
-  return action ? `${base}/${action}` : base
 }
 
 /** The first non-empty line of a task. */

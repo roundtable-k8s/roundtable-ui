@@ -10,7 +10,7 @@ import { formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
-  firstLine, scheduleKey, scheduleUrl, targetName, SCHEDULE_DOCS_URL,
+  firstLine, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL,
   type Schedule, type ScheduleList, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -123,7 +123,7 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
             return (
               <tr key={key} className="border-b border-roundtable-steel/50 last:border-0 align-top">
                 <td className="px-4 py-3">
-                  <span className="font-medium text-white">{s.name}</span>
+                  <Link to={scheduleLink(s.namespace, s.name)} className="font-medium text-white hover:text-roundtable-gold">{s.name}</Link>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {showTable && <TableBadge table={s.table || 'none'} />}
                     <ManagedByBadge managedBy={s.managedBy} />
@@ -258,20 +258,20 @@ export function SchedulesPage() {
   }
 
   const suspend = (s: Schedule) => act(s, async () => {
-    await apiPost<ScheduleSuspendState>(scheduleUrl(s, 'suspend'), {})
+    await apiPost<ScheduleSuspendState>(scheduleApi(s.namespace, s.name, 'suspend'), {})
     return `Suspended ${s.name}`
   })
   const resume = (s: Schedule) => act(s, async () => {
-    const r = await apiPost<ScheduleSuspendState>(scheduleUrl(s, 'resume'), {})
+    const r = await apiPost<ScheduleSuspendState>(scheduleApi(s.namespace, s.name, 'resume'), {})
     return r.message ? `${s.name}: ${r.message}` : `Resumed ${s.name}`
   })
   const confirm = async () => {
     if (!pending) return
     const s = pending.schedule
     if (pending.kind === 'run') {
-      await act(s, async () => runNowMessage(s.name, await apiPost<ScheduleRunNow>(scheduleUrl(s, 'run'), {})))
+      await act(s, async () => runNowMessage(s.name, await apiPost<ScheduleRunNow>(scheduleApi(s.namespace, s.name, 'run'), {})))
     } else {
-      await act(s, async () => { await apiDelete(scheduleUrl(s)); return `Deleted ${s.name}` })
+      await act(s, async () => { await apiDelete(scheduleApi(s.namespace, s.name)); return `Deleted ${s.name}` })
     }
     setPending(null)
   }

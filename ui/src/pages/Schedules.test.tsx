@@ -100,6 +100,7 @@ describe('SchedulesPage', () => {
     renderPage()
     const digest = await rowFor('morning-digest')
     expect(within(digest).queryByRole('button', { name: /Delete/ })).toBeNull()
+    expect(within(digest).getByRole('link', { name: 'morning-digest' })).toHaveAttribute('href', '/schedules/roundtable/morning-digest')
     expect(within(digest).getByRole('button', { name: 'Run morning-digest now' })).toBeInTheDocument()
     expect(within(digest).getByRole('button', { name: 'Suspend morning-digest' })).toBeInTheDocument()
     expect(within(await rowFor('weekly-report')).getByRole('button', { name: 'Delete weekly-report' })).toBeInTheDocument()

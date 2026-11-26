@@ -41,7 +41,7 @@ func scheduleRoutes(api *mux.Router, g *gatewayClient, wrapRun func(http.Handler
 // /v1/schedules/{namespace}/{name}. ok is false after a 400 was written.
 func schedulePath(w http.ResponseWriter, r *http.Request) (string, bool) {
 	v := mux.Vars(r)
-	if !validKnightName.MatchString(v["namespace"]) || !validKnightName.MatchString(v["name"]) {
+	if !validK8sName.MatchString(v["namespace"]) || !validK8sName.MatchString(v["name"]) {
 		jsonError(w, "Invalid namespace or schedule name", http.StatusBadRequest)
 		return "", false
 	}
@@ -68,7 +68,7 @@ func scheduleListHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := url.Values{}
 		if ns := r.URL.Query().Get("namespace"); ns != "" {
-			if !validKnightName.MatchString(ns) {
+			if !validK8sName.MatchString(ns) {
 				jsonError(w, "Invalid namespace", http.StatusBadRequest)
 				return
 			}
@@ -77,7 +77,7 @@ func scheduleListHandler(g *gatewayClient) http.HandlerFunc {
 		// "none" (no RoundTable) is the dashboard's own filter value; the
 		// gateway has no such table, so the UI narrows to it itself.
 		if t := tableFilter(r); t != "" && t != tableNone {
-			if !validKnightName.MatchString(t) {
+			if !validK8sName.MatchString(t) {
 				jsonError(w, "Invalid table", http.StatusBadRequest)
 				return
 			}

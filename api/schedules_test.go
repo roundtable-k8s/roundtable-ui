@@ -127,7 +127,7 @@ func TestSchedulesValidation(t *testing.T) {
 		{"GET", "/api/schedules?namespace=a.b", ""},
 		{"GET", "/api/schedules?table=fleet.>", ""},
 		{"GET", "/api/schedules/roundtable/bad_name", ""},
-		{"DELETE", "/api/schedules/9ns/x", ""},
+		{"DELETE", "/api/schedules/Bad_ns/x", ""},
 		{"POST", "/api/schedules/roundtable/bad_name/run", ""},
 		{"GET", "/api/schedules/roundtable/x/runs?limit=0", ""},
 		{"GET", "/api/schedules/roundtable/x/runs?limit=201", ""},
