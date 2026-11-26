@@ -353,3 +353,111 @@ func TestKnightQueueHandler_Errors(t *testing.T) {
 		t.Errorf("no JetStream knight queue status = %d, want 503", rr.Code)
 	}
 }
+
+func setQueuesTTL(t *testing.T, d time.Duration) {
+	t.Helper()
+	prev := queuesCacheTTL
+	queuesCacheTTL = d
+	t.Cleanup(func() { queuesCacheTTL = prev })
+}
+
+func lookupCount(f *fakeJetStream) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.lookups)
+}
+
+func TestQueuesHandler_SharedCache(t *testing.T) {
+	t0 := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	f := newFakeJetStream()
+	withQueueFixture(t, f, t0)
+	setQueuesTTL(t, 200*time.Millisecond)
+
+	router := setupTestRouter()
+	createKnightCR(t, makeQueueKnightCR("gawain", 2, 1))
+	bors := makeQueueKnightCR("bors", 2, 1)
+	bors.SetLabels(map[string]string{labelRoundTable: "alpha"})
+	createKnightCR(t, bors)
+
+	get := func(path string) []KnightQueue {
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		if rr.Code != http.StatusOK {
+			t.Errorf("status = %d: %s", rr.Code, rr.Body.String())
+		}
+		var got []KnightQueue
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Errorf("decode: %v", err)
+		}
+		return got
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); get("/api/queues") }()
+	}
+	wg.Wait()
+	// One round: one lookup per knight (consumer not found falls through to
+	// a second name, so allow up to two per knight).
+	first := lookupCount(f)
+	if first == 0 || first > 4 {
+		t.Fatalf("lookups after 20 concurrent requests = %d, want one round (<=4)", first)
+	}
+
+	// Within the TTL: served from cache, incl. filtered requests.
+	get("/api/queues")
+	if got := get("/api/queues?table=nonexistent"); len(got) != 0 {
+		t.Errorf("table filter returned %+v, want none", got)
+	}
+	if got := get("/api/queues?table=alpha"); len(got) != 1 || got[0].Knight != "bors" {
+		t.Errorf("table=alpha returned %+v, want [bors]", got)
+	}
+	if got := get("/api/queues?table=none"); len(got) != 1 || got[0].Knight != "gawain" {
+		t.Errorf("table=none returned %+v, want [gawain]", got)
+	}
+	if n := lookupCount(f); n != first {
+		t.Errorf("lookups within TTL = %d, want %d", n, first)
+	}
+
+	// After the TTL: a new round.
+	time.Sleep(250 * time.Millisecond)
+	get("/api/queues")
+	if n := lookupCount(f); n != 2*first {
+		t.Errorf("lookups after TTL = %d, want %d", n, 2*first)
+	}
+}
+
+func TestQueuesHandler_ErrorsNotCached(t *testing.T) {
+	setQueuesTTL(t, time.Minute)
+	c := &queuesCache{}
+	calls := 0
+	_, err := c.get(context.Background(), func(context.Context) ([]KnightQueue, error) {
+		calls++
+		return nil, errors.New("boom")
+	})
+	if err == nil {
+		t.Fatal("want error")
+	}
+	if _, err = c.get(context.Background(), func(context.Context) ([]KnightQueue, error) {
+		calls++
+		return []KnightQueue{{Knight: "a"}}, nil
+	}); err != nil || calls != 2 {
+		t.Fatalf("err=%v calls=%d, want a retry after the failure", err, calls)
+	}
+}
+
+func TestQueuesCache_BuildSurvivesCallerCancel(t *testing.T) {
+	c := &queuesCache{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	errc := make(chan error, 1)
+	c.get(ctx, func(bctx context.Context) ([]KnightQueue, error) {
+		time.Sleep(20 * time.Millisecond)
+		errc <- bctx.Err()
+		return []KnightQueue{}, nil
+	})
+	if buildErr := <-errc; buildErr != nil {
+		t.Errorf("build context was cancelled with the caller: %v", buildErr)
+	}
+}

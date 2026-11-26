@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nats-io/nats.go/jetstream"
+	"golang.org/x/sync/singleflight"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -288,9 +289,69 @@ func knightQueueHandler(namespace string) http.HandlerFunc {
 	}
 }
 
+// queuesCacheTTL is how long one /api/queues lookup is shared between
+// requests. It is a variable so tests can change it.
+var queuesCacheTTL = 3 * time.Second
+
+// queuesCache holds the last unfiltered /api/queues result and collapses
+// concurrent misses into one build. Errors are never cached.
+type queuesCache struct {
+	mu    sync.Mutex
+	at    time.Time
+	items []KnightQueue
+	group singleflight.Group
+}
+
+func (c *queuesCache) fresh() ([]KnightQueue, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.items != nil && time.Since(c.at) < queuesCacheTTL {
+		return c.items, true
+	}
+	return nil, false
+}
+
+// get returns the sorted queues of every knight. build runs at most once for
+// concurrent callers, under its own context bounded by queueLookupTimeout so
+// one caller going away does not fail the others.
+func (c *queuesCache) get(ctx context.Context, build func(context.Context) ([]KnightQueue, error)) ([]KnightQueue, error) {
+	if items, ok := c.fresh(); ok {
+		return items, nil
+	}
+	ch := c.group.DoChan("queues", func() (any, error) {
+		if items, ok := c.fresh(); ok {
+			return items, nil
+		}
+		bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), queueLookupTimeout)
+		defer cancel()
+		items, err := build(bctx)
+		if err != nil {
+			return nil, err
+		}
+		if items == nil {
+			items = []KnightQueue{}
+		}
+		c.mu.Lock()
+		c.items, c.at = items, time.Now()
+		c.mu.Unlock()
+		return items, nil
+	})
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		return res.Val.([]KnightQueue), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 // queuesHandler serves GET /api/queues: the queue of every knight, sorted by
-// name.
+// name. The unfiltered lookup is shared for queuesCacheTTL; ?table= filters
+// the shared result.
 func queuesHandler(namespace string) http.HandlerFunc {
+	cache := &queuesCache{}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
 			jsonError(w, "Kubernetes not available", http.StatusServiceUnavailable)
@@ -301,38 +362,41 @@ func queuesHandler(namespace string) http.HandlerFunc {
 			jsonError(w, "JetStream not available", http.StatusServiceUnavailable)
 			return
 		}
-		crItems, err := cachedList(r.Context(), dynClient, knightGVR, namespace)
+		all, err := cache.get(r.Context(), func(ctx context.Context) ([]KnightQueue, error) {
+			crItems, err := cachedList(ctx, dynClient, knightGVR, namespace)
+			if err != nil {
+				return nil, err
+			}
+			// Look up knights concurrently, a few at a time.
+			out := make([]KnightQueue, len(crItems))
+			sem := make(chan struct{}, 8)
+			var wg sync.WaitGroup
+			for i := range crItems {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(i int) {
+					defer wg.Done()
+					defer func() { <-sem }()
+					out[i] = buildKnightQueue(ctx, b, queueTargetFromCR(&crItems[i]))
+				}(i)
+			}
+			wg.Wait()
+			sort.Slice(out, func(i, j int) bool { return out[i].Knight < out[j].Knight })
+			return out, nil
+		})
 		if err != nil {
 			slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
 			jsonError(w, "Failed to list knights", http.StatusInternalServerError)
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), queueLookupTimeout)
-		defer cancel()
-
-		// Look up knights concurrently, a few at a time.
 		filter := tableFilter(r)
-		items := make([]*unstructured.Unstructured, 0, len(crItems))
-		for i := range crItems {
-			if tableMatches(filter, knightTableName(&crItems[i])) {
-				items = append(items, &crItems[i])
+		out := make([]KnightQueue, 0, len(all))
+		for _, q := range all {
+			if tableMatches(filter, q.Table) {
+				out = append(out, q)
 			}
 		}
-		out := make([]KnightQueue, len(items))
-		sem := make(chan struct{}, 8)
-		var wg sync.WaitGroup
-		for i := range items {
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(i int) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				out[i] = buildKnightQueue(ctx, b, queueTargetFromCR(items[i]))
-			}(i)
-		}
-		wg.Wait()
-		sort.Slice(out, func(i, j int) bool { return out[i].Knight < out[j].Knight })
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
