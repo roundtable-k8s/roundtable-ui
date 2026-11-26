@@ -235,3 +235,14 @@ func TestParseEgressHostEntries(t *testing.T) {
 		t.Errorf("source = %q", e.Source)
 	}
 }
+
+func TestBuildKnightIsolationDefaultEmptyAllowlist(t *testing.T) {
+	cr := isoKnight("gawain", nil, cond("Isolated", "True", "Isolated", "ok"))
+	info := buildKnightIsolation(cr, nil, nil)
+	if info.Egress == nil || info.Egress.Source != "default" {
+		t.Fatalf("egress = %+v, want empty allowlist with source default", info.Egress)
+	}
+	if len(info.Egress.AllowedHosts) != 0 || len(info.Egress.AllowedPorts) != 0 || len(info.Egress.AllowedServices) != 0 {
+		t.Errorf("default allowlist must be empty, got %+v", info.Egress)
+	}
+}
