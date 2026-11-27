@@ -1,7 +1,8 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Target, ArrowLeft } from 'lucide-react'
 import { useMission } from '../hooks/useMission'
 import type { Mission } from '../hooks/useMissions'
+import { DeleteMission } from '../components/DeleteMission'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
 import { MissionResults, KnightStatusList, ChainStatusList } from '../components/MissionSections'
 import { TraceLink } from '../components/TraceLink'
@@ -134,6 +135,7 @@ function MissionBody({ m }: { m: Mission }) {
 
 export function MissionDetailPage() {
   const { name = '' } = useParams()
+  const navigate = useNavigate()
   const { mission, loading, error, notFound, refresh } = useMission(name)
 
   return (
@@ -157,6 +159,7 @@ export function MissionDetailPage() {
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <MissionPhaseBadge phase={mission.phase} />
             <TableBadge table={mission.table} />
+            <span className="ml-auto"><DeleteMission name={mission.name} onDeleted={() => navigate('/missions')} /></span>
           </div>
           <MissionBody m={mission} />
         </>

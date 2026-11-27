@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { MissionDetailPage } from './MissionDetail'
 import { ApiError } from '../lib/api'
 import type { Mission } from '../hooks/useMissions'
 
 const mockApiGet = vi.fn()
+const mockApiDelete = vi.fn()
 vi.mock('../lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/api')>()),
   apiGet: (...a: unknown[]) => mockApiGet(...a),
+  apiDelete: (...a: unknown[]) => mockApiDelete(...a),
 }))
 
 function mission(over: Partial<Mission> = {}): Mission {
@@ -33,7 +36,7 @@ function renderPage() {
   )
 }
 
-beforeEach(() => { mockApiGet.mockReset() })
+beforeEach(() => { mockApiGet.mockReset(); mockApiDelete.mockReset() })
 
 describe('MissionDetailPage', () => {
   it('renders status, objective, knights, chains and cost', async () => {
@@ -101,5 +104,16 @@ describe('MissionDetailPage', () => {
     expect(items[0]).toHaveTextContent('galahad')
     expect(items[0]).toHaveTextContent('0.9')
     expect(items[1]).toHaveTextContent('tmp-1')
+  })
+
+  it('deletes the mission after confirmation and returns to the list', async () => {
+    mockApiGet.mockResolvedValue(mission())
+    mockApiDelete.mockResolvedValue(undefined)
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('missions list')).toBeInTheDocument()
+    expect(mockApiDelete).toHaveBeenCalledTimes(1)
+    expect(mockApiDelete.mock.calls[0][0]).toBe('/api/missions/m1')
   })
 })

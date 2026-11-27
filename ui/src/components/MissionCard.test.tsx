@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { apiGet, ApiError } from '../lib/api'
+import { apiGet, apiDelete, ApiError } from '../lib/api'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MissionCard } from './MissionCard'
@@ -7,6 +7,7 @@ import type { Mission } from '../hooks/useMissions'
 
 vi.mock('../lib/api', () => ({
   apiGet: vi.fn(() => Promise.reject(new Error('none'))),
+  apiDelete: vi.fn(() => Promise.resolve()),
   ApiError: class ApiError extends Error {
     status: number
     constructor(status: number, message: string) { super(message); this.status = status }
@@ -125,5 +126,22 @@ describe('MissionCard results', () => {
     get.mockRejectedValueOnce(new ApiError(500, 'kaput'))
     await userEvent.click(screen.getByRole('button', { name: 'results' }))
     expect(await screen.findByText('Could not load results: kaput')).toBeInTheDocument()
+  })
+})
+
+describe('MissionCard delete', () => {
+  it.each(['Succeeded', 'Failed', 'Expired'])('offers Delete for %s and deletes without opening the card', async (phase) => {
+    const onClick = vi.fn(); const onDeleted = vi.fn()
+    render(<MissionCard mission={mission({ phase })} onClick={onClick} onDeleted={onDeleted} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete mission costly' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await vi.waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1))
+    expect(apiDelete).toHaveBeenLastCalledWith('/api/missions/costly')
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it.each(['Active', 'Planning', 'Pending'])('has no Delete button for %s', (phase) => {
+    render(<MissionCard mission={mission({ phase })} />)
+    expect(screen.queryByRole('button', { name: /Delete mission/ })).not.toBeInTheDocument()
   })
 })
