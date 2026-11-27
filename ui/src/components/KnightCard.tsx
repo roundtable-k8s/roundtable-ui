@@ -24,6 +24,18 @@ interface KnightCardProps {
   activity?: KnightActivity
   /** The knight's agent card (#243); absent → the card-less view. */
   card?: CardEntry
+  /** Queued and in-flight task counts (#579); absent → no load line. */
+  queue?: { pending: number; inFlight: number }
+}
+
+/** "2 queued · 1 running"; muted when idle, amber while work waits or runs. */
+function QueueLine({ queue }: { queue: { pending: number; inFlight: number } }) {
+  const idle = queue.pending === 0 && queue.inFlight === 0
+  return (
+    <p data-testid="knight-queue" className={`mt-3 text-xs text-center ${idle ? 'text-gray-500' : 'text-amber-400'}`}>
+      {queue.pending} queued · {queue.inFlight} running
+    </p>
+  )
 }
 
 /** Live / not live badge plus load (active / max) from the knight's card. */
@@ -71,7 +83,7 @@ function extractModelShortName(model?: string): string | null {
   return parts[parts.length - 1].split('-').slice(0, 2).join('-')
 }
 
-export function KnightCard({ knight, onClick, activity, card, showTable }: KnightCardProps) {
+export function KnightCard({ knight, onClick, activity, card, showTable, queue }: KnightCardProps) {
   const config = getKnightConfig(knight.name)
   const modelShortName = extractModelShortName(knight.model)
   const successRate = knight.tasksCompleted !== undefined && knight.tasksFailed !== undefined
@@ -165,6 +177,8 @@ export function KnightCard({ knight, onClick, activity, card, showTable }: Knigh
           <p className="text-xs text-gray-400">Restarts</p>
         </div>
       </div>
+
+      {queue && <QueueLine queue={queue} />}
 
       {/* Activity indicator */}
       {activity && (

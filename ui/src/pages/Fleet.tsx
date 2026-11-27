@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Zap, Crown, DollarSign, TrendingUp, ShieldOff, Search } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
+import { useKnightLoad, knightLoadKey, type KnightLoadMap } from '../hooks/useKnightLoad'
 import type { Knight } from '../hooks/useFleet'
 import { KnightCard } from '../components/KnightCard'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
@@ -18,6 +19,14 @@ import { SkillFilter } from '../components/SkillFilter'
 import { isNotIsolated } from '../lib/isolation'
 import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as SkillFilterValue } from '../lib/cards'
 
+/** Busy: pending + inFlight > 0; Idle: both 0. No counts for the knight: neither. */
+function matchesLoad(loads: KnightLoadMap, k: Knight, want: string): boolean {
+  const queue = loads.get(knightLoadKey(k))
+  if (!queue) return false
+  const busy = queue.pending + queue.inFlight > 0
+  return want === 'busy' ? busy : !busy
+}
+
 /** The knight's table for card lookup; undefined when unset or "none". */
 const tableOf = (k: { table?: string }) => (k.table && k.table !== 'none' ? k.table : undefined)
 
@@ -29,6 +38,7 @@ const STATUS_OPTIONS = [
   ['offline', 'Offline'],
   ['scaled-to-zero', 'Scaled to zero'],
 ] as const
+const LOAD_OPTIONS = [['busy', 'Busy'], ['idle', 'Idle']] as const
 const SORT_OPTIONS = [['name', 'Name'], ['status', 'Status'], ['restarts', 'Restarts']] as const
 type SortKey = (typeof SORT_OPTIONS)[number][0]
 const STATUS_RANK: Record<string, number> = { online: 0, busy: 1, starting: 2, 'scaled-to-zero': 3, offline: 4 }
@@ -49,9 +59,14 @@ export function FleetPage() {
   }, [selectedKey, selectedKnight, loading])
   const { events } = useWebSocket()
   const { cards } = useCards()
+  const loads = useKnightLoad()
+  const hasLoad = knights.some((k) => loads.has(knightLoadKey(k)))
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const status = params.get('status') ?? ''
+  const loadParam = params.get('load') ?? ''
+  // Busy: queued or running work (#579); Idle: none. Knights without counts match neither.
+  const loadFilter = LOAD_OPTIONS.some(([v]) => v === loadParam) ? loadParam : ''
   const sortParam = params.get('sort') ?? ''
   const sort: SortKey = SORT_OPTIONS.some(([v]) => v === sortParam) ? (sortParam as SortKey) : 'name'
   const knightParam = params.get('knight') ?? ''
@@ -80,13 +95,14 @@ export function FleetPage() {
     return knights
       .filter((k) => !needle || k.name.toLowerCase().includes(needle))
       .filter((k) => !status || k.status === status)
+      .filter((k) => !loadFilter || matchesLoad(loads, k, loadFilter))
       .filter((k) => matchesSkillFilter(cardForKnight(cards, k.name, tableOf(k)), skillFilter))
       .filter((k) => !notIsolatedOnly || isNotIsolated(k))
       .sort(cmp)
-  }, [knights, cards, skillFilter, notIsolatedOnly, q, status, sort])
+  }, [knights, cards, skillFilter, notIsolatedOnly, q, status, loadFilter, loads, sort])
 
   // A new filter or sort starts again from the first page.
-  useEffect(() => { setLimit(PAGE_SIZE) }, [q, status, sort, skillFilter, notIsolatedOnly, table])
+  useEffect(() => { setLimit(PAGE_SIZE) }, [q, status, loadFilter, sort, skillFilter, notIsolatedOnly, table])
 
   // ?knight=<name>: open that knight's drawer once the fleet has it.
   const openedFor = useRef('')
@@ -268,6 +284,17 @@ export function FleetPage() {
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
           </select>
+          {hasLoad && (
+            <select
+              aria-label="Filter by load"
+              value={loadFilter}
+              onChange={(e) => setParam('load', e.target.value)}
+              className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1.5 text-sm text-white"
+            >
+              <option value="">All load</option>
+              {LOAD_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            </select>
+          )}
           <select
             aria-label="Sort by"
             value={sort}
@@ -311,6 +338,7 @@ export function FleetPage() {
               onClick={() => setSelectedKey(knightKey(knight))}
               activity={knightActivity[knight.name]}
               card={cardForKnight(cards, knight.name, tableOf(knight))}
+              queue={loads.get(knightLoadKey(knight))}
               showTable={!table}
             />
           ))}
@@ -329,7 +357,7 @@ export function FleetPage() {
       )}
       {!loading && knights.length > 0 && visibleKnights.length === 0 && (
         <p className="text-center text-gray-500 text-sm py-10">
-          {notIsolatedOnly || q || status ? 'No knight matches these filters.' : 'No knight has a skill matching this filter.'}
+          {notIsolatedOnly || q || status || loadFilter ? 'No knight matches these filters.' : 'No knight has a skill matching this filter.'}
         </p>
       )}
 

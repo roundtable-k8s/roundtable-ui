@@ -7,6 +7,7 @@ import type { Knight } from '../hooks/useFleet'
 import { cardKey, type CardMap } from '../lib/cards'
 import { galahadCard, patsyCard } from '../test/fixtures/cards'
 import { isolated, notEnforced, optedOut } from '../test/fixtures/isolation'
+import type { KnightLoadMap } from '../hooks/useKnightLoad'
 
 const k = (name: string, domain: string): Knight => ({
   name, domain, status: 'online', ready: true, restarts: 0, age: '1h', image: 'knight:latest', skills: 1, nixTools: 1, labels: {},
@@ -19,6 +20,11 @@ vi.mock('../hooks/useFleet', () => ({
   useFleet: () => ({ knights, loading: fleetLoading, error: fleetError, refresh: vi.fn() }),
 }))
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
+let loads: KnightLoadMap = new Map()
+vi.mock('../hooks/useKnightLoad', async (orig) => ({
+  ...(await orig<typeof import('../hooks/useKnightLoad')>()),
+  useKnightLoad: () => loads,
+}))
 let cards: CardMap = new Map()
 vi.mock('../hooks/useCards', () => ({ useCards: () => ({ cards, loading: false, unavailable: false }) }))
 vi.mock('../components/KnightDetailDrawer', () => ({
@@ -33,6 +39,7 @@ beforeEach(() => {
   knights = [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')]
   fleetError = null
   fleetLoading = false
+  loads = new Map()
   cards = new Map([
     [cardKey('personal', 'galahad'), galahadCard],
     [cardKey('personal', 'patsy'), patsyCard],
@@ -226,5 +233,37 @@ describe('Fleet first run', () => {
     render(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
     expect(screen.getByText('⚠️ Failed to fetch')).toBeInTheDocument()
+  })
+})
+
+describe('Fleet load filter (#579)', () => {
+  it('filters to busy and idle knights, and shows the knights\' queue counts', async () => {
+    const user = userEvent.setup()
+    knights = [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')]
+    loads = new Map([['/galahad', { pending: 2, inFlight: 1 }], ['/patsy', { pending: 0, inFlight: 0 }]])
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.getAllByTestId('knight-queue').map((el) => el.textContent)).toEqual(['2 queued · 1 running', '0 queued · 0 running'])
+    await user.selectOptions(screen.getByLabelText('Filter by load'), 'busy')
+    expect(names()).toEqual(['galahad'])
+    await user.selectOptions(screen.getByLabelText('Filter by load'), 'idle')
+    expect(names()).toEqual(['patsy'])
+    expect(screen.getByTestId('fleet-count').textContent).toBe('1/3')
+  })
+
+  it('keeps the load filter in the URL', async () => {
+    const user = userEvent.setup()
+    loads = new Map([['/galahad', { pending: 1, inFlight: 0 }]])
+    render(<MemoryRouter initialEntries={['/fleet']}><FleetPage /><Where /></MemoryRouter>)
+    await user.selectOptions(screen.getByLabelText('Filter by load'), 'busy')
+    expect(screen.getByTestId('where').textContent).toContain('load=busy')
+    expect(names()).toEqual(['galahad'])
+  })
+
+  it('hides the load filter and the queue line when no knight has counts', () => {
+    loads = new Map()
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.queryByLabelText('Filter by load')).toBeNull()
+    expect(screen.queryAllByTestId('knight-queue')).toHaveLength(0)
+    expect(names()).toEqual(['galahad', 'kay', 'patsy'])
   })
 })

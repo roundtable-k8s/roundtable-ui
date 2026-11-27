@@ -389,3 +389,22 @@ describe('KnightCard age', () => {
     expect(screen.getByText('2h 15m uptime')).toBeInTheDocument()
   })
 })
+
+describe('KnightCard queue (#579)', () => {
+  it('shows queued and running counts', () => {
+    render(<KnightCard knight={mockKnight} queue={{ pending: 2, inFlight: 1 }} />)
+    expect(screen.getByTestId('knight-queue').textContent).toBe('2 queued · 1 running')
+  })
+
+  it('shows the zero line when the knight is idle', () => {
+    render(<KnightCard knight={mockKnight} queue={{ pending: 0, inFlight: 0 }} />)
+    const line = screen.getByTestId('knight-queue')
+    expect(line.textContent).toBe('0 queued · 0 running')
+    expect(line.className).toContain('text-gray-500')
+  })
+
+  it('hides the line without queue counts', () => {
+    render(<KnightCard knight={mockKnight} />)
+    expect(screen.queryByTestId('knight-queue')).toBeNull()
+  })
+})
