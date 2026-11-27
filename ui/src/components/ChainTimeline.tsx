@@ -38,7 +38,7 @@ export function ChainTimeline({ chain, now = Date.now(), selected, onSelect }: {
                       title={`Round ${r.iteration}: ${formatSecondsLadder(r.durationMs / 1000)}`}
                       className="absolute top-0 h-5 border-l border-r border-black/40 bg-white/20"
                       style={{
-                        left: `${row.widthPct ? ((r.startPct - row.startPct) / row.widthPct) * 100 : 0}%`,
+                        left: `${row.widthPct ? ((r.startPct - (row.startPct ?? 0)) / row.widthPct) * 100 : 0}%`,
                         width: `${row.widthPct ? (r.widthPct / row.widthPct) * 100 : 100}%`,
                       }} />
                   ))}

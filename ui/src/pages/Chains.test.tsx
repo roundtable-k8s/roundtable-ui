@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, act, waitFor } from '@testing-library/react'
+import { render, screen, within, act, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChainsPage, CHAINS_LIST_URL, CHAIN_GROUPS_URL, FALLBACK_POLL_MS, GROUP_PAGE_SIZE, GROUP_REFRESH_MS } from './Chains'
@@ -571,6 +571,21 @@ describe('ChainsPage trace link', () => {
     renderPage('/chains?chain=doc-sweep')
     await screen.findByRole('region', { name: 'step review-each' })
     expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  })
+})
+
+describe('ChainsPage timeline toggle', () => {
+  it('hides the timeline until Timeline is opened', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([fanOutChain(), prPipelineChain()]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=doc-sweep')
+    const toggle = await screen.findByRole('button', { name: 'Timeline' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('list', { name: 'Chain run timeline' })).toBeNull()
+    fireEvent.click(toggle)
+    expect(screen.getByRole('list', { name: 'Chain run timeline' })).toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.queryByRole('list', { name: 'Chain run timeline' })).toBeNull()
   })
 })
 
