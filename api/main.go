@@ -423,6 +423,10 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.HandleFunc("/chat/tasks/{taskId}", taskStatusHandler(d.gateway)).Methods("GET")
 	api.HandleFunc("/chat/tasks/{taskId}/events", chatEventsHandler(d.gateway)).Methods("GET")
 
+	// Recent tasks and chain runs, newest first (GET /v1/tasks, GET /v1/runs)
+	api.HandleFunc("/gateway/tasks", gatewayTasksHandler(d.gateway)).Methods("GET")
+	api.HandleFunc("/gateway/runs", gatewayRunsHandler(d.gateway)).Methods("GET")
+
 	// Dead letters: failed and lost tasks, retried through the gateway
 	api.HandleFunc("/dead-letters", deadLettersHandler(d.gateway)).Methods("GET")
 	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(d.gateway)).Methods("GET")

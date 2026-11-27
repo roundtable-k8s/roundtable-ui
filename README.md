@@ -402,6 +402,8 @@ Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
 
 ### Failed & Lost
 Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
+- `GET /api/gateway/tasks` — Recent gateway tasks, newest first (`GET /v1/tasks`). Query (forwarded as is, other keys dropped): `knight`, `runId`, `status`, `limit` (a positive integer; the gateway caps it at 200 and defaults to 20)
+- `GET /api/gateway/runs` — Chain runs (`GET /v1/runs`, no steps). Query (forwarded as is): `namespace`, `chain`, `phase`, `limit` (a positive integer)
 - `GET /api/dead-letters` — List dead letters. Query (forwarded as is): `knight`, `reason`, `state`, `limit`
 - `GET /api/dead-letters/{taskId}` — One dead letter including the original task payload, which the list omits. Optional `?table=`
 - `POST /api/dead-letters/{taskId}/retry` — Retry a dead letter. Optional body `{force?, table?}` (only these two are forwarded); the gateway's status codes (409, 422, …) pass through. The dashboard never sends a `namespace`, so the retry relies on the gateway's default namespace
