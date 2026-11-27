@@ -78,6 +78,7 @@ describe('FailedTasksPage', () => {
     const rows = await screen.findAllByTestId('dead-letter-row')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('rt-ui')
+    expect(screen.getByText('1 failed task')).toBeInTheDocument()
   })
 
   it('applies a ?table= switch made while a slow response is in flight', async () => {

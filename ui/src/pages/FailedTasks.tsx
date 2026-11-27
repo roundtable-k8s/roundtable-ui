@@ -68,7 +68,7 @@ export function FailedTasksPage() {
 
   return (
     <div>
-      <PageHeader icon={Skull} title="Failed & lost" subtitle={(loading || error) && shown === 0 ? undefined : capped ? `${shown}+ failed tasks` : countLabel(shown, shown, 'failed tasks', 'failed task')}>
+      <PageHeader icon={Skull} title="Failed & lost" subtitle={(loading || error) && entries.length === 0 ? undefined : capped ? `${entries.length}+ failed tasks` : countLabel(entries.length, entries.length, 'failed tasks', 'failed task')}>
         <RefreshButton onClick={load} loading={loading} />
       </PageHeader>
       <div className="mb-4">

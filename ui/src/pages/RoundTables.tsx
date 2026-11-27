@@ -4,9 +4,8 @@ import { Crown, Shield, DollarSign, ChevronDown, Settings, CheckSquare } from 'l
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
-import { budgetText, formatCost } from '../lib/format'
+import { budgetText, countLabel, formatCost } from '../lib/format'
 import type { RoundTable } from '../lib/types'
-import { countLabel } from '../lib/format'
 import { PageHeader, RefreshButton, ListState, PhaseBadge, ProgressBar } from '../components/ui'
 
 export function RoundTablesPage() {

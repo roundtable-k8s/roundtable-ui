@@ -908,7 +908,7 @@ export function ChainsPage() {
 
   return (
     <div>
-      <PageHeader icon={Link} title="Chain Executions" subtitle={loading || (error && chains.length === 0) ? undefined : countLabel(chains.length, listTotal ?? chains.length, 'chains')}>
+      <PageHeader icon={Link} title="Chain Executions" subtitle={(loading || error) && chains.length === 0 ? undefined : countLabel(chains.length, listTotal ?? chains.length, 'chains')}>
         {connected ? (
           <span className="flex items-center gap-1.5 text-xs text-green-400">
             <Radio className="w-3 h-3" />
