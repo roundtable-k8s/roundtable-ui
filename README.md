@@ -432,6 +432,8 @@ Proxied to the gateway (`/v1/schedules`); all answer 503 when `GATEWAY_URL` is u
 - `GET /api/schedules/{namespace}/{name}/manifest` — The schedule as a manifest, `application/yaml` by default; `?format=json` converts it to JSON, `?format=yaml` is the default, any other value is 400
 - `POST /api/schedules/{namespace}/{name}/suspend` — Suspend (no body)
 - `POST /api/schedules/{namespace}/{name}/resume` — Resume (no body)
+- `POST /api/schedules/suspend` — Suspend every schedule of a table. Body `{"table": "<name>", "namespace": "<ns>"}` (`table` required, `namespace` optional); answers the gateway's `{changed, unchanged, failed}`
+- `POST /api/schedules/resume` — Resume every schedule of a table; same body and answer as suspend
 - `POST /api/schedules/{namespace}/{name}/run` — Run now (no body); rate limited (429) like dispatch
 - `GET /api/schedules/{namespace}/{name}/runs` — Recent runs. Optional `?limit=` (1-200, else 400)
 - `GET /api/schedules/{namespace}/{name}/runs/{run}` — Result of one run
