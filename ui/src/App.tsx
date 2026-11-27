@@ -94,12 +94,13 @@ export default function App() {
 
   // Page title from the nav label; focus <main> on route change (not on first load)
   const mainRef = useRef<HTMLElement>(null)
-  const firstRender = useRef(true)
+  const lastPath = useRef(location.pathname)
   const current = navItems.find(n => isActivePath(location.pathname, n.path))
   const pageLabel = current ? current.label : 'Page not found'
   useEffect(() => { document.title = `${pageLabel} - ${APP_TITLE}` }, [pageLabel])
   useEffect(() => {
-    if (firstRender.current) { firstRender.current = false; return }
+    if (lastPath.current === location.pathname) return
+    lastPath.current = location.pathname
     mainRef.current?.focus()
   }, [location.pathname])
 
@@ -220,8 +221,8 @@ export default function App() {
             <Route path="/architecture" element={<ArchitecturePage />} />
             <Route path="*" element={
               <div>
-                <EmptyState title="Page not found" sub="The page you asked for does not exist." />
-                <p className="text-center"><Link to="/" className="text-roundtable-gold underline">Back to Command Center</Link></p>
+                <EmptyState titleAs="h1" title="Page not found" sub="The page you asked for does not exist." />
+                <p className="text-center"><Link to={table ? `/?table=${encodeURIComponent(table)}` : '/'} className="text-roundtable-gold underline">Back to Command Center</Link></p>
               </div>
             } />
           </Routes>

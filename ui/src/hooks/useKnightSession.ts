@@ -174,5 +174,16 @@ export function useKnightSession() {
     }
   }, [])
 
-  return { stats, recent, tree, loading, error, fetchStats, fetchRecent, fetchTree }
+  // Drop the current knight's data (and invalidate in-flight requests) when the knight changes.
+  const reset = useCallback(() => {
+    latest.current.stats++
+    latest.current.recent++
+    latest.current.tree++
+    setStats(null)
+    setRecent([])
+    setTree([])
+    setError(null)
+  }, [])
+
+  return { stats, recent, tree, loading, error, fetchStats, fetchRecent, fetchTree, reset }
 }

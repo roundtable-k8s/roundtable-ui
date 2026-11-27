@@ -164,6 +164,22 @@ describe('ChatPage selection, races and stale turns', () => {
     expect(screen.getByRole('button', { name: /send/i })).toBeEnabled()
   })
 
+  it('clears the stale timer when the turn finishes early', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await user.type(await screen.findByLabelText('Message'), 'hi')
+    await user.click(screen.getByRole('button', { name: /send/i }))
+    await screen.findByRole('status')
+    const before = vi.getTimerCount()
+    taskStatus = { taskId: 't1', status: 'succeeded', output: 'done' }
+    await act(async () => { vi.advanceTimersByTime(5000) })
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+    expect(vi.getTimerCount()).toBeLessThan(before)
+    await act(async () => { vi.advanceTimersByTime(STALE_TURN_MS + 1000) })
+    expect(screen.queryByText(/Still waiting/)).not.toBeInTheDocument()
+  })
+
   it('retries the knights fetch', async () => {
     apiGet.mockRejectedValueOnce(new Error('down'))
     render(<MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter>)

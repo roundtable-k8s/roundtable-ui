@@ -31,15 +31,17 @@ export function ErrorBanner({ children }: { children: ReactNode }) {
 }
 
 /** Centered icon + message for "nothing here yet" sections. */
-export function EmptyState({ icon: Icon, title, sub }: {
+export function EmptyState({ icon: Icon, title, sub, titleAs: Title = 'p' }: {
   icon?: ComponentType<{ className?: string }>
   title: string
   sub?: string
+  /** Element for the title; use 'h1' when the empty state is the whole page. */
+  titleAs?: 'p' | 'h1' | 'h2'
 }) {
   return (
     <div className="text-center py-12">
       {Icon && <Icon className="w-12 h-12 text-gray-600 mx-auto mb-3" />}
-      <p className="text-gray-500">{title}</p>
+      <Title className="text-gray-500">{title}</Title>
       {sub && <p className="text-gray-600 text-sm mt-1">{sub}</p>}
     </div>
   )

@@ -216,7 +216,7 @@ function statusLabel(k: Knight): string {
 }
 
 export function KnightDetailDrawer({ knight, onClose, card }: Props) {
-  const { stats, recent, loading, error, fetchStats, fetchRecent } = useKnightSession()
+  const { stats, recent, loading, error, fetchStats, fetchRecent, reset: resetSession } = useKnightSession()
   const [recentLoading, setRecentLoading] = useState(false)
   const [logsExpanded, setLogsExpanded] = useState(false)
   const [knightDetail, setKnightDetail] = useState<Knight | null>(null)
@@ -258,6 +258,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
       // Clear the previous knight's detail so a slow/failed fetch can't show
       // knight A's skills and config under knight B's name
       setKnightDetail(null)
+      resetSession()
       refreshAll(knightName)
       setLogsExpanded(false)
     }

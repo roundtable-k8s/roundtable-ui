@@ -10,7 +10,7 @@ vi.mock('../lib/api', async (orig) => ({
   apiGet: vi.fn(() => new Promise(() => {})),
 }))
 vi.mock('../hooks/useKnightSession', () => ({
-  useKnightSession: () => ({ stats: null, recent: [], loading: false, error: null, fetchStats: vi.fn(), fetchRecent: vi.fn() }),
+  useKnightSession: () => ({ stats: null, recent: [], loading: false, error: null, fetchStats: vi.fn(), fetchRecent: vi.fn(), reset: vi.fn() }),
 }))
 
 const knight: Knight = {

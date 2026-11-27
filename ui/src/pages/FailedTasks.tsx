@@ -20,6 +20,9 @@ export function FailedTasksPage() {
   const [state, setState] = useState<StateFilter>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // The state the rows on screen were loaded for; differs from `state` while a new response is pending.
+  const [loadedState, setLoadedState] = useState<StateFilter>('all')
+  const stale = loading && loadedState !== state
   const controller = useRef<AbortController | null>(null)
 
   // The gateway list has no table filter, so narrow at render time from the raw list.
@@ -35,6 +38,7 @@ export function FailedTasksPage() {
       const data = await apiGet<{ deadLetters?: DeadLetter[]; total?: number }>(url, { signal: ctl.signal })
       if (ctl.signal.aborted) return
       setAll(data.deadLetters ?? [])
+      setLoadedState(state)
       setTotal(typeof data.total === 'number' ? data.total : undefined)
       setError(null)
     } catch (e) {
@@ -72,13 +76,15 @@ export function FailedTasksPage() {
         </select>
       </div>
       {capNote && <p data-testid="dead-letters-cap" className="mb-4 text-sm text-yellow-400">{capNote}</p>}
-      <DeadLettersView
-        entries={entries}
-        loading={loading}
-        error={error}
-        onRetry={onRetry}
-        onLoadDetail={(d) => apiGet<DeadLetter>(deadLetterUrl(d))}
-      />
+      <div aria-busy={stale} className={stale ? 'opacity-50 transition-opacity' : undefined} data-testid="dead-letters-rows">
+        <DeadLettersView
+          entries={entries}
+          loading={loading}
+          error={error}
+          onRetry={onRetry}
+          onLoadDetail={(d) => apiGet<DeadLetter>(deadLetterUrl(d))}
+        />
+      </div>
     </div>
   )
 }

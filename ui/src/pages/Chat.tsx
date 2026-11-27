@@ -53,7 +53,12 @@ export function ChatPage() {
   // Flag each turn that is still working after STALE_TURN_MS.
   useEffect(() => {
     for (const t of turns) {
-      if (isFinalStatus(t.status) || staleTimers.current.has(t.id)) continue
+      if (isFinalStatus(t.status)) {
+        const timer = staleTimers.current.get(t.id)
+        if (timer !== undefined) { clearTimeout(timer); staleTimers.current.delete(t.id) }
+        continue
+      }
+      if (staleTimers.current.has(t.id)) continue
       staleTimers.current.set(t.id, setTimeout(() => {
         setStaleIds((s) => new Set(s).add(t.id))
       }, STALE_TURN_MS))

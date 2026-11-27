@@ -55,6 +55,22 @@ describe('KnightDetailDrawer', () => {
     expect(screen.queryByText('a-only-skill')).not.toBeInTheDocument()
   })
 
+  it("does not show knight A's stats under knight B", async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/fleet/arthur/session?type=stats')) {
+        return Promise.resolve(json({ knight: 'arthur', session: null, runtime: { uptime: 5, activeTasks: 0, model: 'a-model' } }))
+      }
+      if (url.includes('/session')) {
+        return new Promise<Response>((_res, rej) => init?.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))))
+      }
+      return new Promise<Response>(() => {})
+    })
+    const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('arthur')} onClose={() => {}} /></MemoryRouter>)
+    expect(await screen.findByText('a-model')).toBeInTheDocument()
+    rerender(<MemoryRouter><KnightDetailDrawer knight={k('bors')} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.queryByText('a-model')).not.toBeInTheDocument()
+  })
+
   it('encodes the knight name in the detail URL', async () => {
     render(<MemoryRouter><KnightDetailDrawer knight={k('a/b')} onClose={() => {}} /></MemoryRouter>)
     await waitFor(() => expect(resolvers['/api/fleet/a%2Fb']).toBeDefined())
