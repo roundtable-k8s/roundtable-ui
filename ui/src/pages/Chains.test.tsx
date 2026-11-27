@@ -604,7 +604,7 @@ describe('ChainsPage truncated list', () => {
 
   it('says "showing 500 of N" from the list response, with one request', async () => {
     mockApiGet.mockImplementation(() => Promise.reject(new Error('no KV')))
-    vi.mocked(apiGetWithTotal).mockImplementation(() => Promise.resolve({ items: many(500) as never, total: 731 }))
+    vi.mocked(apiGetWithTotal).mockReset().mockImplementation(() => Promise.resolve({ items: many(500) as never, total: 731 }))
     vi.mocked(apiFetch).mockClear()
     renderPage('/chains')
     expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
@@ -615,6 +615,7 @@ describe('ChainsPage truncated list', () => {
 
   it('does not show the previous table total after a table switch', async () => {
     mockApiGet.mockImplementation(() => Promise.reject(new Error('no KV')))
+    vi.mocked(apiGetWithTotal).mockReset()
     let release: (v: { items: never; total: number | null }) => void = () => {}
     vi.mocked(apiGetWithTotal).mockImplementation((url: string) =>
       url.includes('table=b')
@@ -634,6 +635,8 @@ describe('ChainsPage truncated list', () => {
   it('shows no note when the page is not full', async () => {
     mockApiGet.mockImplementation((url: string) =>
       url === CHAINS_LIST_URL ? Promise.resolve(many(3)) : Promise.reject(new Error('no KV')))
+    vi.mocked(apiGetWithTotal).mockReset().mockImplementation((url: string) =>
+      mockApiGet(url).then((items: unknown) => ({ items: items as never, total: null })))
     renderPage('/chains')
     await screen.findByText('c-0')
     expect(screen.queryByTestId('chains-truncated')).toBeNull()
