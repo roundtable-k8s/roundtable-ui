@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { FailedTasksPage } from './FailedTasks'
 import type { DeadLetter } from '../lib/deadLetters'
 
@@ -21,8 +21,12 @@ const letters = [
   dl({ taskId: 't2', table: 'dev', knight: 'rt-ui', reason: 'no-consumer', error: 'nobody home' }),
 ]
 
+function UrlProbe() {
+  return <span data-testid="url-search">{useLocation().search}</span>
+}
+
 function renderPage(url = '/failed') {
-  return render(<MemoryRouter initialEntries={[url]}><FailedTasksPage /></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[url]}><UrlProbe /><FailedTasksPage /></MemoryRouter>)
 }
 
 beforeEach(() => {
@@ -32,6 +36,23 @@ beforeEach(() => {
 })
 
 describe('FailedTasksPage', () => {
+  it('keeps the state filter in the URL', async () => {
+    renderPage('/failed?state=open')
+    expect(await screen.findAllByTestId('dead-letter-row')).toHaveLength(2)
+    expect(apiGet).toHaveBeenCalledWith('/api/dead-letters?state=open', expect.anything())
+    expect(screen.getByLabelText('State')).toHaveValue('open')
+    await userEvent.selectOptions(screen.getByLabelText('State'), 'resolved')
+    expect(screen.getByTestId('url-search')).toHaveTextContent('?state=resolved')
+    await userEvent.selectOptions(screen.getByLabelText('State'), 'all')
+    expect(screen.getByTestId('url-search').textContent).toBe('')
+  })
+
+  it('falls back to all states for an unknown state in the URL', async () => {
+    renderPage('/failed?state=bogus')
+    expect(await screen.findAllByTestId('dead-letter-row')).toHaveLength(2)
+    expect(screen.getByLabelText('State')).toHaveValue('all')
+  })
+
   it('lists the dead letters', async () => {
     renderPage()
     expect(await screen.findAllByTestId('dead-letter-row')).toHaveLength(2)
