@@ -132,6 +132,18 @@ export async function apiGet<T>(url: string, init?: ApiRequestInit): Promise<T> 
   return readJson<T>(res, url)
 }
 
+/**
+ * GET a list and also read X-Total-Count from the same response. total is
+ * null when the header is absent or not a positive number.
+ */
+export async function apiGetWithTotal<T>(url: string, init?: ApiRequestInit): Promise<{ items: T; total: number | null }> {
+  const res = await apiFetch(url, init)
+  if (!res.ok) throw await toApiError(res)
+  const items = await readJson<T>(res, url)
+  const n = Number(res.headers.get('X-Total-Count'))
+  return { items, total: res.headers.get('X-Total-Count') !== null && Number.isFinite(n) && n > 0 ? n : null }
+}
+
 /** GET url and return the body as text. Throws ApiError on non-2xx. */
 export async function apiGetText(url: string, init?: ApiRequestInit): Promise<string> {
   const res = await apiFetch(url, init)

@@ -76,3 +76,16 @@ describe('OvernightPage', () => {
     expect(screen.getByRole('link', { name: 'nightly' })).toBeInTheDocument()
   })
 })
+
+describe('OvernightPage truncated chain list', () => {
+  it('reads the total from the list response with one chains request', async () => {
+    const many = Array.from({ length: 500 }, (_, i) => ({ name: `c-${i}`, namespace: 'ns', phase: 'Succeeded', completionTime: ago(2) }))
+    const fetchMock = vi.fn((input: RequestInfo | URL) => String(input).startsWith('/api/chains')
+      ? Promise.resolve(new Response(JSON.stringify(many), { status: 200, headers: { 'Content-Type': 'application/json', 'X-Total-Count': '731' } }))
+      : respond(String(input)))
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+    expect(await screen.findByText(/showing 500 of 731/)).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(c => String(c[0]).startsWith('/api/chains')).length).toBe(1)
+  })
+})

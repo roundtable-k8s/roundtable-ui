@@ -1,6 +1,6 @@
-import { apiGet } from '../lib/api'
+import { apiGet, apiGetWithTotal } from '../lib/api'
 import { GlanceStrip } from '../components/GlanceStrip'
-import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
+import { CHAIN_LIST_LIMIT, type KeyedTotal, totalFor, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader, Download } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -74,7 +74,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   const [chains, setChains] = useState<Chain[]>([])
   const [chainsLoading, setChainsLoading] = useState(true)
   const [chainsError, setChainsError] = useState<string | null>(null)
-  const [chainTotal, setChainTotal] = useState<number | null>(null)
+  const [storedTotal, setStoredTotal] = useState<KeyedTotal | null>(null)
+  const chainTotal = totalFor(storedTotal, withTable(DASHBOARD_CHAINS_URL, table))
   const [sessionCosts, setSessionCosts] = useState<{ total: number; perKnight: Record<string, number> }>({ total: 0, perKnight: {} })
   const [costExpanded, setCostExpanded] = useState(defaultCostExpanded)
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week')
@@ -83,15 +84,12 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     // The list is paginated (default 100, #275); ask for the maximum so no
     // chain is dropped. Items are slim, which is all this panel needs.
     let alive = true
-    apiGet<Chain[]>(withTable(DASHBOARD_CHAINS_URL, table)).then(data => {
+    apiGetWithTotal<Chain[]>(withTable(DASHBOARD_CHAINS_URL, table)).then(({ items: data, total }) => {
       if (!alive) return
       setChains(data)
       setChainsError(null)
       setChainsLoading(false)
-      // A full page means the list may be cut short: ask for the real total.
-      if (data.length >= CHAIN_LIST_LIMIT) {
-        fetchChainTotal(withTable(DASHBOARD_CHAINS_URL, table)).then(n => { if (alive) setChainTotal(n) })
-      } else setChainTotal(null)
+      setStoredTotal({ url: withTable(DASHBOARD_CHAINS_URL, table), total })
     }).catch((e) => {
       if (!alive) return
       // keep any stale chains; just say the refresh failed
