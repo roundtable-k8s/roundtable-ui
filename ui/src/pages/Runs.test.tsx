@@ -51,6 +51,7 @@ describe('RunsPage', () => {
   })
   it('phase filter narrows rows', () => {
     renderPage('/runs?phase=Failed')
+    expect(urls.at(-1)).toContain('phase=Failed')
     expect(screen.queryByText('pickup-chain')).toBeNull()
     expect(screen.getByText('bad')).toBeTruthy()
   })

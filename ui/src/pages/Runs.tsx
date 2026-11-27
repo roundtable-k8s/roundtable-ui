@@ -32,7 +32,8 @@ function SourceBadge({ source }: { source?: string }) {
 
 function IssueCell({ run }: { run: GatewayRun }) {
   if (!run.issue) return <span className="text-gray-600">—</span>
-  const label = `${sanitizeText(run.issue.repo)}#${run.issue.number}`
+  const num = Number.isInteger(run.issue.number) ? `#${run.issue.number}` : ''
+  const label = `${sanitizeText(run.issue.repo)}${num}`
   const href = issueUrl(run.issue)
   if (!href) return <span className="text-gray-300">{label}</span>
   return (
@@ -91,7 +92,7 @@ export function RunsPage() {
   const [activeParam, setActive] = useUrlParam('active', '', ['true'])
   const active = activeParam === 'true'
 
-  const { data, loading, error, updatedAt, refresh } = usePolledFetch<unknown>(runsUrl(source, active), POLL_MS, { runs: [] })
+  const { data, loading, error, updatedAt, refresh } = usePolledFetch<unknown>(runsUrl(source, active, phase), POLL_MS, { runs: [] })
   const all = useMemo(() => runRows(data), [data])
   const rows = useMemo(() => (phase ? all.filter((r) => r.phase === phase) : all), [all, phase])
 

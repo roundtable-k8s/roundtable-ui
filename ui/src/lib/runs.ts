@@ -48,8 +48,9 @@ export function issueUrl(issue: RunIssue | undefined): string {
 }
 
 /** Request URL for the polled list. */
-export function runsUrl(source: string, active: boolean): string {
+export function runsUrl(source: string, active: boolean, phase = ''): string {
   const q = new URLSearchParams({ source, limit: '100' })
+  if (phase) q.set('phase', phase)
   if (active) q.set('active', 'true')
   return `/api/gateway/runs?${q.toString()}`
 }
