@@ -7,10 +7,12 @@ on:
   merge_group:
     types: [checks_requested]
 
-# Only pull request runs cancel their superseded runs: the image is pushed from
-# push runs on main and from merge queue runs, which must always finish.
+# Only pull request runs cancel their superseded runs: the image is pushed only
+# from push runs on main, and every push run needs its own group (run_id) so a
+# pending main run is never replaced by a later merge. Merge queue runs build
+# without pushing.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || (github.event_name == 'push' && github.run_id) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -44,6 +46,16 @@ jobs:
       - name: Build UI
         working-directory: ui
         run: npm run build
+
+      - name: Go fmt
+        working-directory: api
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed for:"
+            echo "$unformatted"
+            exit 1
+          fi
 
       - name: Go vet
         working-directory: api
