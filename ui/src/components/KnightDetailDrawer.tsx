@@ -6,6 +6,7 @@ import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
 import { formatAge, formatCost, formatUptime, formatTimestamp, formatNumber } from '../lib/format'
 import { PodsPanel } from './PodsPanel'
+import { KnightEventsPanel } from './KnightEventsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet'
 import { IsolationBadge } from './IsolationBadge'
@@ -457,6 +458,15 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
               <PodsPanel knight={knightDetail} />
             </div>
           )}
+
+          {/* Recent Kubernetes events (#529) */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Events
+            </h3>
+            <KnightEventsPanel knight={knight.name} />
+          </div>
 
           {/* Conditions */}
           {knightDetail?.conditions && knightDetail.conditions.length > 0 && (
