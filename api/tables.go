@@ -59,6 +59,8 @@ type tableSource struct {
 	envStream string // FLEET_STREAM, "" when unset
 	ttl       time.Duration
 	now       func() time.Time
+	// discoverFn replaces discover when set (tests observe the context).
+	discoverFn func(context.Context) ([]TableInfo, error)
 
 	mu      sync.Mutex
 	cached  []TableInfo
@@ -144,7 +146,11 @@ func (s *tableSource) runFlight(ctx context.Context, f *tableFlight) error {
 	}()
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), k8sRequestTimeout)
 	defer cancel()
-	discovered, err := s.discover(dctx)
+	discover := s.discover
+	if s.discoverFn != nil {
+		discover = s.discoverFn
+	}
+	discovered, err := discover(dctx)
 	if err == nil {
 		s.mu.Lock()
 		s.cached = resolveTables(discovered, s.envPrefix, s.envStream)

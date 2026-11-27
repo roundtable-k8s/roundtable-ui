@@ -375,9 +375,18 @@ func TestTablesStaleCacheDoesNotWaitForSlowDiscovery(t *testing.T) {
 func TestTablesColdStartSurvivesLeaderDisconnect(t *testing.T) {
 	withTwoTables(t)
 	src := newTableSource(tablesTestNS, "", "")
+	var discoverCtxErr error
+	real := src.discover
+	src.discoverFn = func(ctx context.Context) ([]TableInfo, error) {
+		discoverCtxErr = ctx.Err()
+		return real(ctx)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // the leader's client is already gone
 	got := src.tables(ctx)
+	if discoverCtxErr != nil {
+		t.Fatalf("discover received a cancelled context: %v", discoverCtxErr)
+	}
 	if len(got) != 2 {
 		t.Fatalf("got %+v, want the two discovered tables", got)
 	}

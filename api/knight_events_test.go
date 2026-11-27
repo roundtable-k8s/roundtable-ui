@@ -113,3 +113,26 @@ func TestKnightEventsErrorMapping(t *testing.T) {
 		t.Errorf("leaked error text: %s", w.Body.String())
 	}
 }
+
+func TestKnightEventsSeriesCountFallback(t *testing.T) {
+	router := setupTestRouter()
+	ns := "test-namespace"
+	if _, err := dynClient.Resource(knightGVR).Namespace(ns).Create(nil, makeTestKnightCR("galahad", ns, "security"), metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	last := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	e := knightEvent("s", "galahad", "Series", 0, last)
+	e.LastTimestamp = metav1.Time{}
+	e.Series = &corev1.EventSeries{Count: 7, LastObservedTime: metav1.NewMicroTime(last)}
+	fakeK8sClient.PrependReactor("list", "events", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &corev1.EventList{Items: []corev1.Event{*e}}, nil
+	})
+	w := getKnightEvents(router, "galahad")
+	var evs []KnightEvent
+	if err := json.Unmarshal(w.Body.Bytes(), &evs); err != nil || len(evs) != 1 {
+		t.Fatalf("%v %s", err, w.Body.String())
+	}
+	if evs[0].Count != 7 || evs[0].LastTimestamp != "2026-01-02T03:04:05Z" {
+		t.Errorf("got %+v", evs[0])
+	}
+}

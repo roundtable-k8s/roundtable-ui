@@ -92,3 +92,15 @@ func mkStatic(body string) error {
 	}
 	return os.WriteFile("static/index.html", []byte(body), 0o644)
 }
+
+func TestHeadSkipsStreamingRoutes(t *testing.T) {
+	h := routerFor(t, nil)
+	for _, p := range []string{"/api/chat/tasks/t1/events", "/api/fleet/k/logs"} {
+		if w := do(h, "HEAD", p); w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("HEAD %s: status %d, want 405", p, w.Code)
+		}
+	}
+	if w := do(h, "HEAD", "/api/fleet"); w.Code != http.StatusOK {
+		t.Errorf("HEAD /api/fleet: status %d, want 200", w.Code)
+	}
+}

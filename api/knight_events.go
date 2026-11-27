@@ -67,6 +67,11 @@ func knightEventsHandler(namespace string) http.HandlerFunc {
 				Type: e.Type, Reason: e.Reason, Message: e.Message, Count: e.Count,
 				ReportingComponent: e.ReportingController,
 			}
+			lastSeries := time.Time{}
+			if e.Count == 0 && e.Series != nil {
+				ev.Count = e.Series.Count
+				lastSeries = e.Series.LastObservedTime.Time
+			}
 			if e.Source.Component != "" {
 				ev.ReportingComponent = e.Source.Component
 			}
@@ -75,6 +80,8 @@ func knightEventsHandler(namespace string) http.HandlerFunc {
 			}
 			if !e.LastTimestamp.IsZero() {
 				ev.LastTimestamp = e.LastTimestamp.UTC().Format(time.RFC3339)
+			} else if !lastSeries.IsZero() {
+				ev.LastTimestamp = lastSeries.UTC().Format(time.RFC3339)
 			} else if t := eventTime(e); !t.IsZero() {
 				ev.LastTimestamp = t.UTC().Format(time.RFC3339)
 			}
