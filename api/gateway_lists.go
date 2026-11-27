@@ -58,7 +58,14 @@ func gatewayTasksHandler(g *gatewayClient) http.HandlerFunc {
 	}
 }
 
-// gatewayRunsHandler proxies GET /v1/runs (namespace, chain, phase, limit).
+// validRunSource lists the values the gateway accepts for the runs source filter.
+var validRunSource = map[string]bool{"gateway": true, "trigger": true, "pickup": true, "all": true}
+
+// validRunIssue matches the owner/repo#number form of a picked-up issue.
+var validRunIssue = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#[0-9]{1,9}$`)
+
+// gatewayRunsHandler proxies GET /v1/runs (namespace, chain, phase, source,
+// active, issue, limit). Other query keys are dropped.
 func gatewayRunsHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := url.Values{}
@@ -82,6 +89,27 @@ func gatewayRunsHandler(g *gatewayClient) http.HandlerFunc {
 				return
 			}
 			q.Set("phase", p)
+		}
+		if s := r.URL.Query().Get("source"); s != "" {
+			if !validRunSource[s] {
+				jsonError(w, "Invalid source", http.StatusBadRequest)
+				return
+			}
+			q.Set("source", s)
+		}
+		if a := r.URL.Query().Get("active"); a != "" {
+			if a != "true" {
+				jsonError(w, "active must be true", http.StatusBadRequest)
+				return
+			}
+			q.Set("active", a)
+		}
+		if is := r.URL.Query().Get("issue"); is != "" {
+			if !validRunIssue.MatchString(is) {
+				jsonError(w, "Invalid issue", http.StatusBadRequest)
+				return
+			}
+			q.Set("issue", is)
 		}
 		if !listLimit(w, r, q) {
 			return
