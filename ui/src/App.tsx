@@ -9,6 +9,7 @@ import { useTableFilter } from './hooks/useTableFilter'
 import { useTables } from './hooks/useTables'
 import { TableSelect, EmptyState } from './components/ui'
 import { useHealth } from './hooks/useHealth'
+import { useVersion } from './hooks/useVersion'
 import { useOpenDeadLetters, deadLetterBadge } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
@@ -71,6 +72,7 @@ function isActivePath(pathname: string, path: string) {
 const APP_TITLE = 'Round Table'
 
 export default function App() {
+  const version = useVersion()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { table, setTable } = useTableFilter()
@@ -171,8 +173,13 @@ export default function App() {
 
         <div className="p-4 border-t border-roundtable-steel">
           <p className="text-xs text-gray-500 text-center">
-            ⚔️ Round Table v1.0.0
+            ⚔️ Round Table
           </p>
+          {version?.version && (
+            <p className="text-xs text-gray-500 text-center mt-1" data-testid="build-version">
+              v{version.version}{version.commit ? ` (${version.commit.slice(0, 7)})` : ''}
+            </p>
+          )}
         </div>
       </nav>
 

@@ -410,6 +410,9 @@ func buildRouter(d routerDeps) *mux.Router {
 	// namespace the dashboard reads (the default for new schedules, #302)
 	api.HandleFunc("/config", configHandler(d.fleetPrefix, d.namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
 
+	// Build version (#431); authenticated like the other API routes
+	api.HandleFunc("/version", versionHandler()).Methods("GET")
+
 	// Health
 	api.HandleFunc("/health", healthHandler(d.k8sStatus, d.natsStatus)).Methods("GET")
 
