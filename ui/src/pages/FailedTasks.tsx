@@ -86,7 +86,7 @@ export function FailedTasksPage() {
           error={error}
           onRetry={onRetry}
           onLoadDetail={(d) => apiGet<DeadLetter>(deadLetterUrl(d))}
-          onLoadEntry={(taskId, table) => apiGet<DeadLetter>(deadLetterUrl({ taskId, table }))}
+          onLoadEntry={(taskId, table, signal) => apiGet<DeadLetter>(deadLetterUrl({ taskId, table }), { signal })}
         />
       </div>
     </div>
