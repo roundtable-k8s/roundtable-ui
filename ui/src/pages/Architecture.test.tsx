@@ -38,8 +38,8 @@ describe('ArchitecturePage', () => {
   it('shows the spinner while loading', async () => {
     mockApiGet.mockImplementation(() => new Promise(() => {}))
     renderPage()
-    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
-    expect(screen.getByText('Loading architecture data...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.getByText('Loading architecture data…')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Refresh/ })).toBeDisabled()
   })
 
@@ -55,13 +55,13 @@ describe('ArchitecturePage', () => {
     expect(screen.getByText('Knights (2 agents)')).toBeInTheDocument()
     expect(screen.getByText('1 online')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.queryByText('Loading architecture data...')).toBeNull()
+    expect(screen.queryByText('Loading architecture data…')).toBeNull()
   })
 
   it('still renders and shows a banner when one endpoint fails', async () => {
     mockApi([{ name: 'a', natsPrefix: 'fleet-a' }], new Error('missions down'))
     renderPage()
-    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load live data: missions down')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load architecture data: missions down')
     expect(screen.getByText('1 RoundTable')).toBeInTheDocument()
     expect(screen.getByText('0 active / 0 total missions')).toBeInTheDocument()
     expect(screen.getByText('Data Flow')).toBeInTheDocument()

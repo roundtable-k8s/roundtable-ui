@@ -5,7 +5,7 @@ import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
 import type { RoundTable } from '../lib/types'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, PhaseBadge, ProgressBar } from '../components/ui'
+import { PageHeader, RefreshButton, ListState, PhaseBadge, ProgressBar } from '../components/ui'
 
 export function RoundTablesPage() {
   const { data: allTables, loading, error, refresh } = usePolledFetch<RoundTable[]>('/api/roundtables', 15000, [])
@@ -28,25 +28,8 @@ export function RoundTablesPage() {
         <RefreshButton onClick={refresh} loading={loading} />
       </PageHeader>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner>Failed to load round tables: {error}</ErrorBanner>
-        </div>
-      )}
-
-      {loading && roundTables.length === 0 && (
-        <div className="text-center py-12">
-          <div className="flex justify-center mb-3">
-            <Spinner />
-          </div>
-          <p className="text-gray-500 text-sm">Loading round tables...</p>
-        </div>
-      )}
-
-      {!loading && !error && roundTables.length === 0 && (
-        <EmptyState icon={Crown} title="No round tables found." />
-      )}
-
+      <ListState loading={loading} error={error} count={roundTables.length} what="round tables"
+        icon={Crown} emptyTitle="No round tables found." onRetry={refresh}>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {roundTables.map(rt => {
           const expanded = expandedCards.has(rt.name)
@@ -225,6 +208,7 @@ export function RoundTablesPage() {
           )
         })}
       </div>
+      </ListState>
     </div>
   )
 }

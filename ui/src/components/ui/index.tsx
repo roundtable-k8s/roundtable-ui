@@ -13,10 +13,10 @@ import { phaseColor } from '../../lib/status'
 /* ------------------------------------------------------------------ */
 
 /** Gold ring spinner. */
-export function Spinner({ size = 'md' }: { size?: 'sm' | 'md' }) {
+export function Spinner({ size = 'md', decorative = false }: { size?: 'sm' | 'md'; decorative?: boolean }) {
   const dims = size === 'sm' ? 'w-5 h-5' : 'w-8 h-8'
   return (
-    <div role="status" aria-label="Loading"
+    <div {...(decorative ? { 'aria-hidden': true } : { role: 'status', 'aria-label': 'Loading' })}
       className={`animate-spin ${dims} border-2 border-roundtable-gold border-t-transparent rounded-full`} />
   )
 }
@@ -43,6 +43,58 @@ export function EmptyState({ icon: Icon, title, sub }: {
       {sub && <p className="text-gray-600 text-sm mt-1">{sub}</p>}
     </div>
   )
+}
+
+/**
+ * The one loading / empty / error treatment for list pages, so a page can
+ * never say "empty" while loading or after a failed fetch.
+ *  - error, no data: banner "Failed to load {what}: {error}" (+ Retry)
+ *  - error, data:    the banner above the children
+ *  - loading, no data: spinner with "Loading {what}…" (role="status")
+ *  - nothing to show: EmptyState (plus `emptyExtra`)
+ *  - otherwise: children
+ */
+export function ListState({ loading, error, count, what, emptyTitle, emptySub, emptyExtra, icon, onRetry, children }: {
+  loading: boolean
+  error?: string | null
+  count: number
+  what: string
+  emptyTitle: string
+  emptySub?: string
+  emptyExtra?: ReactNode
+  icon?: ComponentType<{ className?: string }>
+  onRetry?: () => void
+  children?: ReactNode
+}) {
+  const banner = error ? (
+    <div className="mb-6">
+      <ErrorBanner>
+        Failed to load {what}: {error}
+        {onRetry && count === 0 && (
+          <button onClick={onRetry} className="ml-3 underline hover:text-red-300">Retry</button>
+        )}
+      </ErrorBanner>
+    </div>
+  ) : null
+  if (error && count === 0) return banner
+  if (error) return <>{banner}{children}</>
+  if (count === 0 && loading) {
+    return (
+      <div role="status" className="text-center py-12">
+        <div className="flex justify-center mb-3"><Spinner decorative /></div>
+        <p className="text-gray-500 text-sm">Loading {what}…</p>
+      </div>
+    )
+  }
+  if (count === 0) {
+    return (
+      <div data-testid="list-empty">
+        <EmptyState icon={icon} title={emptyTitle} sub={emptySub} />
+        {emptyExtra}
+      </div>
+    )
+  }
+  return <>{children}</>
 }
 
 /* ------------------------------------------------------------------ */

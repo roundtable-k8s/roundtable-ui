@@ -6,7 +6,7 @@ import { inTable } from '../lib/tables'
 import { useRunning } from '../hooks/useRunning'
 import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
+import { PageHeader, StatCard, ErrorBanner, ListState } from '../components/ui'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
@@ -146,11 +146,6 @@ export function RunningPage() {
           <ErrorBanner>This API does not report running tasks yet (GET /api/running not found).</ErrorBanner>
         </div>
       )}
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner>Failed to load running tasks: {error}</ErrorBanner>
-        </div>
-      )}
 
       <div className="flex flex-wrap gap-3 mb-4">
         <label className="flex items-center gap-2 text-sm text-gray-400">
@@ -180,13 +175,8 @@ export function RunningPage() {
         </label>
       </div>
 
-      {rows.length === 0 ? (
-        loading ? (
-          <div className="text-gray-400 p-4" role="status">Loading…</div>
-        ) : (
-          <EmptyState icon={Activity} title={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'} />
-        )
-      ) : (
+      <ListState loading={loading} error={error} count={rows.length} what="running tasks" icon={Activity}
+        emptyTitle={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'}>
         <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
           <table className="w-full text-sm">
             <thead>
@@ -235,7 +225,7 @@ export function RunningPage() {
             </tbody>
           </table>
         </div>
-      )}
+      </ListState>
 
       {selectedId && (
         <TaskActivityPanel
