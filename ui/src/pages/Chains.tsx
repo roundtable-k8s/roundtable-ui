@@ -13,6 +13,7 @@ import { TraceLink } from '../components/TraceLink'
 import { RunNow } from '../components/RunNow'
 import { CostTag } from '../components/CostTag'
 import { RunCostTable } from '../components/RunCostTable'
+import { ChainTimeline } from '../components/ChainTimeline'
 import { tokensText } from '../lib/cost'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useTableFilter } from '../hooks/useTableFilter'
@@ -540,6 +541,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
     cardRef.current?.scrollIntoView?.({ block: 'start' })
   }, [focused])
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
+  const [showTimeline, setShowTimeline] = useState(false)
   const { view, error: detailError } = useChainDetail(chain, expanded)
   const steps = view?.steps || []
 
@@ -646,6 +648,21 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
           <StepDAG steps={steps} currentStep={view.currentStep} />
           <StepProgress steps={steps} />
           {steps.length > 0 && <RunCostTable chain={view} />}
+          {steps.length > 0 && (
+            <div className="mt-3">
+              <button type="button" aria-expanded={showTimeline} onClick={() => setShowTimeline(v => !v)}
+                className="text-xs text-gray-400 hover:text-white flex items-center gap-1">
+                {showTimeline ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                Timeline
+              </button>
+              {showTimeline && (
+                <div className="mt-2">
+                  <ChainTimeline chain={view} selected={selectedStep}
+                    onSelect={name => setSelectedStep(selectedStep === name ? null : name)} />
+                </div>
+              )}
+            </div>
+          )}
           {/* Step list for drill-down (#49) */}
           <div className="mt-3 flex flex-wrap gap-2">
             {steps.map(step => {
