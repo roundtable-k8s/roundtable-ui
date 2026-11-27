@@ -41,12 +41,24 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
   const [pending, setPending] = useState<string | null>(null)
   const [retried, setRetried] = useState<Record<string, RetryResult>>({})
   const [retryError, setRetryError] = useState<string | null>(null)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [bulkConfirm, setBulkConfirm] = useState(false)
+  const [bulk, setBulk] = useState<{ running: boolean; done: number; failed: number; total: number } | null>(null)
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
   const [earlier, setEarlier] = useState<DeadLetter[]>([])
   const [earlierError, setEarlierError] = useState<string | null>(null)
 
   // Keep the latest loader in a ref so a new callback identity on re-render does not refetch.
   const loadEntryRef = useRef(onLoadEntry)
   loadEntryRef.current = onLoadEntry
+  const onRetryRef = useRef(onRetry)
+  onRetryRef.current = onRetry
+  // Set on unmount so a running bulk retry stops adding new retries.
+  const unmounted = useRef(false)
+  useEffect(() => {
+    unmounted.current = false
+    return () => { unmounted.current = true }
+  }, [])
 
   // Earlier attempts of the selected entry, following retryOf at most MAX_EARLIER_ATTEMPTS steps.
   // Runs once per selection; a 404 (entry expired from the store) just ends the walk.
@@ -85,6 +97,55 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
   const reasons = useMemo(() => [...new Set(entries.map((e) => e.reason))].sort(), [entries])
   const rows = entries.filter((e) => (!knight || e.knight === knight) && (!reason || e.reason === reason))
 
+  const selectable = (e: DeadLetter) => e.state === 'open' && !isChainOwned(e) && !retried[entryKey(e)]
+  const selectableRows = rows.filter(selectable)
+  // Only rows that are still shown and selectable count, so a filter change drops hidden picks.
+  const picked = selectableRows.filter((e) => checked.has(entryKey(e)))
+  const allPicked = selectableRows.length > 0 && picked.length === selectableRows.length
+  const bulkRunning = !!bulk?.running
+
+  const toggle = (e: DeadLetter) => setChecked((c) => {
+    const n = new Set(c)
+    const k = entryKey(e)
+    if (n.has(k)) n.delete(k); else n.add(k)
+    return n
+  })
+  const toggleAll = () => setChecked((c) => {
+    const n = new Set(c)
+    for (const e of selectableRows) { if (allPicked) n.delete(entryKey(e)); else n.add(entryKey(e)) }
+    return n
+  })
+
+  const runBulk = async () => {
+    const batch = picked
+    setBulkConfirm(false)
+    setRetryError(null)
+    setBulk({ running: true, done: 0, failed: 0, total: batch.length })
+    let done = 0
+    let failed = 0
+    for (const e of batch) {
+      if (unmounted.current) return
+      const key = entryKey(e)
+      setPending(key)
+      try {
+        const res = await onRetryRef.current(e, false)
+        done++
+        if (unmounted.current) return
+        setRetried((r) => ({ ...r, [key]: res }))
+        setRowErrors((r) => { const { [key]: _, ...rest } = r; return rest })
+      } catch (err) {
+        failed++
+        if (unmounted.current) return
+        setRowErrors((r) => ({ ...r, [key]: err instanceof Error ? err.message : 'retry failed' }))
+      }
+      if (unmounted.current) return
+      setBulk({ running: true, done, failed, total: batch.length })
+    }
+    setPending(null)
+    setChecked((c) => { const n = new Set(c); for (const e of batch) n.delete(entryKey(e)); return n })
+    setBulk({ running: false, done, failed, total: batch.length })
+  }
+
   const open = (e: DeadLetter) => {
     setSelected(e)
     setDetail(null)
@@ -94,7 +155,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
 
   const retry = async (e: DeadLetter, force: boolean) => {
     const key = entryKey(e)
-    if (pending === key) return
+    if (pending === key || bulkRunning) return
     setPending(key)
     setRetryError(null)
     try {
@@ -118,7 +179,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
     return (
       <button
         type="button"
-        disabled={pending === key}
+        disabled={pending === key || bulkRunning}
         onClick={(ev) => { ev.stopPropagation(); chain ? setConfirming(e) : retry(e, false) }}
         className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-sm bg-roundtable-gold/10 text-roundtable-gold border border-roundtable-gold/30 hover:bg-roundtable-gold/20 disabled:opacity-50 disabled:cursor-not-allowed"
       >
@@ -133,7 +194,13 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
       {error && <div className="mb-4"><ErrorBanner>{error}</ErrorBanner></div>}
       {retryError && <div className="mb-4"><ErrorBanner>Retry failed: {retryError}</ErrorBanner></div>}
 
-      <div className="flex gap-4 mb-4">
+      {bulk && (
+        <p className="mb-4 text-sm text-gray-300" role="status" data-testid="bulk-summary">
+          {bulk.running ? `Retrying ${bulk.done + bulk.failed + 1 > bulk.total ? bulk.total : bulk.done + bulk.failed + 1} of ${bulk.total}…` : `Retried ${bulk.done}, failed ${bulk.failed}`}
+        </p>
+      )}
+
+      <div className="flex gap-4 mb-4 items-end">
         <div>
           <label htmlFor="dl-knight" className="text-sm text-gray-400 mb-1 block">Knight</label>
           <select id="dl-knight" value={knight} onChange={(e) => setKnight(e.target.value)}
@@ -150,6 +217,13 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
             {reasons.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
+        {picked.length > 0 && (
+        <button type="button" disabled={bulkRunning} onClick={() => setBulkConfirm(true)}
+          className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm bg-roundtable-gold/10 text-roundtable-gold border border-roundtable-gold/30 hover:bg-roundtable-gold/20 disabled:opacity-50 disabled:cursor-not-allowed">
+          <RotateCcw className="w-3.5 h-3.5" />
+          Retry {picked.length} selected
+        </button>
+        )}
       </div>
 
       {loading && entries.length === 0 ? (
@@ -161,6 +235,10 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
           <table className="w-full text-sm" data-testid="dead-letters">
             <thead>
               <tr className="text-left text-gray-400 border-b border-roundtable-steel">
+                <th className="p-3 w-8">
+                  <input type="checkbox" aria-label="Select all shown" checked={allPicked} disabled={selectableRows.length === 0 || bulkRunning}
+                    onChange={toggleAll} />
+                </th>
                 <th className="p-3">Time</th><th className="p-3">Knight</th><th className="p-3">Reason</th>
                 <th className="p-3">Error</th><th className="p-3">Attempt</th><th className="p-3">Chain / step</th>
                 <th className="p-3">State</th><th className="p-3" />
@@ -170,6 +248,12 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
               {rows.map((e) => (
                 <tr key={entryKey(e)} data-testid="dead-letter-row" onClick={() => open(e)}
                   className={`border-b border-roundtable-steel/50 cursor-pointer hover:bg-roundtable-steel/30 ${e.state === 'resolved' ? 'opacity-50' : ''}`}>
+                  <td className="p-3" onClick={(ev) => ev.stopPropagation()}>
+                    {selectable(e) && (
+                      <input type="checkbox" aria-label={`Select ${e.taskId}`} checked={checked.has(entryKey(e))} disabled={bulkRunning}
+                        onChange={() => toggle(e)} />
+                    )}
+                  </td>
                   <td className="p-3 whitespace-nowrap text-gray-300">{formatTimestampOrDate(deadLetterTime(e))}</td>
                   <td className="p-3 text-white">{e.knight}</td>
                   <td className="p-3 text-gray-300">{e.reason}</td>
@@ -180,7 +264,10 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
                     <span className={`px-2 py-0.5 rounded text-xs ${stateStyle[e.state] ?? stateStyle.resolved}`}>{e.state}</span>
                     {e.state === 'resolved' && <div className="text-xs text-gray-500 mt-1">A later success arrived</div>}
                   </td>
-                  <td className="p-3 text-right">{retryButton(e)}</td>
+                  <td className="p-3 text-right">
+                    {retryButton(e)}
+                    {rowErrors[entryKey(e)] && <div className="text-xs text-red-400 mt-1" role="alert">Retry failed: {rowErrors[entryKey(e)]}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -228,6 +315,21 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
               : <UntrustedText text={detail.task?.task ?? '(no payload)'} className="bg-roundtable-navy rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap break-words" />}
           </div>
         </Drawer>
+      )}
+
+      {bulkConfirm && (
+        <Modal title="Retry selected tasks?" onClose={() => setBulkConfirm(false)}>
+          <div className="p-6 space-y-4">
+            <p className="text-gray-300 text-sm">
+              Retry {picked.length} task{picked.length === 1 ? '' : 's'} one after another for: {[...new Set(picked.map((e) => e.knight))].sort().join(', ')}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setBulkConfirm(false)} className="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+              <button type="button" onClick={() => { void runBulk() }}
+                className="px-4 py-2 rounded-lg bg-roundtable-gold text-roundtable-navy font-medium">Retry {picked.length}</button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {confirming && (

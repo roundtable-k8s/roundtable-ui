@@ -154,4 +154,63 @@ describe('DeadLettersView', () => {
       expect(text.indexOf('Attempt 3:')).toBeLessThan(text.indexOf('Attempt 4:'))
     })
   })
+
+  describe('bulk retry', () => {
+    const o = (n: number, extra: Partial<DeadLetter> = {}): DeadLetter => ({ ...lost, taskId: `o${n}`, ...extra })
+    const res = (id: string): RetryResult => ({ taskId: `${id}-r2`, retryOf: id, attempt: 2, knight: 'galahad' })
+
+    it('does not offer chain-owned or non-open rows for selection', () => {
+      setup([lost, chain, resolved])
+      expect(screen.getByLabelText('Select t1')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Select t2')).toBeNull()
+      expect(screen.queryByLabelText('Select t3')).toBeNull()
+    })
+
+    it('select all respects the filters', async () => {
+      setup([o(1), o(2), o(3, { knight: 'rt-ui' })])
+      await userEvent.selectOptions(screen.getByLabelText('Knight'), 'galahad')
+      await userEvent.click(screen.getByLabelText('Select all shown'))
+      expect(screen.getByRole('button', { name: 'Retry 2 selected' })).toBeInTheDocument()
+      await userEvent.selectOptions(screen.getByLabelText('Knight'), '')
+      expect(screen.getByRole('button', { name: 'Retry 2 selected' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Select o3')).not.toBeChecked()
+    })
+
+    it('retries in order after confirmation, survives a failure and shows results per row', async () => {
+      const calls: string[] = []
+      const onRetry = vi.fn(async (e: DeadLetter) => {
+        calls.push(e.taskId)
+        if (e.taskId === 'o2') throw new ApiError(409, 'already retried')
+        return res(e.taskId)
+      })
+      setup([o(1), o(2), o(3)], onRetry)
+      await userEvent.click(screen.getByLabelText('Select all shown'))
+      await userEvent.click(screen.getByRole('button', { name: 'Retry 3 selected' }))
+      const dialog = screen.getByRole('dialog')
+      expect(dialog.textContent).toContain('3 tasks')
+      expect(dialog.textContent).toContain('galahad')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Retry 3' }))
+      await waitFor(() => expect(screen.getByTestId('bulk-summary').textContent).toBe('Retried 2, failed 1'))
+      expect(calls).toEqual(['o1', 'o2', 'o3'])
+      expect(onRetry).toHaveBeenCalledWith(expect.anything(), false)
+      expect(screen.getByText('Retried as o1-r2')).toBeInTheDocument()
+      expect(screen.getByText('Retried as o3-r2')).toBeInTheDocument()
+      expect(screen.getByText(/Retry failed: already retried/)).toBeInTheDocument()
+    })
+
+    it('stops adding retries when the view unmounts', async () => {
+      let release!: () => void
+      const onRetry = vi.fn((e: DeadLetter) => new Promise<RetryResult>((r) => { release = () => r(res(e.taskId)) }))
+      const onLoadDetail = vi.fn()
+      const { unmount } = render(<MemoryRouter><DeadLettersView entries={[o(1), o(2)]} onRetry={onRetry} onLoadDetail={onLoadDetail} onLoadEntry={vi.fn()} /></MemoryRouter>)
+      await userEvent.click(screen.getByLabelText('Select all shown'))
+      await userEvent.click(screen.getByRole('button', { name: 'Retry 2 selected' }))
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retry 2' }))
+      await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1))
+      unmount()
+      release()
+      await new Promise((r) => setTimeout(r, 20))
+      expect(onRetry).toHaveBeenCalledTimes(1)
+    })
+  })
 })
