@@ -292,6 +292,8 @@ type routerDeps struct {
 	sampler                           *queueSampler
 	gateway                           *gatewayClient
 	dispatchLimit                     *dispatchLimiter
+	// Connectivity checks for /api/health; nil reports the worst state.
+	k8sStatus, natsStatus func() string
 }
 
 // buildRouter registers every route and the JSON 404/405 answers for /api.
@@ -408,10 +410,7 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.HandleFunc("/config", configHandler(d.fleetPrefix, d.namespace, traceTemplate(os.Getenv("TRACE_URL_TEMPLATE")))).Methods("GET")
 
 	// Health
-	api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	}).Methods("GET")
+	api.HandleFunc("/health", healthHandler(d.k8sStatus, d.natsStatus)).Methods("GET")
 
 	// Serve static UI files with SPA fallback for everything outside /api
 	r.MatcherFunc(func(req *http.Request, _ *mux.RouteMatch) bool {
@@ -555,6 +554,8 @@ func main() {
 		cards: cards, tc: tc, sampler: sampler,
 		gateway:       newGatewayClientFromEnv(),
 		dispatchLimit: newDispatchLimiter(),
+		k8sStatus:     func() string { return k8sHealth(dynClient != nil && k8sClient != nil) },
+		natsStatus:    func() string { return natsHealth(nc) },
 	}
 	r := buildRouter(d)
 	r.Use(tracingMiddleware)

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 
@@ -68,5 +68,32 @@ describe('App shell accessibility', { timeout: 15000 }, () => {
     expect(screen.getByText('Page not found')).toBeTruthy()
     expect(document.title).toBe('Page not found - Round Table')
     expect(screen.getByRole('link', { name: 'Back to Command Center' }).getAttribute('href')).toBe('/')
+  })
+})
+
+describe('Kubernetes health banner', () => {
+  const BANNER = 'Kubernetes unavailable: the dashboard API cannot read cluster state'
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('warns when /api/health reports kubernetes unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ status: 'ok', kubernetes: 'unavailable', nats: 'connected' }), { headers: { 'Content-Type': 'application/json' } })))
+    renderAt('/')
+    expect((await screen.findByRole('alert')).textContent).toBe(BANNER)
+  })
+
+  it('shows no banner when connected', async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ status: 'ok', kubernetes: 'connected', nats: 'connected' }), { headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', f)
+    renderAt('/')
+    await waitFor(() => expect(f).toHaveBeenCalled())
+    expect(screen.queryByText(BANNER)).toBeNull()
+  })
+
+  it('shows no banner when the health request fails', async () => {
+    const f = vi.fn(async () => new Response('boom', { status: 500 }))
+    vi.stubGlobal('fetch', f)
+    renderAt('/')
+    await waitFor(() => expect(f).toHaveBeenCalled())
+    expect(screen.queryByText(BANNER)).toBeNull()
   })
 })
