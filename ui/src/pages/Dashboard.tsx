@@ -15,6 +15,8 @@ import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
 import { FirstRun } from '../components/FirstRun'
 import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
+import { costByChain } from '../lib/chainCost'
+import { CostTag } from '../components/CostTag'
 
 import type { Chain } from '../lib/types'
 
@@ -237,6 +239,12 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
 
     return { totalCost, costByKnight, dailyCosts, topTasks }
   }, [filteredCostEntries])
+
+  // Cost by chain: run copies of one template share a row (#515).
+  const chainCostRows = useMemo(() => {
+    const days = timeRange === 'day' ? 1 : timeRange === 'week' ? 7 : 30
+    return costByChain(chains, Date.now() - days * 24 * 60 * 60 * 1000)
+  }, [chains, timeRange])
 
   const runningCounts = useMemo(() => countByStatus(running.tasks.values()), [running.tasks])
   const runningTotal = runningCounts.running + runningCounts.stale + runningCounts.lost
@@ -515,6 +523,52 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Cost by chain */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-roundtable-gold" /> Cost by Chain
+                {truncationNote(chains.length, chainTotal) && (
+                  <span className="text-xs text-yellow-400 font-normal" data-testid="cost-chains-truncated">{truncationNote(chains.length, chainTotal)}</span>
+                )}
+              </h3>
+              {chainCostRows.length === 0 ? (
+                <EmptyState title="No chain runs in this range" />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table aria-label="Cost by chain" className="w-full">
+                    <thead>
+                      <tr className="border-b border-roundtable-steel">
+                        <th scope="col" className="text-left text-gray-400 text-xs font-medium pb-2">Chain</th>
+                        <th scope="col" className="text-right text-gray-400 text-xs font-medium pb-2">Runs</th>
+                        <th scope="col" className="text-left text-gray-400 text-xs font-medium pb-2">Latest run</th>
+                        <th scope="col" className="text-right text-gray-400 text-xs font-medium pb-2">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chainCostRows.map(row => (
+                        <tr key={row.key} className="border-b border-roundtable-steel/30 last:border-0">
+                          <td className="py-2">
+                            <Link to={`/chains?chain=${encodeURIComponent(row.key)}`} className="text-gray-300 text-sm hover:underline">{row.key}</Link>
+                          </td>
+                          <td className="py-2 text-right text-gray-400 text-xs">{row.runs}</td>
+                          <td className="py-2">
+                            <span className="text-gray-500 text-xs">{row.latest ? formatTimestamp(row.latest) : '—'}</span>
+                          </td>
+                          <td className="py-2 text-right text-roundtable-gold font-medium text-sm">
+                            <CostTag
+                              costUSD={row.costUSD === null ? null : String(row.costUSD)}
+                              notionalUSD={String(row.notionalUSD)}
+                              className="justify-end"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Most expensive tasks */}
