@@ -96,6 +96,7 @@ describe('FailedTasksPage', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('rt-ui')
     expect(screen.queryByText('deadline exceeded')).not.toBeInTheDocument()
+    expect(apiGet).toHaveBeenCalledTimes(1)
   })
 
   it('filters by knight', async () => {

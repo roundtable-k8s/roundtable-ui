@@ -7,7 +7,6 @@ describe('runRows', () => {
     expect(runRows(null)).toEqual([])
     expect(runRows({})).toEqual([])
     expect(runRows({ runs: 'x' })).toEqual([])
-    expect(runsUrl('all', false, 'Failed')).toBe('/api/gateway/runs?source=all&limit=100&phase=Failed')
   })
 })
 
@@ -20,7 +19,6 @@ describe('ageLabel', () => {
     expect(ageLabel(-3)).toBe('0s')
     expect(ageLabel(undefined)).toBe('—')
     expect(ageLabel(NaN)).toBe('—')
-    expect(runsUrl('all', false, 'Failed')).toBe('/api/gateway/runs?source=all&limit=100&phase=Failed')
   })
 })
 
@@ -34,7 +32,6 @@ describe('issueUrl', () => {
     expect(issueUrl({ repo: 'a/b?x', number: 1 })).toBe('')
     expect(issueUrl({ repo: 'a/b', number: 0 })).toBe('')
     expect(issueUrl({ repo: 'a/b', number: 1.5 })).toBe('')
-    expect(runsUrl('all', false, 'Failed')).toBe('/api/gateway/runs?source=all&limit=100&phase=Failed')
   })
 })
 

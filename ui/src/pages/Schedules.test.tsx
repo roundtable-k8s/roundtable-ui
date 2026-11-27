@@ -195,7 +195,7 @@ describe('SchedulesPage', () => {
     expect(screen.getByText(/^1 of 3 schedules/)).toBeInTheDocument()
   })
 
-  it('starts filtered from the URL, and an unknown state behaves as all', async () => {
+  it('starts filtered from the ?state= URL parameter', async () => {
     serve()
     renderPage('/schedules?state=failing')
     await rowFor('cluster-scan')
