@@ -400,6 +400,7 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.HandleFunc("/fleet/{knight}", knightHandler(d.namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/logs", knightLogsHandler(d.namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/pods", knightPodsHandler(d.namespace, d.running)).Methods("GET")
+	api.HandleFunc("/fleet/{knight}/events", knightEventsHandler(d.namespace)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/session", knightSessionHandler(d.fleetPrefix)).Methods("GET")
 	api.HandleFunc("/fleet/{knight}/queue", knightQueueHandler(d.namespace)).Methods("GET")
 	api.HandleFunc("/queues", queuesHandler(d.namespace)).Methods("GET")

@@ -367,6 +367,7 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/fleet/{knight}` — Get knight details
 - `GET /api/fleet/{knight}/logs` — Stream knight pod logs
 - `GET /api/fleet/{knight}/pods` — Pods of the knight with container state and last activity: `{pods: [...], default}` (`default` is the pod to show first, absent when there are none). 503 when Kubernetes is unavailable
+- `GET /api/fleet/{knight}/events` — Recent Kubernetes events of the knight (operator Warnings such as `TaskLost`), newest first, at most 50: `[{type, reason, message, count, firstTimestamp, lastTimestamp, reportingComponent}]`. 404 for an unknown knight, 502 when the event list fails
 - `GET /api/fleet/{knight}/session?type={stats|recent|tree}` — Knight session introspection
 - `GET /api/fleet/{knight}/queue` — Knight's JetStream task queue (pending, ack-pending, redelivered, oldest wait, free slots)
 - `GET /api/queues` — Task queues of all knights
