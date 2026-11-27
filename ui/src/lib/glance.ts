@@ -12,11 +12,14 @@ export interface GlanceItem {
   to: string
 }
 
-/** Each source is null when it has not loaded or failed to load: the item is then "unknown", never "ok". */
+/**
+ * Each source is null when it has not loaded or failed to load: the item is then "unknown", never "ok".
+ * Health and dead letters also carry flags (`error`, `loading`) for a failed or unanswered poll.
+ */
 export interface GlanceInput {
   health: Health | null
   knights: { status: string }[] | null
-  deadLetters: { count: number; capped?: boolean } | null
+  deadLetters: { count: number; capped?: boolean; loading?: boolean; error?: boolean } | null
   schedules: Pick<Schedule, 'lastResult'>[] | null
   queues: KnightQueue[] | null
 }
@@ -25,7 +28,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 function apiItem(health: Health | null): GlanceItem {
   const to = '/'
-  if (!health) return { id: 'api', label: 'API status unknown', tone: 'unknown', to }
+  if (!health || health.error) return { id: 'api', label: 'API status unknown', tone: 'unknown', to }
   const parts = [{ name: 'Kubernetes', v: health.kubernetes }, { name: 'NATS', v: health.nats }]
   const tone = (v?: string): GlanceTone => {
     if (!v) return 'unknown'
@@ -54,7 +57,7 @@ export function glanceItems(input: GlanceInput): GlanceItem[] {
     const n = knights.filter((k) => k.status === 'offline').length
     items.push({ id: 'knights', label: plural(n, 'knight not ready', 'knights not ready'), tone: n > 0 ? 'bad' : 'ok', to: '/fleet?status=offline' })
   }
-  if (!deadLetters) items.push({ id: 'failed', label: 'Failed tasks unknown', tone: 'unknown', to: '/failed' })
+  if (!deadLetters || deadLetters.loading || deadLetters.error) items.push({ id: 'failed', label: 'Failed tasks unknown', tone: 'unknown', to: '/failed' })
   else {
     const n = deadLetters.count
     items.push({ id: 'failed', label: `${n}${deadLetters.capped ? '+' : ''} open failed ${n === 1 && !deadLetters.capped ? 'task' : 'tasks'}`, tone: n > 0 ? 'bad' : 'ok', to: '/failed' })

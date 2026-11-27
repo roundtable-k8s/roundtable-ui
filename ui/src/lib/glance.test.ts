@@ -40,4 +40,18 @@ describe('glanceItems', () => {
     expect(ids({ health: null, knights: null, deadLetters: null, schedules: null, queues: null })).toEqual(['api', 'knights', 'failed', 'schedules', 'queues'])
     expect(glanceItems({ ...ok, queues: null })).toEqual([{ id: 'queues', label: 'Queues unknown', tone: 'unknown', to: '/queues' }])
   })
+  it('shows the API chip as unknown when the health poll failed after a success', () => {
+    const stale = { ...ok, health: { kubernetes: 'ok', nats: 'connected', error: true } }
+    expect(glanceItems(stale)).toEqual([{ id: 'api', label: 'API status unknown', tone: 'unknown', to: '/' }])
+  })
+  it('shows failed tasks as unknown before the first dead-letter answer', () => {
+    expect(glanceItems({ ...ok, deadLetters: { count: 0, capped: false, loading: true } })).toEqual([
+      { id: 'failed', label: 'Failed tasks unknown', tone: 'unknown', to: '/failed' },
+    ])
+  })
+  it('shows failed tasks as unknown when the dead-letter poll failed', () => {
+    expect(glanceItems({ ...ok, deadLetters: { count: 0, capped: false, error: true } })).toEqual([
+      { id: 'failed', label: 'Failed tasks unknown', tone: 'unknown', to: '/failed' },
+    ])
+  })
 })

@@ -59,6 +59,12 @@ describe('GlanceStrip', () => {
     expect(await screen.findByText('Queues unknown')).toHaveAttribute('data-tone', 'unknown')
     expect(screen.queryByText('All clear')).toBeNull()
   })
+  it('shows the API chip as unknown when /api/health fails', async () => {
+    mockApi({ ...healthy, fail: 'health' })
+    renderStrip()
+    expect(await screen.findByText('API status unknown')).toHaveAttribute('data-tone', 'unknown')
+    expect(screen.queryByText('All clear')).toBeNull()
+  })
   it('shows unknown knights when the fleet failed to load', async () => {
     mockApi(healthy)
     renderStrip(null)
