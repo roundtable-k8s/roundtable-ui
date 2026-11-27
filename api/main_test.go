@@ -662,6 +662,100 @@ func TestBriefingHandler(t *testing.T) {
 	}
 }
 
+// TestBriefingHandlerErrors covers size cap and read-error answers: only a
+// missing file is 404; oversized files are 413; other read failures are 500.
+func TestBriefingHandlerErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := "Briefings/Daily"
+	briefingsDir := filepath.Join(tmpDir, dir)
+	if err := os.MkdirAll(briefingsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	router := mux.NewRouter()
+	api := router.PathPrefix("/api").Subrouter()
+	api.HandleFunc("/briefings/{date}", briefingHandler(tmpDir, []string{dir})).Methods("GET")
+
+	serve := func(date string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/api/briefings/"+date, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("exactly the cap is served", func(t *testing.T) {
+		content := strings.Repeat("a", maxBriefingBytes)
+		if err := os.WriteFile(filepath.Join(briefingsDir, "2026-01-02.md"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		w := serve("2026-01-02")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if w.Body.Len() != maxBriefingBytes {
+			t.Errorf("expected %d bytes, got %d", maxBriefingBytes, w.Body.Len())
+		}
+	})
+
+	t.Run("one byte over the cap answers 413", func(t *testing.T) {
+		content := strings.Repeat("a", maxBriefingBytes+1)
+		if err := os.WriteFile(filepath.Join(briefingsDir, "2026-01-03.md"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		w := serve("2026-01-03")
+		if w.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("expected 413, got %d", w.Code)
+		}
+		if strings.Contains(w.Body.String(), "aaaa") {
+			t.Error("413 body must not contain briefing content")
+		}
+		if !strings.Contains(w.Body.String(), fmt.Sprint(maxBriefingBytes)) {
+			t.Errorf("413 body should state the limit, got %s", w.Body.String())
+		}
+	})
+
+	t.Run("missing file answers 404 without the vault path", func(t *testing.T) {
+		w := serve("2026-01-04")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", w.Code)
+		}
+		if strings.Contains(w.Body.String(), tmpDir) {
+			t.Errorf("404 body leaks the vault path: %s", w.Body.String())
+		}
+	})
+
+	t.Run("directory with the briefing name answers 404", func(t *testing.T) {
+		if err := os.MkdirAll(filepath.Join(briefingsDir, "2026-01-05.md"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		w := serve("2026-01-05")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("unreadable file answers 500", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root ignores file permissions")
+		}
+		p := filepath.Join(briefingsDir, "2026-01-06.md")
+		if err := os.WriteFile(p, []byte("secret"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(p, 0644) })
+		w := serve("2026-01-06")
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d", w.Code)
+		}
+		if strings.Contains(w.Body.String(), tmpDir) {
+			t.Errorf("500 body leaks the vault path: %s", w.Body.String())
+		}
+	})
+}
+
 // TestMissionsHandler tests the /api/missions endpoint
 func TestMissionsHandler(t *testing.T) {
 	router := setupTestRouter()

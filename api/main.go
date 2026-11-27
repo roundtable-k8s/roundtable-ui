@@ -7,7 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
+	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -1391,6 +1392,11 @@ func briefingListHandler(vaultPath string, dirs []string) http.HandlerFunc {
 
 var briefingDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
+// maxBriefingBytes caps how much of one briefing the API reads and returns.
+const maxBriefingBytes = 2 << 20
+
+var briefingTooLargeMsg = fmt.Sprintf("Briefing too large (limit %d bytes)", maxBriefingBytes)
+
 // briefingHandler serves one briefing. The optional ?dir= query selects one of
 // the configured directories; otherwise they are searched in order.
 func briefingHandler(vaultPath string, dirs []string) http.HandlerFunc {
@@ -1420,9 +1426,42 @@ func briefingHandler(vaultPath string, dirs []string) http.HandlerFunc {
 		}
 
 		for _, d := range search {
-			content, err := os.ReadFile(filepath.Join(vaultPath, d, date+".md"))
+			f, err := os.Open(filepath.Join(vaultPath, d, date+".md"))
 			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					continue
+				}
+				slog.ErrorContext(r.Context(), "briefing read failed", "dir", d, "error", err)
+				jsonError(w, "Failed to read briefing", http.StatusInternalServerError)
+				return
+			}
+			info, err := f.Stat()
+			if err != nil {
+				f.Close()
+				slog.ErrorContext(r.Context(), "briefing read failed", "dir", d, "error", err)
+				jsonError(w, "Failed to read briefing", http.StatusInternalServerError)
+				return
+			}
+			if info.IsDir() {
+				f.Close()
 				continue
+			}
+			if info.Size() > maxBriefingBytes {
+				f.Close()
+				jsonError(w, briefingTooLargeMsg, http.StatusRequestEntityTooLarge)
+				return
+			}
+			// Read one byte past the cap so a file that grew after Stat is still caught.
+			content, err := io.ReadAll(io.LimitReader(f, maxBriefingBytes+1))
+			f.Close()
+			if err != nil {
+				slog.ErrorContext(r.Context(), "briefing read failed", "dir", d, "error", err)
+				jsonError(w, "Failed to read briefing", http.StatusInternalServerError)
+				return
+			}
+			if len(content) > maxBriefingBytes {
+				jsonError(w, briefingTooLargeMsg, http.StatusRequestEntityTooLarge)
+				return
 			}
 			w.Header().Set("Content-Type", "text/markdown")
 			w.Header().Set("X-Briefing-Dir", d)
