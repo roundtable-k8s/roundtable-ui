@@ -3,7 +3,7 @@ import { render, screen, within, act, waitFor, fireEvent } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChainsPage, CHAINS_LIST_URL, CHAIN_GROUPS_URL, FALLBACK_POLL_MS, GROUP_PAGE_SIZE, GROUP_REFRESH_MS } from './Chains'
-import { apiGet, apiPost, apiFetch } from '../lib/api'
+import { apiGet, apiGetWithTotal, apiPost, apiFetch } from '../lib/api'
 import { fanOutChain, prPipelineChain } from '../test/fixtures/chains'
 import type { Chain } from '../lib/types'
 import apiFanout from '../test/fixtures/api/fanout.json'
@@ -11,7 +11,13 @@ import apiLoop from '../test/fixtures/api/pr-pipeline-loop.json'
 import apiCost from '../test/fixtures/api/cost.json'
 import type { TopicListener } from '../hooks/useWebSocket'
 
-vi.mock('../lib/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn(), apiFetch: vi.fn() }))
+vi.mock('../lib/api', () => {
+  const apiGet = vi.fn()
+  // Lists load through apiGetWithTotal; by default it wraps apiGet with no total.
+  const apiGetWithTotal = vi.fn((url: string, init?: unknown) =>
+    apiGet(url, init).then((items: unknown) => ({ items, total: null })))
+  return { apiGet, apiGetWithTotal, apiPost: vi.fn(), apiFetch: vi.fn() }
+})
 
 let connected = true
 const listeners = new Map<string, Set<TopicListener>>()
@@ -593,12 +599,36 @@ describe('ChainsPage timeline toggle', () => {
 describe('ChainsPage truncated list', () => {
   const many = (n: number) => Array.from({ length: n }, (_, i) => ({ ...fanOutChain(), name: `c-${i}` }))
 
-  it('says "showing 500 of N" when the API holds more chains than the page', async () => {
-    mockApiGet.mockImplementation((url: string) =>
-      url === CHAINS_LIST_URL ? Promise.resolve(many(500)) : Promise.reject(new Error('no KV')))
-    vi.mocked(apiFetch).mockResolvedValue(new Response('[]', { headers: { 'X-Total-Count': '731' } }))
+  const listCalls = () => mockApiGet.mock.calls.filter(c => String(c[0]).startsWith('/api/chains?')).length
+    + vi.mocked(apiGetWithTotal).mock.calls.length
+
+  it('says "showing 500 of N" from the list response, with one request', async () => {
+    mockApiGet.mockImplementation(() => Promise.reject(new Error('no KV')))
+    vi.mocked(apiGetWithTotal).mockImplementation(() => Promise.resolve({ items: many(500) as never, total: 731 }))
+    vi.mocked(apiFetch).mockClear()
     renderPage('/chains')
     expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
+    expect(vi.mocked(apiGetWithTotal)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(apiFetch)).not.toHaveBeenCalled()
+    expect(listCalls()).toBe(1)
+  })
+
+  it('does not show the previous table total after a table switch', async () => {
+    mockApiGet.mockImplementation(() => Promise.reject(new Error('no KV')))
+    let release: (v: { items: never; total: number | null }) => void = () => {}
+    vi.mocked(apiGetWithTotal).mockImplementation((url: string) =>
+      url.includes('table=b')
+        ? new Promise(r => { release = r as typeof release })
+        : Promise.resolve({ items: many(500) as never, total: 731 }))
+    const { unmount } = renderPage('/chains')
+    expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
+    unmount()
+    vi.mocked(apiGetWithTotal).mockClear()
+    renderPage('/chains?table=b')
+    await waitFor(() => expect(vi.mocked(apiGetWithTotal)).toHaveBeenCalled())
+    expect(screen.queryByTestId('chains-truncated')).toBeNull()
+    release({ items: many(500) as never, total: 900 })
+    expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 900')
   })
 
   it('shows no note when the page is not full', async () => {

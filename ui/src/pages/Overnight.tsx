@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Moon } from 'lucide-react'
-import { apiGet } from '../lib/api'
+import { apiGet, apiGetWithTotal } from '../lib/api'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
 import { useUrlParam } from '../hooks/useUrlParam'
-import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
+import { CHAIN_LIST_LIMIT, truncationNote } from '../lib/chainTotal'
 import { DEAD_LETTERS_URL, deadLetterTime, errorExcerpt, type DeadLetter } from '../lib/deadLetters'
 import { NOTIONAL_HINT } from '../lib/cost'
 import { formatCost, formatTimestamp } from '../lib/format'
@@ -38,10 +38,8 @@ export function OvernightPage() {
   const load = useCallback(async () => {
     setLoading(true)
     await Promise.all([
-      apiGet<Chain[]>(CHAINS_URL).then(async (data) => {
-        const list = data ?? []
-        const total = list.length >= CHAIN_LIST_LIMIT ? await fetchChainTotal(CHAINS_URL) : null
-        setChains({ data: list, error: null, total })
+      apiGetWithTotal<Chain[]>(CHAINS_URL).then(({ items, total }) => {
+        setChains({ data: items ?? [], error: null, total })
       }, (e) => setChains((p) => ({ ...p, error: errMsg(e, 'chains') }))),
       apiGet<{ deadLetters?: DeadLetter[] }>(DEAD_LETTERS_URL).then(
         (d) => setDead({ data: d.deadLetters ?? [], error: null }),

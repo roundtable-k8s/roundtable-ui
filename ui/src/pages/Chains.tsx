@@ -1,5 +1,5 @@
-import { apiGet, apiPost } from '../lib/api'
-import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
+import { apiGet, apiGetWithTotal, apiPost } from '../lib/api'
+import { CHAIN_LIST_LIMIT, type KeyedTotal, totalFor, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, ExternalLink, Square } from 'lucide-react'
 import { UntrustedText } from '../components/UntrustedText'
@@ -796,7 +796,8 @@ export function ChainsPage() {
   const { table } = useTableFilter()
   const { connected, subscribeTopic } = useWebSocket()
   const [chains, setChains] = useState<Chain[]>([])
-  const [listTotal, setListTotal] = useState<number | null>(null)
+  const [storedTotal, setStoredTotal] = useState<KeyedTotal | null>(null)
+  const listTotal = totalFor(storedTotal, withTable(CHAINS_LIST_URL, table))
   const [groups, setGroups] = useState<ChainRunGroup[]>([])
   const [focusDetail, setFocusDetail] = useState<Chain | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -825,15 +826,13 @@ export function ChainsPage() {
     setLoading(true)
     setRefreshToken(t => t + 1)
     fetchGroups()
-    apiGet<Chain[]>(withTable(CHAINS_LIST_URL, table), { signal: controller.signal })
-      .then((data) => {
+    apiGetWithTotal<Chain[]>(withTable(CHAINS_LIST_URL, table), { signal: controller.signal })
+      .then(({ items: data, total }) => {
         if (controller.signal.aborted) return
         setChains(replay.reduce(applyChainUpdate, data || []))
         setError('')
-        // A full page means the list may be cut short: ask for the real total.
-        if ((data || []).length >= CHAIN_LIST_LIMIT) {
-          fetchChainTotal(withTable(CHAINS_LIST_URL, table)).then(n => { if (!controller.signal.aborted) setListTotal(n) })
-        } else setListTotal(null)
+        // X-Total-Count comes with the list; keyed by URL so a table switch can't show the old one.
+        setStoredTotal({ url: withTable(CHAINS_LIST_URL, table), total })
       })
       .catch((e) => {
         // Keep the last good list on transient failures — surface the error instead

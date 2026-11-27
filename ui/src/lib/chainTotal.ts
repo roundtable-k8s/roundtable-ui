@@ -1,21 +1,12 @@
-import { apiFetch } from './api'
-
 /** Page size the Chains and Dashboard lists ask for (the API maximum). */
 export const CHAIN_LIST_LIMIT = 500
 
-/**
- * Number of chains matching listUrl, read from X-Total-Count of a one-item
- * page. Only call when the list came back full: null when unknown.
- */
-export async function fetchChainTotal(listUrl: string): Promise<number | null> {
-  try {
-    const res = await apiFetch(listUrl.replace(/([?&])limit=\d+/, '$1limit=1'))
-    if (!res.ok) return null
-    const n = Number(res.headers.get('X-Total-Count'))
-    return Number.isFinite(n) && n > 0 ? n : null
-  } catch {
-    return null
-  }
+/** A total remembered together with the list URL it belongs to. */
+export interface KeyedTotal { url: string; total: number | null }
+
+/** The stored total only when it was read for url (a table switch must not show the old one). */
+export function totalFor(stored: KeyedTotal | null, url: string): number | null {
+  return stored && stored.url === url ? stored.total : null
 }
 
 /** "showing 500 of N" when the list is cut short, else null. */

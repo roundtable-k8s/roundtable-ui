@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { DashboardPage } from './Dashboard'
 import { useFleet } from '../hooks/useFleet'
-import { apiGet, apiFetch } from '../lib/api'
+import { apiGet, apiGetWithTotal, apiFetch } from '../lib/api'
 import { useWebSocket } from '../hooks/useWebSocket'
 
 // Mock the hooks
@@ -76,6 +76,10 @@ vi.mock('../lib/api', () => ({
     }
     return Promise.resolve({})
   }),
+  apiGetWithTotal: vi.fn(async (url: string, init?: unknown) => {
+    const { apiGet } = await import('../lib/api')
+    return { items: await apiGet(url, init as never), total: null }
+  }),
   // fetchWithTimeout (session introspection) goes through apiFetch — report
   // "unsupported" so cost fan-out resolves without network access
   apiFetch: vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) })),
@@ -90,9 +94,10 @@ function renderDashboard(props = {}) {
 }
 
 // Tests override these mocks; put the defaults back after every test, pass or fail.
-let defaults: { apiGet: unknown; apiFetch: unknown; useFleet: unknown; useWebSocket: unknown }
+let defaults: { apiGetWithTotal: unknown; apiGet: unknown; apiFetch: unknown; useFleet: unknown; useWebSocket: unknown }
 beforeEach(() => {
   defaults = {
+    apiGetWithTotal: vi.mocked(apiGetWithTotal).getMockImplementation(),
     apiGet: vi.mocked(apiGet).getMockImplementation(),
     apiFetch: vi.mocked(apiFetch).getMockImplementation(),
     useFleet: vi.mocked(useFleet).getMockImplementation(),
@@ -101,6 +106,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.mocked(apiGet).mockReset().mockImplementation(defaults.apiGet as typeof apiGet)
+  vi.mocked(apiGetWithTotal).mockReset().mockImplementation(defaults.apiGetWithTotal as typeof apiGetWithTotal)
   vi.mocked(apiFetch).mockReset().mockImplementation(defaults.apiFetch as typeof apiFetch)
   vi.mocked(useFleet).mockReset().mockImplementation(defaults.useFleet as typeof useFleet)
   vi.mocked(useWebSocket).mockReset().mockImplementation(defaults.useWebSocket as typeof useWebSocket)
@@ -322,26 +328,24 @@ describe('DashboardPage session cost refresh (#152)', () => {
 })
 
 describe('DashboardPage truncated chain list', () => {
-  async function withChains(n: number, total: string) {
-    const orig = defaults.apiGet as typeof apiGet
-    vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
+  async function withChains(n: number, total: number | null) {
+    vi.mocked(apiGetWithTotal).mockImplementation((async (url: string) =>
       url === '/api/chains?limit=500'
-        ? Promise.resolve(Array.from({ length: n }, (_, i) => ({ name: `c-${i}`, phase: 'Succeeded', steps: [] })))
-        : orig(url, init)) as typeof apiGet)
-    vi.mocked(apiFetch).mockImplementation(((url: string) =>
-      url === '/api/chains?limit=1'
-        ? Promise.resolve(new Response('[]', { headers: { 'X-Total-Count': total } }))
-        : Promise.resolve({ ok: false, json: () => Promise.resolve({}) })) as typeof apiFetch)
+        ? { items: Array.from({ length: n }, (_, i) => ({ name: `c-${i}`, phase: 'Succeeded', steps: [] })), total }
+        : { items: [], total: null }) as never)
   }
 
   it('says "showing 500 of N" when there are more chains than the page', async () => {
-    await withChains(500, '731')
+    await withChains(500, 731)
     renderDashboard()
     expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
+    // one list request, no second limit=1 call
+    expect(vi.mocked(apiGetWithTotal)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(apiFetch).mock.calls.some(c => String(c[0]).includes('limit=1'))).toBe(false)
   })
 
   it('shows no note with fewer than 500 chains', async () => {
-    await withChains(2, '2')
+    await withChains(2, 2)
     renderDashboard()
     await screen.findByText('c-0')
     expect(screen.queryByTestId('chains-truncated')).toBeNull()
