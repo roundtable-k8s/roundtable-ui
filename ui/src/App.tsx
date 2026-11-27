@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare, Zap, CalendarClock, Search, Moon } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare, Zap, CalendarClock, Search, Moon, Workflow } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
@@ -31,6 +31,7 @@ const MissionsPage = lazy(() => import('./pages/Missions').then(m => ({ default:
 const CostDashboardPage = lazy(() => import('./pages/CostDashboard').then(m => ({ default: m.CostDashboardPage })))
 const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ default: m.ArchitecturePage })))
 const RunningPage = lazy(() => import('./pages/Running').then(m => ({ default: m.RunningPage })))
+const RunsPage = lazy(() => import('./pages/Runs').then(m => ({ default: m.RunsPage })))
 const OvernightPage = lazy(() => import('./pages/Overnight').then(m => ({ default: m.OvernightPage })))
 const QueuesPage = lazy(() => import('./pages/Queues').then(m => ({ default: m.QueuesPage })))
 const FailedTasksPage = lazy(() => import('./pages/FailedTasks').then(m => ({ default: m.FailedTasksPage })))
@@ -63,6 +64,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Command Center' },
   { path: '/fleet', icon: Shield, label: 'Fleet' },
   { path: '/running', icon: Activity, label: 'Running' },
+  { path: '/runs', icon: Workflow, label: 'Runs' },
   { path: '/overnight', icon: Moon, label: 'Overnight' },
   { path: '/missions', icon: Target, label: 'Missions' },
   { path: '/roundtables', icon: Crown, label: 'Round Tables' },
@@ -240,6 +242,7 @@ export default function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/fleet" element={<FleetPage />} />
             <Route path="/running" element={<RunningPage />} />
+            <Route path="/runs" element={<RunsPage />} />
             <Route path="/overnight" element={<OvernightPage />} />
             <Route path="/missions" element={<MissionsPage />} />
             <Route path="/roundtables" element={<RoundTablesPage />} />
