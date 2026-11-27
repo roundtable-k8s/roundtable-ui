@@ -233,12 +233,13 @@ nix flake check    # verifies the tool versions and that knight-tools contains t
 
 The dashboard is deployed as part of the Round Table operator chart. The chart is published only as an OCI artifact (there is no classic Helm repository, so no repository needs to be added). The dashboard is enabled by default.
 
+The chart wires the dashboard's `GATEWAY_TOKEN` to the gateway's own token Secret, so the install above needs no gateway settings. To send a token from a different Secret, set `dashboard.gateway.tokenSecret` and `dashboard.gateway.tokenKey` (the dashboard re-reads the token on a 401). The gateway's token Secret is set with `gateway.auth.existingSecret` and `gateway.auth.secretKey`.
+
 ```bash
 # Install/upgrade Round Table with the dashboard exposed through an ingress
 helm upgrade --install roundtable-operator oci://ghcr.io/roundtable-k8s/charts/roundtable-operator \
   --namespace roundtable \
   --create-namespace \
-  --set dashboard.enabled=true \
   --set dashboard.ingress.enabled=true \
   --set dashboard.ingress.host=roundtable.example.com
 
@@ -295,7 +296,7 @@ without one no exporter is created and no collector connection is attempted.
 `OTEL_SDK_DISABLED=true` or `OTEL_TRACES_EXPORTER=none` switches export off
 even with an endpoint. Each request gets a server span named after its route
 template, and gateway calls are client spans carrying the W3C `traceparent`.
-`/api/ws`, `/metrics`, `/healthz` and `/readyz` produce no spans. Log lines
+`/api/ws` and `/metrics` produce no spans. Log lines
 written inside a traced request carry `trace_id` and `span_id`.
 
 The "View trace" links on chain and mission cards use the `traceId` (32 hex
@@ -346,12 +347,12 @@ The dashboard exposes a comprehensive REST API:
 - `GET /api/fleet/{knight}` — Get knight details
 - `GET /api/fleet/{knight}/logs` — Stream knight pod logs
 - `GET /api/fleet/{knight}/pods` — Pods of the knight with container state and last activity: `{pods: [...], default}` (`default` is the pod to show first, absent when there are none). 503 when Kubernetes is unavailable
-- `GET /api/running` — Tasks running now (from live `<prefix>.activity.>` events): `{tasks, count, generatedAt, heartbeatIntervalMs, staleAfterMs}`. Optional `?table=<name>` (`none` = knights without a RoundTable)
 - `GET /api/fleet/{knight}/session?type={stats|recent|tree}` — Knight session introspection
 - `GET /api/fleet/{knight}/queue` — Knight's JetStream task queue (pending, ack-pending, redelivered, oldest wait, free slots)
 - `GET /api/queues` — Task queues of all knights
 - `GET /api/fleet/{knight}/queue/history?since=1h` — Sampled queue backlog and replicas (every 15 s, last 6 h, in memory) plus KEDA/HPA scale events with reasons
 - `GET /api/queues/history?since=1h` — The same history for every knight
+- `GET /api/running` — Tasks running now (from live `<prefix>.activity.>` events): `{tasks, count, generatedAt, heartbeatIntervalMs, staleAfterMs}`. Optional `?table=<name>` (`none` = knights without a RoundTable)
 
 ### Agent Cards
 - `GET /api/cards` — Every knight's agent card for the covered tables (optional `?table=<name>`; 400 for an unknown table), read from `CARDS_KV_BUCKET`, plus whether the knight is live and its load. Cards exist while a knight is scaled to zero. A missing bucket returns `{"cards": []}`.
