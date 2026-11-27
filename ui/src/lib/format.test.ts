@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  formatCost, formatDateTime, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
+  budgetText, formatCost, formatDateTime, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
   formatSecondsLadder, formatTimestamp, formatTimestampOrDate, formatUptime, until,
 } from './format'
 
@@ -17,6 +17,20 @@ describe('formatCost', () => {
     expect(formatCost(0.00421)).toBe('$0.0042')
     expect(formatCost(0.01)).toBe('$0.01')
     expect(formatCost(1.234)).toBe('$1.23')
+  })
+})
+
+describe('budgetText', () => {
+  it('reads empty, zero and non-numeric budgets as unlimited', () => {
+    expect(budgetText('')).toBe('unlimited')
+    expect(budgetText('0')).toBe('unlimited')
+    expect(budgetText('0.00')).toBe('unlimited')
+    expect(budgetText('abc')).toBe('unlimited')
+    expect(budgetText(undefined)).toBe('unlimited')
+  })
+  it('formats a positive budget as a dollar amount', () => {
+    expect(budgetText('50')).toBe('$50.00')
+    expect(budgetText('0.005')).toBe('$0.0050')
   })
 })
 

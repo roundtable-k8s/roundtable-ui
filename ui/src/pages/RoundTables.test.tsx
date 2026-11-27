@@ -54,3 +54,48 @@ describe('RoundTablesPage load failure', () => {
     fetchState = { data: tables, error: null }
   })
 })
+
+describe('RoundTablesPage budgets and toggle', () => {
+  const capped: RoundTable = { ...base, name: 'capped', costBudgetUSD: '50', totalCost: '12.4', policies: { costBudgetUSD: '50', maxConcurrentPlanTasks: 0, maxMissions: 0 } }
+  const unlimited: RoundTable = { ...base, name: 'open', costBudgetUSD: '0', totalCost: '12.4', policies: { costBudgetUSD: '', maxConcurrentPlanTasks: 0, maxMissions: 0 } }
+
+  it('shows the budget on the card only when there is one', () => {
+    fetchState = { data: [capped, unlimited], error: null }
+    renderPage()
+    expect(screen.getByText(/\/ \$50\.00/)).toBeTruthy()
+    expect(screen.getAllByText(/\$12\.40/).length).toBe(2)
+    expect(screen.queryByText(/\/ \$0/)).toBeNull()
+    fetchState = { data: tables, error: null }
+  })
+
+  it('reads unlimited budgets and max missions in the policies block', () => {
+    fetchState = { data: [unlimited], error: null }
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: /more details/i }))
+    const budgetRow = screen.getByText('Cost Budget').parentElement
+    expect(budgetRow?.textContent).toBe('Cost Budgetunlimited')
+    expect(screen.getByText('Max Missions').parentElement?.textContent).toBe('Max Missionsunlimited')
+    fetchState = { data: tables, error: null }
+  })
+
+  it('never shows a bare dollar sign for an empty budget', () => {
+    fetchState = { data: [unlimited], error: null }
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: /more details/i }))
+    expect(screen.queryByText('$')).toBeNull()
+    fetchState = { data: tables, error: null }
+  })
+
+  it('exposes aria-expanded and aria-controls on the toggle', () => {
+    fetchState = { data: [capped], error: null }
+    renderPage()
+    const btn = screen.getByRole('button', { name: /more details/i })
+    expect(btn).toHaveAttribute('aria-expanded', 'false')
+    const id = btn.getAttribute('aria-controls')
+    expect(id).toBeTruthy()
+    fireEvent.click(btn)
+    expect(screen.getByRole('button', { name: /less/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById(id!)).toBeTruthy()
+    fetchState = { data: tables, error: null }
+  })
+})

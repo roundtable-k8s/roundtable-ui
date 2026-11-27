@@ -4,6 +4,7 @@ import { Crown, Shield, DollarSign, ChevronDown, Layers, Settings, CheckSquare }
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
+import { budgetText, formatCost } from '../lib/format'
 import type { RoundTable } from '../lib/types'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, PhaseBadge, ProgressBar } from '../components/ui'
 
@@ -115,9 +116,9 @@ export function RoundTablesPage() {
                       Cost
                     </div>
                     <div>
-                      <span className="text-roundtable-gold">${rt.totalCost || '0.00'}</span>
-                      {rt.costBudgetUSD && (
-                        <span className="text-gray-500"> / ${rt.costBudgetUSD}</span>
+                      <span className="text-roundtable-gold">{formatCost(parseFloat(rt.totalCost) || 0)}</span>
+                      {budgetText(rt.costBudgetUSD) !== 'unlimited' && (
+                        <span className="text-gray-500"> / {budgetText(rt.costBudgetUSD)}</span>
                       )}
                     </div>
                   </div>
@@ -138,6 +139,8 @@ export function RoundTablesPage() {
                 {hasDetail && (
                   <button
                     onClick={() => toggleCard(rt.name)}
+                    aria-expanded={expanded}
+                    aria-controls={`rt-${rt.name}-details`}
                     className="mt-4 w-full flex items-center justify-center gap-1 text-xs text-gray-500 hover:text-roundtable-gold transition-colors"
                   >
                     <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -148,7 +151,7 @@ export function RoundTablesPage() {
 
               {/* Expanded detail section */}
               {expanded && hasDetail && (
-                <div className="border-t border-roundtable-steel/50 px-5 pb-5 pt-4 space-y-4">
+                <div id={`rt-${rt.name}-details`} className="border-t border-roundtable-steel/50 px-5 pb-5 pt-4 space-y-4">
                   {/* Description */}
                   {rt.description && (
                     <p className="text-sm text-gray-400 leading-relaxed">{rt.description}</p>
@@ -188,7 +191,7 @@ export function RoundTablesPage() {
                       <div className="bg-roundtable-navy rounded-lg p-3 space-y-1.5">
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">Cost Budget</span>
-                          <span className="text-roundtable-gold">${rt.policies.costBudgetUSD}</span>
+                          <span className="text-roundtable-gold">{budgetText(rt.policies.costBudgetUSD)}</span>
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">Max Concurrent Plan Tasks</span>
@@ -196,7 +199,7 @@ export function RoundTablesPage() {
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">Max Missions</span>
-                          <span className="text-gray-300">{rt.policies.maxMissions}</span>
+                          <span className="text-gray-300">{rt.policies.maxMissions || 'unlimited'}</span>
                         </div>
                       </div>
                     </div>
