@@ -44,7 +44,7 @@ func knightEventsHandler(namespace string) http.HandlerFunc {
 		defer cancel()
 		// Same 404 rule as knightHandler: an unknown knight is not found.
 		if _, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{}); err != nil {
-			writeGetError(w, r, err, "Knight", "knight", name)
+			writeK8sError(w, r, err, "read", "Knight")
 			return
 		}
 		list, err := k8sClient.CoreV1().Events(namespace).List(kctx, metav1.ListOptions{
