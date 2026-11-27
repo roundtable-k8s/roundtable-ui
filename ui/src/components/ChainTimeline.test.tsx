@@ -62,12 +62,13 @@ describe('ChainTimeline', () => {
     vi.useFakeTimers()
     try {
       vi.setSystemTime(T0 + 10_000)
-      const c = { ...chain, phase: 'Running', completionTime: undefined, steps: [step('a', { phase: 'Running', startTime: iso(0) })] } as unknown as Chain
+      // Start at 4s, not 0: a running step that starts with the run always fills the span, so its width is pinned at 100.
+      const c = { ...chain, phase: 'Running', completionTime: undefined, steps: [step('a', { phase: 'Running', startTime: iso(4) })] } as unknown as Chain
       render(<ChainTimeline chain={c} />)
       const w1 = parseFloat(screen.getByTestId('bar-a').style.width)
       act(() => { vi.advanceTimersByTime(1000) })
-      expect(parseFloat(screen.getByTestId('bar-a').style.width)).toBeGreaterThanOrEqual(w1)
-      expect(screen.getByTestId('bar-a')).toHaveAttribute('aria-label', 'a: Running, 11s')
+      expect(parseFloat(screen.getByTestId('bar-a').style.width)).toBeGreaterThan(w1)
+      expect(screen.getByTestId('bar-a')).toHaveAttribute('aria-label', 'a: Running, 7s')
     } finally { vi.useRealTimers() }
   })
   it('does not tick for a finished chain', () => {

@@ -491,17 +491,20 @@ describe('ChainsPage cancel run', () => {
     const mockPost = vi.mocked(apiPost)
     mockPost.mockReset()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    mockPost.mockRejectedValueOnce(new Error('run already finished'))
-    open(runCopy('Running'))
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancel run' }))
-    expect(confirm).toHaveBeenCalled()
-    expect(mockPost).toHaveBeenCalledWith('/api/chains/runs/roundtable/pr-pipeline-roundtable-9/cancel', {})
-    expect((await screen.findByRole('alert')).textContent).toContain('run already finished')
-    confirm.mockReturnValue(false)
-    mockPost.mockClear()
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel run' }))
-    expect(mockPost).not.toHaveBeenCalled()
-    confirm.mockRestore()
+    try {
+      mockPost.mockRejectedValueOnce(new Error('run already finished'))
+      open(runCopy('Running'))
+      await userEvent.click(await screen.findByRole('button', { name: 'Cancel run' }))
+      expect(confirm).toHaveBeenCalled()
+      expect(mockPost).toHaveBeenCalledWith('/api/chains/runs/roundtable/pr-pipeline-roundtable-9/cancel', {})
+      expect((await screen.findByRole('alert')).textContent).toContain('run already finished')
+      confirm.mockReturnValue(false)
+      mockPost.mockClear()
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel run' }))
+      expect(mockPost).not.toHaveBeenCalled()
+    } finally {
+      confirm.mockRestore()
+    }
   })
 
   it('shows "Cancel requested" and disables the button after a successful cancel', async () => {
@@ -538,7 +541,8 @@ describe('ChainsPage detail refetch', () => {
 
 describe('ChainsPage schedule', () => {
   it('shows the Scheduled badge and schedule summary', async () => {
-    const next = new Date(Date.now() + 3 * 3600_000).toISOString()
+    // 3.5h, not 3h: until() floors to whole hours, so a fixture exactly 3h away reads "in 2h" once a few ms pass.
+    const next = new Date(Date.now() + 3.5 * 3600_000).toISOString()
     mockApiGet.mockImplementation((url: string) =>
       url === CHAINS_LIST_URL
         ? Promise.resolve([{ ...fanOutChain(), name: 'nightly', schedule: '0 6 * * *', timeZone: 'UTC', nextScheduledAt: next }, prPipelineChain()])

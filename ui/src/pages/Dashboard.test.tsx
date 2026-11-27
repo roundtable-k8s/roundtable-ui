@@ -366,7 +366,8 @@ describe('DashboardPage truncated chain list', () => {
 describe('DashboardPage scheduled chains', () => {
   it('shows "next in" for a scheduled chain that is not suspended', async () => {
     const orig = vi.mocked(apiGet).getMockImplementation()!
-    const next = new Date(Date.now() + 3 * 3600_000).toISOString()
+    // 3.5h, not 3h: until() floors to whole hours, so a fixture exactly 3h away reads "in 2h" once a few ms pass.
+    const next = new Date(Date.now() + 3.5 * 3600_000).toISOString()
     vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
       url === '/api/chains?limit=500'
         ? Promise.resolve([
@@ -374,10 +375,13 @@ describe('DashboardPage scheduled chains', () => {
           { name: 'paused', phase: 'Succeeded', schedule: '0 6 * * *', suspend: true, nextScheduledAt: next, steps: [] },
         ])
         : orig(url, init)) as typeof apiGet)
-    renderDashboard()
-    expect(await screen.findByText(/^next in 3h/)).toBeInTheDocument()
-    expect(screen.getAllByText(/^next in/)).toHaveLength(1)
-    vi.mocked(apiGet).mockImplementation(orig)
+    try {
+      renderDashboard()
+      expect(await screen.findByText(/^next in 3h/)).toBeInTheDocument()
+      expect(screen.getAllByText(/^next in/)).toHaveLength(1)
+    } finally {
+      vi.mocked(apiGet).mockImplementation(orig)
+    }
   })
 })
 
@@ -492,27 +496,29 @@ describe('DashboardPage cost CSV download (#514)', () => {
       clicks.push(this)
     })
 
-    renderDashboard({ defaultCostExpanded: true })
-    const button = screen.getByRole('button', { name: 'Download CSV' })
-    expect(screen.getByText('Covers recent results only')).toBeInTheDocument()
-    await user.click(button)
+    try {
+      renderDashboard({ defaultCostExpanded: true })
+      const button = screen.getByRole('button', { name: 'Download CSV' })
+      expect(screen.getByText('Covers recent results only')).toBeInTheDocument()
+      await user.click(button)
 
-    expect(createObjectURL).toHaveBeenCalledTimes(1)
-    const blob = createObjectURL.mock.calls[0][0] as Blob
-    expect(blob.type).toBe('text/csv;charset=utf-8')
-    const text = await blob.text()
-    expect(text).toContain('Knight,Cost (USD),Tasks,Failed\r\n')
-    expect(text).toContain('galahad,0.5,1,0\r\n')
-    expect(text).toContain('lancelot,0.25,1,0\r\n')
-    expect(text).toContain("'=cmd,0.1,1,0")
-    expect(text).toContain('Top tasks\r\n')
-    expect(clicks[0].download).toBe('roundtable-costs-week.csv')
-    expect(clicks[0].href).toBe('blob:cost')
-    expect(clicks[0].isConnected).toBe(false)
-    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:cost'))
-
-    click.mockRestore()
-    delete urlApi.createObjectURL
-    delete urlApi.revokeObjectURL
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+      const blob = createObjectURL.mock.calls[0][0] as Blob
+      expect(blob.type).toBe('text/csv;charset=utf-8')
+      const text = await blob.text()
+      expect(text).toContain('Knight,Cost (USD),Tasks,Failed\r\n')
+      expect(text).toContain('galahad,0.5,1,0\r\n')
+      expect(text).toContain('lancelot,0.25,1,0\r\n')
+      expect(text).toContain("'=cmd,0.1,1,0")
+      expect(text).toContain('Top tasks\r\n')
+      expect(clicks[0].download).toBe('roundtable-costs-week.csv')
+      expect(clicks[0].href).toBe('blob:cost')
+      expect(clicks[0].isConnected).toBe(false)
+      await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:cost'))
+    } finally {
+      click.mockRestore()
+      delete urlApi.createObjectURL
+      delete urlApi.revokeObjectURL
+    }
   })
 })
