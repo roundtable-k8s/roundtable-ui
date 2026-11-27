@@ -496,6 +496,7 @@ func main() {
 		slog.WarnContext(context.Background(), "OpenTelemetry setup failed, tracing disabled", "error", otelErr)
 	}
 
+	setMemoryLimitFromCgroup(cgroupMemoryFiles)
 	wsMaxConnections = wsMaxConnectionsFromEnv()
 
 	natsURL := envOr("NATS_URL", "nats://nats.database.svc:4222")
