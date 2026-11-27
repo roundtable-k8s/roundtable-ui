@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 )
@@ -44,6 +45,8 @@ func currentVersion() versionInfo {
 func versionHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(currentVersion())
+		if err := json.NewEncoder(w).Encode(currentVersion()); err != nil {
+			slog.DebugContext(r.Context(), "Failed to encode version", "error", err)
+		}
 	}
 }

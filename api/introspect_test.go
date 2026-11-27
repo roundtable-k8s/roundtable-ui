@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -536,5 +537,38 @@ func TestLooksLikeKnightPod(t *testing.T) {
 		if got := looksLikeKnightPod(tt.knight, tt.pod); got != tt.want {
 			t.Errorf("looksLikeKnightPod(%q, %q) = %v, want %v", tt.knight, tt.pod, got, tt.want)
 		}
+	}
+}
+
+func TestIntrospectClientDisconnectNotLoggedAsTimeout(t *testing.T) {
+	var buf strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	h := setupIntrospectTest(t, &fakeIntrospect{}) // no pods: knight-level path
+	ctx, cancel := context.WithCancel(context.Background())
+	sessionRequester = func(context.Context) introspectRequester {
+		return func(string, []byte, time.Duration) ([]byte, error) {
+			cancel()
+			return nil, context.Canceled
+		}
+	}
+	req := httptest.NewRequest("GET", "/api/fleet/galahad/session?type=stats", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code == http.StatusGatewayTimeout {
+		t.Errorf("status = 504 for a cancelled request")
+	}
+	if strings.Contains(buf.String(), "introspect timeout") {
+		t.Errorf("cancellation logged as timeout: %s", buf.String())
+	}
+}
+
+func TestIntrospectRealTimeoutStill504(t *testing.T) {
+	f := &fakeIntrospect{answer: func(string) ([]byte, error) { return nil, nats.ErrTimeout }}
+	h := setupIntrospectTest(t, f)
+	if w, _ := doSession(t, h, "type=stats"); w.Code != http.StatusGatewayTimeout {
+		t.Errorf("status = %d, want 504", w.Code)
 	}
 }

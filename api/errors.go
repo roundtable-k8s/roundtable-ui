@@ -26,6 +26,12 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 // the resource ("mission", "trigger", "RoundTable"). The raw error is never
 // returned, except for 422 where the Kubernetes status message names the
 // offending field.
+//
+// Per verb: AlreadyExists is 409 and NotFound 404 for every verb. Forbidden is
+// 403 for writes (create, delete) but 500 for reads, because a forbidden read
+// is the dashboard's own RBAC gap. Invalid/BadRequest is 422 only for writes;
+// a read answers the generic 500 "Failed to read X". Timeouts and an
+// unavailable API are 502 for every verb.
 func k8sErrorStatus(err error, verb, noun string) (int, string) {
 	lower := strings.ToLower(noun)
 	switch {
@@ -36,7 +42,7 @@ func k8sErrorStatus(err error, verb, noun string) (int, string) {
 	case apierrors.IsForbidden(err) && verb != "read":
 		// A forbidden read is the dashboard's own RBAC gap, not the caller's.
 		return http.StatusForbidden, "Not allowed to " + verb + " this " + lower
-	case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
+	case (apierrors.IsInvalid(err) || apierrors.IsBadRequest(err)) && verb != "read":
 		var st apierrors.APIStatus
 		if errors.As(err, &st) && st.Status().Message != "" {
 			return http.StatusUnprocessableEntity, st.Status().Message
