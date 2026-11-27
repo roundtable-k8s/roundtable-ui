@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/nats-io/nats.go"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestHealthReportsConnectivity(t *testing.T) {
@@ -49,8 +52,16 @@ func TestHealthWithoutChecksReportsWorstState(t *testing.T) {
 }
 
 func TestK8sHealthNilClients(t *testing.T) {
-	if k8sHealth(dynClient != nil && k8sClient != nil) != "unavailable" && dynClient == nil {
-		t.Fatal("nil dynClient must be unavailable")
+	dyn := fake.NewSimpleDynamicClient(runtime.NewScheme())
+	kube := k8sfake.NewSimpleClientset()
+	if k8sAvailable(nil, nil) || k8sAvailable(nil, kube) {
+		t.Fatal("nil dynamic client must be unavailable")
+	}
+	if k8sAvailable(dyn, nil) {
+		t.Fatal("nil kubernetes client must be unavailable")
+	}
+	if !k8sAvailable(dyn, kube) {
+		t.Fatal("both clients set must be available")
 	}
 	if k8sHealth(true) != "connected" || k8sHealth(false) != "unavailable" {
 		t.Fatal("mapping")
@@ -61,7 +72,7 @@ func TestNatsHealth(t *testing.T) {
 	if natsHealth(nil) != "disconnected" {
 		t.Fatal("nil conn")
 	}
-	if natsHealth(&nats.Conn{}) != "disconnected" && natsHealth(&nats.Conn{}) != "connected" {
-		t.Fatal("unexpected")
+	if got := natsHealth(&nats.Conn{}); got != "disconnected" {
+		t.Fatalf("zero conn = %q, want disconnected", got)
 	}
 }

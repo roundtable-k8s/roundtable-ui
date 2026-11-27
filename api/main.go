@@ -321,7 +321,14 @@ func routeMethods(r *mux.Router) []string {
 }
 
 // addHeadRoutes answers HEAD on every GET-only route with the GET handler,
-// as net/http does (the server drops the body).
+// as net/http does (the server drops the body). Streaming routes are skipped:
+// HEAD would open and hold the upstream stream with the body discarded, so it
+// answers 405 like any unlisted method.
+var headSkipped = map[string]bool{
+	"/api/chat/tasks/{taskId}/events": true,
+	"/api/fleet/{knight}/logs":        true,
+}
+
 func addHeadRoutes(r *mux.Router) {
 	type headRoute struct {
 		tmpl    string
@@ -333,7 +340,7 @@ func addHeadRoutes(r *mux.Router) {
 		if err != nil || len(ms) != 1 || ms[0] != http.MethodGet {
 			return nil
 		}
-		if tmpl, err := route.GetPathTemplate(); err == nil && route.GetHandler() != nil {
+		if tmpl, err := route.GetPathTemplate(); err == nil && route.GetHandler() != nil && !headSkipped[tmpl] {
 			heads = append(heads, headRoute{tmpl, route.GetHandler()})
 		}
 		return nil
@@ -643,7 +650,7 @@ func main() {
 		cards: cards, tc: tc, sampler: sampler,
 		gateway:       newGatewayClientFromEnv(),
 		dispatchLimit: newDispatchLimiter(),
-		k8sStatus:     func() string { return k8sHealth(dynClient != nil && k8sClient != nil) },
+		k8sStatus:     func() string { return k8sHealth(k8sAvailable(dynClient, k8sClient)) },
 		natsStatus:    func() string { return natsHealth(nc) },
 	}
 	d.middleware = []mux.MiddlewareFunc{tracingMiddleware, securityHeaders, metricsMiddleware, authMiddleware, rateLimiter.middleware}

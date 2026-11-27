@@ -5,7 +5,14 @@ import (
 	"net/http"
 
 	"github.com/nats-io/nats.go"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
+
+// k8sAvailable reports whether both Kubernetes clients are set.
+func k8sAvailable(dyn dynamic.Interface, k kubernetes.Interface) bool {
+	return dyn != nil && k != nil
+}
 
 // k8sHealth maps client availability to the health value.
 func k8sHealth(available bool) string {

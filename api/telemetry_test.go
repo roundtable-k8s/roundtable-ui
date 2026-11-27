@@ -238,6 +238,8 @@ func TestGatewayRouteTemplate(t *testing.T) {
 		"/v1/runs/ns/run-1/cancel":  "/v1/runs/{namespace}/{name}/cancel",
 		"/v1/schedules/ns/s/runs/digest-1795600000": "/v1/schedules/{namespace}/{name}/runs/{id}",
 		"/v1/schedules/ns/s/manifest":               "/v1/schedules/{namespace}/{name}/manifest",
+		"/v1/knights/k/snapshots":                   "/v1/knights/{id}/snapshots",
+		"/v1/knights/k/snapshot":                    "/v1/knights/{id}/snapshot",
 		"/other/thing":                              "/",
 	} {
 		if got := gatewayRouteTemplate(in); got != want {
