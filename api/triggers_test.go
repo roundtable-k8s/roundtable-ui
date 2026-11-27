@@ -160,6 +160,17 @@ func TestTriggerDetailHandler_GetErrors(t *testing.T) {
 		t.Errorf("forbidden get: body says not found: %s", w.Body.String())
 	}
 
+	// A timeout is a 502 like the other detail handlers.
+	dynClient.(*fake.FakeDynamicClient).PrependReactor("get", "triggers", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewTimeoutError("etcd secret", 1)
+	})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/triggers/roundtable/nightly", nil))
+	if w.Code != http.StatusBadGateway || strings.Contains(w.Body.String(), "secret") {
+		t.Errorf("timeout get: status %d, want 502: %s", w.Code, w.Body.String())
+	}
+	dynClient.(*fake.FakeDynamicClient).ReactionChain = dynClient.(*fake.FakeDynamicClient).ReactionChain[1:]
+
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/triggers/roundtable/missing", nil))
 	if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "Trigger not found") {

@@ -82,6 +82,9 @@ func TestMissionCreateDeleteK8sErrors(t *testing.T) {
 		{"exists", "create", apierrors.NewAlreadyExists(gr, "m1"), "POST", "/api/missions", 409, "A mission with this name already exists"},
 		{"forbidden", "create", apierrors.NewForbidden(gr, "m1", errors.New("secret detail")), "POST", "/api/missions", 403, "Not allowed to create this mission"},
 		{"invalid", "create", apierrors.NewInvalid(schema.GroupKind{Group: "ai.roundtable.io", Kind: "Mission"}, "m1", field.ErrorList{field.Invalid(field.NewPath("spec", "ttlSeconds"), 1, "too small")}), "POST", "/api/missions", 422, "spec.ttlSeconds"},
+		{"timeout", "create", apierrors.NewTimeoutError("etcd secret", 1), "POST", "/api/missions", 502, "Kubernetes API unavailable, try again"},
+		{"server timeout", "create", apierrors.NewServerTimeout(gr, "create", 1), "POST", "/api/missions", 502, "Kubernetes API unavailable, try again"},
+		{"unavailable", "delete", apierrors.NewServiceUnavailable("down secret"), "DELETE", "/api/missions/m1", 502, "Kubernetes API unavailable, try again"},
 		{"generic", "create", errors.New("boom internal"), "POST", "/api/missions", 500, "Failed to create mission"},
 		{"not found", "delete", apierrors.NewNotFound(gr, "m1"), "DELETE", "/api/missions/m1", 404, "Mission not found"},
 		{"delete generic", "delete", errors.New("boom internal"), "DELETE", "/api/missions/m1", 500, "Failed to delete mission"},
@@ -90,7 +93,9 @@ func TestMissionCreateDeleteK8sErrors(t *testing.T) {
 		fdc.ReactionChain = nil
 		react(c.verb, c.err)
 		w := doReq(router, c.method, c.target, body)
-		if w.Code != c.code || !strings.Contains(w.Body.String(), c.msg) {
+		var got struct{ Error string }
+		_ = json.Unmarshal(w.Body.Bytes(), &got)
+		if w.Code != c.code || (c.code != 422 && got.Error != c.msg) || (c.code == 422 && !strings.Contains(got.Error, c.msg)) {
 			t.Errorf("%s: got %d %s", c.name, w.Code, w.Body.String())
 		}
 		if strings.Contains(w.Body.String(), "boom") || strings.Contains(w.Body.String(), "secret detail") {

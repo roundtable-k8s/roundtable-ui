@@ -276,7 +276,7 @@ func knightQueueHandler(namespace string) http.HandlerFunc {
 		}
 		cr, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			writeGetError(w, r, err, "Knight", "knight", name)
+			writeK8sError(w, r, err, "read", "Knight")
 			return
 		}
 
@@ -385,7 +385,11 @@ func queuesHandler(namespace string) http.HandlerFunc {
 			return out, nil
 		})
 		if err != nil {
-			slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
+			if errors.Is(err, context.Canceled) {
+				slog.DebugContext(r.Context(), "Knight list cancelled by client")
+			} else {
+				slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
+			}
 			jsonError(w, "Failed to list knights", http.StatusInternalServerError)
 			return
 		}
