@@ -235,7 +235,7 @@ export function ChatPage() {
                         <Activity className="w-3 h-3" /> Activity
                       </button>
                     )}
-                    <TraceLink traceId={t.traceId} />
+                    <TraceLink traceId={t.traceId} size="xs" />
                   </div>
                 </div>
               </li>

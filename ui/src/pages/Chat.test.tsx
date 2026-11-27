@@ -91,6 +91,7 @@ describe('ChatPage', () => {
     expect(screen.getByText('1.2k in / 300 out')).toBeInTheDocument()
     expect(screen.getByText('3 turns')).toBeInTheDocument()
     expect(screen.getByText('2 tool calls')).toBeInTheDocument()
+    expect(screen.getByText(/tool calls/i)).toBeInTheDocument()
     expect(screen.getByText('8.2s')).toBeInTheDocument()
   })
 
@@ -102,7 +103,7 @@ describe('ChatPage', () => {
     expect(await screen.findByText('sub', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByText('$0.30')).toBeInTheDocument()
     expect(screen.getByText('notional')).toBeInTheDocument()
-    expect(screen.queryByText('tool calls')).toBeNull()
+    expect(screen.queryByText(/tool calls/i)).toBeNull()
   })
 
   it('shows no usage labels when the reply carries none', async () => {

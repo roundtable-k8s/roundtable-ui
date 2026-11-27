@@ -19,6 +19,17 @@ describe('TraceLink', () => {
     expect(a).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
+  it('uses the small text size by default and xs when asked', async () => {
+    vi.mocked(apiGet).mockResolvedValue({ traceUrlTemplate: 'https://t.example/trace/{traceId}' })
+    const { unmount } = render(<TraceLink traceId={id} />)
+    expect(await screen.findByRole('link', { name: /View trace/ })).toHaveClass('text-sm')
+    unmount()
+    render(<TraceLink traceId={id} size="xs" />)
+    const a = await screen.findByRole('link', { name: /View trace/ })
+    expect(a).toHaveClass('text-xs')
+    expect(a).not.toHaveClass('text-sm')
+  })
+
   it('is hidden without a template or a trace id', async () => {
     vi.mocked(apiGet).mockResolvedValue({ fleetPrefix: 'x' })
     const { container } = render(<TraceLink traceId={id} />)
