@@ -24,9 +24,12 @@ permissions:
   # write: only to add the protected-paths label.
   pull-requests: write
 
+# Never cancel a running check: a cancelled required check run on the head
+# commit keeps the pull request BLOCKED even when a later run succeeds (#545).
+# A newer event queues behind the running one instead; the check takes seconds.
 concurrency:
   group: merge-guard-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   merge-guard:
