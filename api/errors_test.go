@@ -190,3 +190,17 @@ func TestKeyEqual(t *testing.T) {
 		t.Error("keyEqual wrong")
 	}
 }
+
+func TestK8sErrorStatusInvalidOnlyForWrites(t *testing.T) {
+	inv := apierrors.NewInvalid(schema.GroupKind{Group: "ai.roundtable.io", Kind: "Mission"}, "m1", field.ErrorList{field.Invalid(field.NewPath("spec", "ttlSeconds"), 1, "too small")})
+	for _, err := range []error{inv, apierrors.NewBadRequest("bad")} {
+		if code, msg := k8sErrorStatus(err, "read", "mission"); code != 500 || msg != "Failed to read mission" {
+			t.Errorf("read: got %d %q, want 500 generic", code, msg)
+		}
+		for _, verb := range []string{"create", "delete"} {
+			if code, _ := k8sErrorStatus(err, verb, "mission"); code != 422 {
+				t.Errorf("%s: got %d, want 422", verb, code)
+			}
+		}
+	}
+}

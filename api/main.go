@@ -1310,6 +1310,9 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 		subject := knightIntrospectSubject(prefix, name)
 		data, err := req(subject, payload, timeout)
 		if err != nil {
+			if introspectClientGone(ctx, err, w) {
+				return
+			}
 			slog.WarnContext(ctx, "Knight introspect timeout", "knight", name, "subject", subject, "error", err)
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
@@ -1355,6 +1358,9 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 				jsonError(w, "Pod does not support per-pod introspection", http.StatusBadGateway)
 				return
 			}
+			if introspectClientGone(ctx, err, w) {
+				return
+			}
 			slog.WarnContext(ctx, "Knight introspect timeout", "knight", name, "subject", subject, "error", err)
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
@@ -1393,6 +1399,9 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 			agg, ok = mergeHistory(replies)
 		}
 		if !ok {
+			if introspectClientGone(ctx, nil, w) {
+				return
+			}
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
@@ -1400,6 +1409,9 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 	default: // session, recent, tree: the pod that has the data answers
 		pick, ok := pickFirstFound(replies)
 		if !ok {
+			if introspectClientGone(ctx, nil, w) {
+				return
+			}
 			jsonError(w, "Knight introspection timeout", http.StatusGatewayTimeout)
 			return
 		}
@@ -1407,6 +1419,19 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 	}
 	w.Header().Set(introspectScopeHeader, "aggregate")
 	writeRedactedJSON(w, out)
+}
+
+// introspectClientGone reports whether an introspect failure is only the
+// client having gone away (cancelled request context). Such a failure is not a
+// Knight timeout: nothing is logged at warn and no 504 is sent; the status is
+// 499 (client closed request) for the benefit of access logs.
+func introspectClientGone(ctx context.Context, err error, w http.ResponseWriter) bool {
+	if ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+		return false
+	}
+	slog.DebugContext(ctx, "Knight introspect cancelled by client")
+	w.WriteHeader(499)
+	return true
 }
 
 // taskHistoryHandler returns recent results from every table's results
