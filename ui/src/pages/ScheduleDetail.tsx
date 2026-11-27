@@ -9,7 +9,7 @@ import { SafeMarkdown } from '../components/SafeMarkdown'
 import { TraceLink } from '../components/TraceLink'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
 import {
-  RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
+  RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, scheduleNextUrl, type ScheduleNextRuns, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
   runResultText, runResultOutcome, prLabel, describeTurns, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -205,6 +205,26 @@ export function ScheduleActions({ s, onChanged, onDeleted }: {
         </Modal>
       )}
     </div>
+  )
+}
+
+export function NextRuns({ namespace, name, suspended }: { namespace: string; name: string; suspended: boolean }) {
+  const { data, error } = usePolledFetch<ScheduleNextRuns | null>(scheduleNextUrl(namespace, name, 5), POLL_MS, null)
+  const times = data?.times ?? []
+  return (
+    <section aria-label="next runs" className="mb-4 rounded-xl border border-roundtable-steel bg-roundtable-slate p-4">
+      <h3 className="mb-2 text-sm font-semibold text-white">Next runs</h3>
+      {(suspended || data?.suspended) && <p className="mb-2 text-xs text-amber-300">suspended: these ticks will not fire</p>}
+      {error && <p className="text-xs text-gray-500">Next runs unavailable: {sanitizeText(error)}</p>}
+      {!error && data && times.length === 0 && <p className="text-xs text-gray-500">No upcoming runs.</p>}
+      {times.length > 0 && (
+        <ol className="space-y-0.5 text-sm text-gray-200">
+          {times.map((t) => (
+            <li key={t.time} title={t.time}>{sanitizeText(t.local)} <span className="text-gray-500">· {sanitizeText(t.time)} UTC</span></li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }
 
@@ -412,6 +432,7 @@ export function ScheduleDetailPage() {
       {data && (
         <>
           <ScheduleSummary s={data} />
+          <NextRuns namespace={data.namespace} name={data.name} suspended={data.suspended} />
           <ScheduleActions s={data} onChanged={refresh} onDeleted={() => navigate('/schedules')} />
           <div role="tablist" className="mb-4 flex border-b border-roundtable-steel">
             <button role="tab" aria-selected={tab === 'runs'} className={tabCls('runs')} onClick={() => setTab('runs')}>Run history</button>

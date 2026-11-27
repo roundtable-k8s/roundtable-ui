@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ScheduleFormPage, NextRunsPreview } from './ScheduleForm'
 import { apiGet, apiPost, apiPut, ApiError } from '../lib/api'
@@ -208,5 +208,53 @@ describe('NextRunsPreview', () => {
     expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Thu, 26 Nov 2026, 07:00', 'Fri, 27 Nov 2026, 07:00', 'Sat, 28 Nov 2026, 07:00',
     ])
+  })
+})
+
+describe('NextRunsPreview: gateway preview', () => {
+  const NOW = new Date('2026-11-25T18:00:00Z')
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+  const flush = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
+
+  it('debounces, then shows local and UTC per row', async () => {
+    mockGet.mockResolvedValue({ times: [{ time: '2026-11-26T06:00:00Z', local: 'Thu, 26 Nov 2026, 07:00' }] })
+    const { rerender } = render(<NextRunsPreview cron="0 7 * * *" timeZone="Europe/Berlin" now={NOW} />)
+    rerender(<NextRunsPreview cron="0 8 * * *" timeZone="Europe/Berlin" now={NOW} />)
+    await flush(300)
+    expect(mockGet).not.toHaveBeenCalled()
+    await flush(200)
+    expect(mockGet).toHaveBeenCalledTimes(1)
+    expect(mockGet).toHaveBeenCalledWith('/api/schedules/preview?cron=0+8+*+*+*&timeZone=Europe%2FBerlin&count=5')
+    expect(screen.getByRole('listitem')).toHaveTextContent('Thu, 26 Nov 2026, 07:00 · 2026-11-26T06:00:00Z UTC')
+  })
+
+  it('shows the gateway 422 message', async () => {
+    mockGet.mockRejectedValue(new ApiError(422, 'minute: 61 is above the maximum 59'))
+    render(<NextRunsPreview cron="61 * * * *" timeZone="UTC" now={NOW} />)
+    await flush(500)
+    expect(screen.getByRole('alert')).toHaveTextContent('minute: 61 is above the maximum 59')
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  it('falls back to the local parser on a 5xx', async () => {
+    mockGet.mockRejectedValue(new ApiError(502, 'bad gateway'))
+    render(<NextRunsPreview cron="0 7 * * *" timeZone="UTC" now={NOW} />)
+    await flush(500)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('ignores a stale response', async () => {
+    let resolveFirst: (v: unknown) => void = () => {}
+    mockGet.mockImplementationOnce(() => new Promise((r) => { resolveFirst = r }))
+    mockGet.mockResolvedValueOnce({ times: [{ time: '2026-11-26T08:00:00Z', local: 'second' }] })
+    const { rerender } = render(<NextRunsPreview cron="0 7 * * *" timeZone="UTC" now={NOW} />)
+    await flush(400)
+    rerender(<NextRunsPreview cron="0 8 * * *" timeZone="UTC" now={NOW} />)
+    await flush(400)
+    await act(async () => { resolveFirst({ times: [{ time: '2026-11-26T07:00:00Z', local: 'first' }] }) })
+    expect(screen.getByRole('listitem')).toHaveTextContent('second')
+    expect(screen.queryByText(/first/)).toBeNull()
   })
 })

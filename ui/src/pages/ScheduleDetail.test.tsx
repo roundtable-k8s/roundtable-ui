@@ -58,10 +58,18 @@ const missionResult: ScheduleRunResult = {
 
 const YAML = 'apiVersion: ai.roundtable.io/v1alpha1\nkind: Trigger\nmetadata:\n  name: morning-digest\n'
 
+function nextRuns(suspended = false) {
+  return {
+    suspended,
+    times: [1, 2, 3, 4, 5].map((d) => ({ time: `2099-01-0${d}T06:00:00Z`, local: `Mon, ${d} Jan 2099, 07:00` })),
+  }
+}
+
 function mockApi(s: Schedule, extra: ScheduleRun[] = []) {
   mockApiGet.mockImplementation(async (url: string) => {
     if (url === '/api/schedules/roundtable/morning-digest') return s
     if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs: [...runs, ...extra] }
+    if (url.startsWith('/api/schedules/roundtable/morning-digest/next')) return nextRuns(s.suspended)
     if (url === '/api/schedules/roundtable/morning-digest/runs/digest-2') return result
     if (url.endsWith('/runs/digest-3')) return knightResult
     if (url.endsWith('/runs/digest-4')) return missionResult
@@ -292,5 +300,26 @@ describe('ScheduleDetailPage policy block', () => {
     renderPage()
     await screen.findByRole('region', { name: 'summary' })
     expect(screen.queryByRole('region', { name: 'policy' })).toBeNull()
+  })
+})
+
+describe('ScheduleDetailPage: next runs', () => {
+  beforeEach(() => { resetConfigCache() })
+
+  it('lists five ticks with local and UTC time', async () => {
+    mockApi(sched())
+    renderPage()
+    const section = await screen.findByRole('region', { name: 'next runs' })
+    await waitFor(() => expect(within(section).getAllByRole('listitem')).toHaveLength(5))
+    expect(within(section).getAllByRole('listitem')[0]).toHaveTextContent('Mon, 1 Jan 2099, 07:00 · 2099-01-01T06:00:00Z UTC')
+    expect(within(section).queryByText(/will not fire/)).toBeNull()
+    expect(mockApiGet.mock.calls.map((c) => c[0])).toContain('/api/schedules/roundtable/morning-digest/next?count=5')
+  })
+
+  it('marks a suspended schedule', async () => {
+    mockApi(sched({ suspended: true }))
+    renderPage()
+    const section = await screen.findByRole('region', { name: 'next runs' })
+    expect(within(section).getByText('suspended: these ticks will not fire')).toBeInTheDocument()
   })
 })
