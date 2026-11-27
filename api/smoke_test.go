@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -115,7 +116,7 @@ func TestSmokeUIAndRouter(t *testing.T) {
 		if code != want {
 			t.Fatalf("GET %s: status %d, want %d (body %s)", path, code, want, body)
 		}
-		if ct := hdr.Get("Content-Type"); ct != "application/json" {
+		if ct := hdr.Get("Content-Type"); mediaType(ct) != "application/json" {
 			t.Fatalf("GET %s: Content-Type %q, want application/json", path, ct)
 		}
 		if out != nil {
@@ -158,29 +159,31 @@ func TestSmokeUIAndRouter(t *testing.T) {
 		}
 	}
 
-	// JSON the pages depend on (shapes as the hooks in ui/src/hooks read them).
-	var knights []struct {
-		Name string `json:"name"`
+	// JSON the pages depend on. Items are decoded generically and the keys the
+	// UI types (Knight, Mission, RoundTable, Chain) require are asserted, so a
+	// renamed API field fails here. Keys typed `| null` must be present.
+	listOf := func(path string, wantLen int, required []string) []map[string]any {
+		t.Helper()
+		var items []map[string]any
+		getJSON(path, http.StatusOK, &items)
+		if len(items) != wantLen {
+			t.Fatalf("%s: %d items, want %d", path, len(items), wantLen)
+		}
+		for _, item := range items {
+			requireKeys(t, path, item, required)
+		}
+		return items
 	}
-	getJSON("/api/fleet", http.StatusOK, &knights)
-	if len(knights) != 2 {
-		t.Errorf("/api/fleet: %d knights, want 2", len(knights))
+	listOf("/api/fleet", 2, []string{"name", "domain", "status", "ready", "restarts", "age", "image", "skills", "nixTools", "labels"})
+	missions := listOf("/api/missions", 1, []string{"name", "namespace", "phase", "objective", "startedAt", "expiresAt",
+		"knights", "chains", "costBudgetUSD", "totalCost", "ttlSeconds", "timeoutSeconds", "roundTableRef"})
+	if missions[0]["name"] != "smoke-mission" {
+		t.Errorf("/api/missions name = %v, want smoke-mission", missions[0]["name"])
 	}
-
-	var missions []struct {
-		Name string `json:"name"`
-	}
-	getJSON("/api/missions", http.StatusOK, &missions)
-	if len(missions) != 1 || missions[0].Name != "smoke-mission" {
-		t.Errorf("/api/missions = %+v, want one smoke-mission", missions)
-	}
-
-	var roundTables []struct {
-		Name string `json:"name"`
-	}
-	getJSON("/api/roundtables", http.StatusOK, &roundTables)
-	if len(roundTables) != 1 {
-		t.Errorf("/api/roundtables: %d entries, want 1", len(roundTables))
+	listOf("/api/roundtables", 1, []string{"name", "namespace", "phase", "knightsReady", "knightsTotal", "natsPrefix", "costBudgetUSD", "totalCost"})
+	chains := listOf("/api/chains", 1, []string{"name", "namespace", "phase", "currentStep", "startTime", "completionTime", "steps"})
+	if chains[0]["name"] != "smoke-chain" {
+		t.Errorf("/api/chains name = %v, want smoke-chain", chains[0]["name"])
 	}
 
 	var tables struct {
@@ -191,14 +194,6 @@ func TestSmokeUIAndRouter(t *testing.T) {
 	getJSON("/api/tables", http.StatusOK, &tables)
 	if len(tables.Tables) != 1 || tables.Tables[0].Name != "table-a" {
 		t.Errorf("/api/tables = %+v, want one table-a", tables.Tables)
-	}
-
-	var chains []struct {
-		Name string `json:"name"`
-	}
-	getJSON("/api/chains", http.StatusOK, &chains)
-	if len(chains) != 1 || chains[0].Name != "smoke-chain" {
-		t.Errorf("/api/chains = %+v, want one smoke-chain", chains)
 	}
 
 	var triggers []json.RawMessage
@@ -223,5 +218,25 @@ func TestSmokeUIAndRouter(t *testing.T) {
 	getJSON("/api/health", http.StatusOK, &health)
 	if health["status"] != "ok" {
 		t.Errorf("/api/health = %v, want status ok", health)
+	}
+}
+
+// mediaType strips parameters such as "; charset=utf-8" from a Content-Type.
+func mediaType(ct string) string {
+	mt, _, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return ct
+	}
+	return mt
+}
+
+// requireKeys fails the test for each key missing from item. A key whose value
+// is null still counts as present.
+func requireKeys(t *testing.T, path string, item map[string]any, keys []string) {
+	t.Helper()
+	for _, k := range keys {
+		if _, ok := item[k]; !ok {
+			t.Errorf("%s: item %v missing key %q the UI expects", path, item["name"], k)
+		}
 	}
 }
