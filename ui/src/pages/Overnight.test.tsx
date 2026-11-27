@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
-const stat = (label: string) => screen.getByText(label).closest('div')!.parentElement!
+const stat = (label: string) => screen.getAllByText(label)[0].closest('div')!.parentElement!
 
 describe('OvernightPage', () => {
   it('summarises the default 12 hour window', async () => {
