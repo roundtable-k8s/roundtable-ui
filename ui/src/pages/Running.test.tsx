@@ -60,6 +60,13 @@ describe('RunningPage', () => {
     expect(running.getByRole('link')).toHaveAttribute('href', '/chains?chain=pr-pipeline')
   })
 
+  it('names the table, scopes headers and hints at Enter on rows', () => {
+    renderPage()
+    const table = screen.getByRole('table', { name: /running tasks/i })
+    expect(table).toHaveAccessibleDescription('Press Enter on a row to open its details')
+    for (const th of screen.getAllByRole('columnheader')) expect(th).toHaveAttribute('scope', 'col')
+  })
+
   it('highlights stale and lost rows', () => {
     renderPage()
     const rows = screen.getAllByRole('row').slice(1)

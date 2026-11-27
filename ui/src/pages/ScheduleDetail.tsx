@@ -207,14 +207,14 @@ export function RunHistory({ namespace, name, selected, onSelect }: {
 
   return (
     <section aria-label="run history" className="overflow-x-auto rounded-xl border border-roundtable-steel">
-      <table className="w-full text-sm">
+      <table aria-label="Run history" className="w-full text-sm">
         <thead className="bg-black/20 text-left text-gray-400">
           <tr>
-            <th className="px-3 py-2">Time</th>
-            <th className="px-3 py-2">Outcome</th>
-            <th className="px-3 py-2">Duration</th>
-            <th className="px-3 py-2">Cost</th>
-            <th className="px-3 py-2">Result</th>
+            <th scope="col" className="px-3 py-2">Time</th>
+            <th scope="col" className="px-3 py-2">Outcome</th>
+            <th scope="col" className="px-3 py-2">Duration</th>
+            <th scope="col" className="px-3 py-2">Cost</th>
+            <th scope="col" className="px-3 py-2">Result</th>
           </tr>
         </thead>
         <tbody>

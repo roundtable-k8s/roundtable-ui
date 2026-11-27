@@ -45,17 +45,17 @@ export function QueuesTable({ queues, history, showTable = false }: {
 
   return (
     <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-      <table className="w-full text-sm">
+      <table aria-label="Queues" className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
-            <th className="px-4 py-3 font-medium">Knight</th>
-            <th className="px-4 py-3 font-medium text-right">Pending</th>
-            <th className="px-4 py-3 font-medium text-right">Ack pending</th>
-            <th className="px-4 py-3 font-medium text-right">Redelivered</th>
-            <th className="px-4 py-3 font-medium text-right">Oldest wait</th>
-            <th className="px-4 py-3 font-medium text-right">Free slots</th>
-            <th className="px-4 py-3 font-medium text-right">Replicas</th>
-            <th className="px-4 py-3 font-medium">Last hour</th>
+            <th scope="col" className="px-4 py-3 font-medium">Knight</th>
+            <th scope="col" className="px-4 py-3 font-medium text-right">Pending</th>
+            <th scope="col" className="px-4 py-3 font-medium text-right">Ack pending</th>
+            <th scope="col" className="px-4 py-3 font-medium text-right">Redelivered</th>
+            <th scope="col" className="px-4 py-3 font-medium text-right">Oldest wait</th>
+            <th scope="col" className="px-4 py-3 font-medium text-right">Free slots</th>
+            <th scope="col" className="px-4 py-3 font-medium text-right">Replicas</th>
+            <th scope="col" className="px-4 py-3 font-medium">Last hour</th>
           </tr>
         </thead>
         <tbody>

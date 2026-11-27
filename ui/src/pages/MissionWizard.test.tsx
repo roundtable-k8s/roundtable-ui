@@ -69,3 +69,30 @@ describe('MissionWizard validation', () => {
     expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled()
   })
 })
+
+describe('MissionWizard step indicator', () => {
+  it('exposes the steps as a list and moves aria-current on Next', async () => {
+    const user = userEvent.setup()
+    render(<MissionWizard onClose={() => {}} onCreated={() => {}} />)
+    const list = screen.getByRole('list', { name: 'Mission steps' })
+    expect(list.querySelectorAll('li')).toHaveLength(4)
+    expect(screen.getByRole('button', { name: /basics/i })).toHaveAttribute('aria-current', 'step')
+    await user.type(screen.getByLabelText('Mission Name'), 'm1')
+    await user.type(screen.getByLabelText('Objective'), 'do it')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(screen.getByRole('button', { name: /knights/i })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('button', { name: /basics/i })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('button', { name: /basics.*\(complete\)/i })).toBeInTheDocument()
+  })
+
+  it('explains a step blocked by an invalid earlier step', async () => {
+    const user = userEvent.setup()
+    render(<MissionWizard onClose={() => {}} onCreated={() => {}} />)
+    await user.type(screen.getByLabelText('Objective'), 'do it')
+    const review = screen.getByRole('button', { name: /review/i })
+    expect(review).toBeDisabled()
+    expect(review).toHaveAttribute('title', 'Fix the earlier step first')
+    expect(review).toHaveAccessibleDescription('Fix the earlier step first')
+    expect(screen.getByRole('button', { name: /basics.*\(has errors\)/i })).toBeInTheDocument()
+  })
+})

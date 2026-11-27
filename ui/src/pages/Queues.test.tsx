@@ -74,6 +74,13 @@ describe('QueuesPage', () => {
     expect(events[0].textContent).toContain('1 → 2 replicas (hpa): scaled on consumer lag')
   })
 
+  it('names the table and scopes its headers', async () => {
+    mockApi([queue()], [history()])
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
+    const table = await screen.findByRole('table', { name: 'Queues' })
+    for (const th of within(table).getAllByRole('columnheader')) expect(th).toHaveAttribute('scope', 'col')
+  })
+
   it('shows ack-pending-only work without warnings', async () => {
     mockApi([queue({ ackPending: 2, freeSlots: 0, oldestWaitSeconds: 30 })], [history()])
     render(<MemoryRouter><QueuesPage /></MemoryRouter>)

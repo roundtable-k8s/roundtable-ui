@@ -87,6 +87,13 @@ describe('ScheduleDetailPage', () => {
     expect(rows[2]).toHaveTextContent('—')
   })
 
+  it('names the run history table and scopes its headers', async () => {
+    mockApi(sched())
+    renderPage()
+    const table = await screen.findByRole('table', { name: /run history/i })
+    for (const th of within(table).getAllByRole('columnheader')) expect(th).toHaveAttribute('scope', 'col')
+  })
+
   it('opens a run result rendered as markdown and toggles to raw text', async () => {
     mockApi(sched())
     renderPage()

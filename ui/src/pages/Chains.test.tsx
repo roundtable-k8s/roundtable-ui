@@ -84,6 +84,13 @@ describe('ChainsPage fan-out', () => {
     expect(within(step).queryAllByRole('row')).toHaveLength(0)
   })
 
+  it('names the step item table and scopes its headers', async () => {
+    renderPage('/chains?chain=doc-sweep')
+    const step = await screen.findByRole('region', { name: 'step review-each' })
+    const table = within(step).getByRole('table', { name: 'Chain steps' })
+    for (const th of within(table).getAllByRole('columnheader')) expect(th).toHaveAttribute('scope', 'col')
+  })
+
   it('shows why a step was skipped', async () => {
     renderPage('/chains?chain=doc-sweep')
     const step = await screen.findByRole('region', { name: 'step publish' })
