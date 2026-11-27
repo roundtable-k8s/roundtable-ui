@@ -77,9 +77,27 @@ func chatSendHandler(g *gatewayClient) http.HandlerFunc {
 }
 
 // chatKnightsHandler proxies GET /v1/knights: who the gateway can reach.
+// Optional namespace and load (exactly "true" or "false") are forwarded;
+// load=true makes the gateway add each knight's queue counts.
 func chatKnightsHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		g.relay(w, r, http.MethodGet, "/v1/knights", nil, nil)
+		q := r.URL.Query()
+		var query url.Values
+		if ns := q.Get("namespace"); ns != "" {
+			query = url.Values{"namespace": {ns}}
+		}
+		if q.Has("load") {
+			load := q.Get("load")
+			if load != "true" && load != "false" {
+				jsonError(w, "load must be true or false", http.StatusBadRequest)
+				return
+			}
+			if query == nil {
+				query = url.Values{}
+			}
+			query.Set("load", load)
+		}
+		g.relay(w, r, http.MethodGet, "/v1/knights", query, nil)
 	}
 }
 

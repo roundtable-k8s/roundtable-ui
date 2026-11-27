@@ -41,6 +41,15 @@ export const isFinalStatus = (status: string | undefined) =>
 export interface ChatKnight {
   name: string
   namespace?: string
+  domain?: string
+  model?: string
+  runtime?: string
+  roundTable?: string
+  phase?: string
+  ready?: boolean
+  suspended?: boolean
+  /** Only with `GET /api/chat/knights?load=true`; absent when the gateway could not read NATS. */
+  queue?: { pending: number; inFlight: number }
 }
 
 /** Select-option key: `namespace/name` when the knight has a namespace. */
