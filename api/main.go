@@ -433,6 +433,10 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.HandleFunc("/dead-letters/{taskId}", deadLetterDetailHandler(d.gateway)).Methods("GET")
 	api.HandleFunc("/dead-letters/{taskId}/retry", deadLetterRetryHandler(d.gateway)).Methods("POST")
 
+	// Knight workspace snapshots: request (202, never waits) and list
+	api.Handle("/knights/{name}/snapshot", d.dispatchLimit.wrap(knightSnapshotHandler(d.gateway))).Methods("POST")
+	api.HandleFunc("/knights/{name}/snapshots", knightSnapshotsHandler(d.gateway)).Methods("GET")
+
 	// Schedules: every gateway schedules route; run shares the dispatch rate limit (#300)
 	scheduleRoutes(api, d.gateway, d.dispatchLimit.wrap)
 

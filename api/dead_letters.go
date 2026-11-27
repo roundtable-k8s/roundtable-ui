@@ -104,7 +104,8 @@ func gatewayRouteTemplate(p string) string {
 		if i < n {
 			out = append(out, names[i])
 		} else if seg == "manifest" || seg == "retry" || seg == "events" || seg == "cancel" ||
-			seg == "invoke" || seg == "runs" || seg == "suspend" || seg == "resume" || seg == "run" {
+			seg == "invoke" || seg == "runs" || seg == "suspend" || seg == "resume" || seg == "run" ||
+			seg == "snapshot" || seg == "snapshots" {
 			out = append(out, seg)
 		} else {
 			out = append(out, "{id}")
