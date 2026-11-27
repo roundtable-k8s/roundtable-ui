@@ -361,9 +361,16 @@ describe('DashboardPage truncated chain list', () => {
   })
 
   it('shows a spinner while the first load is pending', () => {
-    vi.mocked(useFleet).mockReturnValueOnce({ knights: [], loading: true, error: null, refresh: vi.fn() } as never)
+    vi.mocked(useFleet).mockReturnValue({ knights: [], loading: true, error: null, refresh: vi.fn() } as never)
     renderDashboard()
-    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.getByText('Loading…').closest('[role="status"]')).not.toBeNull()
+    expect(screen.queryByText('0/0')).not.toBeInTheDocument()
+    expect(screen.getByText('…')).toBeInTheDocument()
+  })
+
+  it('shows no spinner once the fleet has loaded', async () => {
+    renderDashboard()
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
 })
 
