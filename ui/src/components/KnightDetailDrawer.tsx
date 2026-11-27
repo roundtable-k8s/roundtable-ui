@@ -524,7 +524,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
                   </span>
                 )}
                 <span className="ml-auto">
-                  <SnapshotButton name={knight.name} namespace={knight.namespace} knight={knightDetail} onDetail={setKnightDetail} />
+                  <SnapshotButton name={knight.name} namespace={knight.namespace} knight={knightDetail} onDetail={(d) => { detailAbort.current?.abort(); setDetailLoading(false); setKnightDetail(d) }} />
                 </span>
               </h3>
               {(knightDetail.workspaceSnapshots?.length ?? 0) === 0 ? (

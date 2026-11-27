@@ -38,8 +38,8 @@ function DetailPoller({ url, onDetail }: { url: string; onDetail: (k: Knight) =>
 
 /**
  * "Take snapshot": asks the gateway for a workspace snapshot and, after the
- * 202, follows the knight detail (3 s, up to 60 s) until a new snapshot name
- * appears or the WorkspaceSnapshots condition changes.
+ * 202, follows the knight detail (3 s, up to 60 s) until the new snapshot is ready,
+ * the WorkspaceSnapshots condition reports a failure, or the time is up.
  */
 export function SnapshotButton({ name, namespace, knight, onDetail }: {
   name: string
@@ -53,18 +53,23 @@ export function SnapshotButton({ name, namespace, knight, onDetail }: {
   const [error, setError] = useState('')
   const [expected, setExpected] = useState('')
   const [watching, setWatching] = useState(false)
+  const inFlight = useRef(false)
   const baseline = useRef<{ names: Set<string>; cond: string }>({ names: new Set(), cond: '' })
 
   const names = (knight.workspaceSnapshots ?? []).map((s) => s.name)
   const cond = conditionKey(knight.workspaceSnapshotsCondition)
 
-  // Stop once something changed relative to the click
+  // The snapshot we are waiting for: the expected name, else any new one
+  const target = (knight.workspaceSnapshots ?? []).filter((s) =>
+    expected ? s.name === expected : !baseline.current.names.has(s.name))
+  const listed = target.length > 0
+  const ready = target.some((s) => s.readyToUse)
+  const failed = cond !== baseline.current.cond && knight.workspaceSnapshotsCondition?.status === 'False'
+
+  // Keep following until it is Ready, the condition reports a failure, or 60 s
   useEffect(() => {
-    if (!watching) return
-    const appeared = names.some((n) => !baseline.current.names.has(n))
-    if (appeared || cond !== baseline.current.cond) setWatching(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watching, names.join('\n'), cond])
+    if (watching && (ready || failed)) setWatching(false)
+  }, [watching, ready, failed])
 
   // ...or after 60 s
   useEffect(() => {
@@ -79,7 +84,8 @@ export function SnapshotButton({ name, namespace, knight, onDetail }: {
   }, [name, namespace])
 
   const take = async () => {
-    if (pending) return
+    if (inFlight.current) return
+    inFlight.current = true
     setPending(true)
     setMessage(''); setError(''); setExpected('')
     try {
@@ -92,6 +98,7 @@ export function SnapshotButton({ name, namespace, knight, onDetail }: {
     } catch (e) {
       setError(snapshotErrorMessage(e))
     } finally {
+      inFlight.current = false
       setPending(false)
     }
   }
@@ -107,7 +114,7 @@ export function SnapshotButton({ name, namespace, knight, onDetail }: {
         <Camera className="w-3.5 h-3.5" />
         {pending ? 'Requesting…' : 'Take snapshot'}
       </button>
-      {expected && watching && (
+      {expected && watching && !listed && (
         <span className="text-xs text-gray-400">
           Expected: <span className="font-mono">{sanitizeText(expected)}</span> (Pending)
         </span>
