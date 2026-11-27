@@ -55,7 +55,7 @@ func TestWSOversizeMessageClosesConnection(t *testing.T) {
 }
 
 // A normal activity subscribe, under the 64 KiB read limit, is still accepted:
-// the server replies with a backlog and keeps the connection open.
+// the server replies with a backlog instead of closing the connection.
 func TestWSActivitySubscribeUnderReadLimit(t *testing.T) {
 	conn, _ := startCardsNATS(t)
 	oldNC := nc
@@ -88,9 +88,13 @@ func TestWSActivitySubscribeUnderReadLimit(t *testing.T) {
 			t.Fatalf("connection closed before the subscribe reply: %v", err)
 		}
 		if strings.Contains(string(data), `"op":"backlog"`) {
-			return
+			break
 		}
 	}
+	// Free the connection slot before returning so TestWSConnectionCap does
+	// not depend on test order.
+	c.Close()
+	waitFor(t, func() bool { return wsOpenConns.Load() == 0 })
 }
 
 func TestWSConnectionCap(t *testing.T) {

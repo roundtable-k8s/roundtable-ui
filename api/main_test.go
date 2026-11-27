@@ -2331,7 +2331,7 @@ func TestWSShutdownSendsGoingAway(t *testing.T) {
 		t.Fatal(err)
 	}
 	hs := &http.Server{Handler: wsHandler(src, nil, nil, nil, nil, nil)}
-	go hs.Serve(ln)
+	go func() { _ = hs.Serve(ln) }()
 	defer hs.Close()
 
 	c, _, err := websocket.DefaultDialer.Dial("ws://"+ln.Addr().String(), nil)
