@@ -68,6 +68,10 @@ export interface Mission {
   costBreakdown?: MissionKnightCost[]
   /** Detail endpoint only: status.result, capped at 4000 characters. */
   result?: string
+  /** Detail endpoint only: true when result was cut at the 4000-character cap. */
+  resultTruncated?: boolean
+  /** Detail endpoint only: full length of status.result in characters, set with resultTruncated. */
+  resultLength?: number
 }
 
 export interface MissionCondition {

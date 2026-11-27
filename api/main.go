@@ -2276,6 +2276,10 @@ type MissionDetail struct {
 	Conditions    []MissionConditionDTO  `json:"conditions,omitempty"`
 	CostBreakdown []MissionKnightCostDTO `json:"costBreakdown,omitempty"`
 	Result        string                 `json:"result,omitempty"`
+	// ResultTruncated is set when Result was cut at maxMissionResultChars;
+	// ResultLength then carries the full length in characters.
+	ResultTruncated bool `json:"resultTruncated,omitempty"`
+	ResultLength    int  `json:"resultLength,omitempty"`
 }
 
 func parseMissionDetail(obj map[string]interface{}, summary MissionSummary) MissionDetail {
@@ -2314,6 +2318,8 @@ func parseMissionDetail(obj map[string]interface{}, summary MissionSummary) Miss
 	}
 	if r := []rune(getStr(status, "result")); len(r) > maxMissionResultChars {
 		d.Result = string(r[:maxMissionResultChars])
+		d.ResultTruncated = true
+		d.ResultLength = len(r)
 	} else {
 		d.Result = string(r)
 	}
