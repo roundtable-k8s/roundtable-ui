@@ -104,6 +104,29 @@ describe('TriggerDetailPage active runs', () => {
   })
 })
 
+describe('TriggerDetailPage run refs for knight and mission triggers', () => {
+  it.each([
+    ['knight', { targetKind: 'knight' as const, targetKnight: 'galahad' }],
+    ['mission', { targetKind: 'mission' as const }],
+  ])('renders %s firing and active runs as plain text, not chain links', async (_k, target) => {
+    mockApiGet.mockResolvedValue(trig({
+      name: 'nightly', targetChain: '', ...target, activeRuns: ['task-active'],
+      recentFirings: [{ time: '2026-11-25T03:00:00Z', key: 'k1', run: 'task-fired' }],
+    }))
+    render(
+      <MemoryRouter initialEntries={['/triggers/roundtable/nightly']}>
+        <Routes><Route path="/triggers/:namespace/:name" element={<TriggerDetailPage />} /></Routes>
+      </MemoryRouter>,
+    )
+    const firings = await screen.findByRole('region', { name: 'recent firings' })
+    const active = await screen.findByRole('region', { name: 'active runs' })
+    expect(within(firings).getByText('task-fired')).toBeInTheDocument()
+    expect(within(active).getByText('task-active')).toBeInTheDocument()
+    expect(within(firings).queryByRole('link', { name: 'task-fired' })).toBeNull()
+    expect(within(active).queryByRole('link', { name: 'task-active' })).toBeNull()
+  })
+})
+
 describe('TriggersPage links', () => {
   it('links to the Schedules page', async () => {
     mockApiGet.mockResolvedValue([])
