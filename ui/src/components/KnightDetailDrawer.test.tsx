@@ -38,6 +38,13 @@ describe('KnightDetailDrawer', () => {
     expect(fetchMock.mock.calls.length).toBe(calls)
   })
 
+  it('labels the age as uptime when ready and age when not ready', () => {
+    const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { age: '2h 15m' })} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText('2h 15m uptime')).toBeInTheDocument()
+    rerender(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { age: '2h 15m', ready: false, status: 'offline' })} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText('2h 15m age')).toBeInTheDocument()
+  })
+
   it('reads Starting for a starting knight', () => {
     render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { status: 'starting', ready: false })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText('Starting')).toBeInTheDocument()

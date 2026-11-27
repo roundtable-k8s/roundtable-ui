@@ -20,6 +20,9 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
   // table filter) never renders the previous url's data, even for one frame.
   const [state, setState] = useState<PolledState<T>>({ url, data: initial, error: null, loading: true })
 
+  // Accepted: switching A -> B -> A before B answers shows A's earlier data
+  // with loading: false, because the state still belongs to url A.
+
   // The url in force; a response for an earlier url (e.g. another table) is dropped.
   const current = useRef(url)
   const initialRef = useRef(initial)

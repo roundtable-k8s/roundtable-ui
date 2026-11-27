@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { RoundTablesPage } from './RoundTables'
@@ -14,6 +14,8 @@ let fetchState: { data: RoundTable[]; error: string | null } = { data: tables, e
 vi.mock('../hooks/usePolledFetch', () => ({
   usePolledFetch: () => ({ ...fetchState, loading: false, refresh: vi.fn() }),
 }))
+
+afterEach(() => { fetchState = { data: tables, error: null } })
 
 const renderPage = (url = '/roundtables') =>
   render(<MemoryRouter initialEntries={[url]}><RoundTablesPage /></MemoryRouter>)
@@ -55,7 +57,6 @@ describe('RoundTablesPage load failure', () => {
     renderPage()
     expect(screen.getByText(/Failed to load round tables: boom/)).toBeTruthy()
     expect(screen.queryByText('No round tables found.')).toBeNull()
-    fetchState = { data: tables, error: null }
   })
 })
 
@@ -69,7 +70,6 @@ describe('RoundTablesPage budgets and toggle', () => {
     expect(screen.getByText(/\/ \$50\.00/)).toBeTruthy()
     expect(screen.getAllByText(/\$12\.40/).length).toBe(2)
     expect(screen.queryByText(/\/ \$0/)).toBeNull()
-    fetchState = { data: tables, error: null }
   })
 
   it('reads unlimited budgets and max missions in the policies block', () => {
@@ -79,7 +79,6 @@ describe('RoundTablesPage budgets and toggle', () => {
     const budgetRow = screen.getByText('Cost Budget').parentElement
     expect(budgetRow?.textContent).toBe('Cost Budgetunlimited')
     expect(screen.getByText('Max Missions').parentElement?.textContent).toBe('Max Missionsunlimited')
-    fetchState = { data: tables, error: null }
   })
 
   it('never shows a bare dollar sign for an empty budget', () => {
@@ -87,7 +86,6 @@ describe('RoundTablesPage budgets and toggle', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: /more details/i }))
     expect(screen.queryByText('$')).toBeNull()
-    fetchState = { data: tables, error: null }
   })
 
   it('exposes aria-expanded and aria-controls on the toggle', () => {
@@ -100,6 +98,5 @@ describe('RoundTablesPage budgets and toggle', () => {
     fireEvent.click(btn)
     expect(screen.getByRole('button', { name: /less/i })).toHaveAttribute('aria-expanded', 'true')
     expect(document.getElementById(id!)).toBeTruthy()
-    fetchState = { data: tables, error: null }
   })
 })

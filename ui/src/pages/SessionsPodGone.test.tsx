@@ -125,7 +125,7 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     await user.selectOptions(knightSelect, 'lancelot')
     release()
     await vi.waitFor(() => expect(calls.some(u => u.includes('/lancelot/session?type=history'))).toBe(true))
-    await new Promise(r => setTimeout(r, 20))
+    await vi.waitFor(() => expect(screen.queryByRole('status', { name: /Loading/ })).toBeNull())
     expect((screen.getByLabelText('Knight') as HTMLSelectElement).value).toBe('lancelot')
   })
 

@@ -111,14 +111,24 @@ describe('usePolledFetch', () => {
   it('returns initial data and loading on the very first render after a url change', async () => {
     mockGet.mockImplementation((url: string) =>
       url === '/api/a' ? Promise.resolve(['from-a']) : new Promise(() => {}))
-    const { result, rerender } = renderHook(({ url }) => usePolledFetch<string[]>(url, 60000, []), {
+    const renders: string[][] = []
+    const { result, rerender } = renderHook(({ url }) => {
+      const r = usePolledFetch<string[]>(url, 60000, [])
+      renders.push(r.data)
+      return r
+    }, {
       initialProps: { url: '/api/a' },
     })
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     expect(result.current.data).toEqual(['from-a'])
 
     // No timer or promise has run since the rerender.
+    const before = renders.length
     rerender({ url: '/api/b' })
+    // Every render after the change (not just the settled one) must be free of a's data.
+    const after = renders.slice(before)
+    expect(after.length).toBeGreaterThan(0)
+    for (const d of after) expect(d).not.toContain('from-a')
     expect(result.current.data).toEqual([])
     expect(result.current.loading).toBe(true)
     expect(result.current.error).toBeNull()

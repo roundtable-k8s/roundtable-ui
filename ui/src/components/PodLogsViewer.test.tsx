@@ -149,7 +149,7 @@ describe('PodLogsViewer', () => {
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(apiGetText).toHaveBeenCalledTimes(1))
     // Flush the pods reload and any request it might trigger before the final counts.
-    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+    await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve() })
     expect(apiGet).toHaveBeenCalledTimes(1)
     expect(apiGetText).toHaveBeenCalledTimes(1)
     expect(lastUrl()).toBe('/api/fleet/galahad/logs?pod=galahad-abc-2')
