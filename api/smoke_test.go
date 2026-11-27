@@ -34,6 +34,9 @@ func TestSmokeUIAndRouter(t *testing.T) {
 	if err != nil {
 		t.Skip("api/static/index.html not found; run `cd ui && npm run build` first")
 	}
+	// Read the shared fixture before t.Chdir below, while testdata/ is relative
+	// to the package directory.
+	chainFixture := loadChainFixture(t, "fanout.json")
 
 	// buildRouter serves the bundle from the fixed relative path ./static, so
 	// run from a temp directory whose static entry links to the built bundle.
@@ -71,19 +74,33 @@ func TestSmokeUIAndRouter(t *testing.T) {
 			t.Fatalf("seed %s %s: %v", kind, name, err)
 		}
 	}
+	// Knights and the Chain reuse the shared test fixtures (makeTestKnightCR in
+	// main_test.go, testdata/chains/fanout.json via loadChainFixture) so a
+	// schema change breaks one place. RoundTable and Mission have no shared
+	// fixture yet, so they stay inline in seed below.
+	ctx := context.Background()
+	for _, kn := range []*unstructured.Unstructured{
+		makeTestKnightCR("galahad", ns, "build"),
+		makeTestKnightCR("lancelot", ns, "plan"),
+	} {
+		kn.SetNamespace(ns)
+		if _, err := dynClient.Resource(knightGVR).Namespace(ns).Create(ctx, kn, metav1.CreateOptions{}); err != nil {
+			t.Fatalf("seed Knight %s: %v", kn.GetName(), err)
+		}
+	}
+	chain := &unstructured.Unstructured{Object: chainFixture}
+	chain.SetNamespace(ns)
+	if _, err := dynClient.Resource(chainGVR).Namespace(ns).Create(ctx, chain, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("seed Chain %s: %v", chain.GetName(), err)
+	}
 	seed(roundTableGVR, "RoundTable", "table-a",
 		map[string]any{"nats": map[string]any{"subjectPrefix": "fleet-a"}},
 		map[string]any{"phase": "Ready"})
-	seed(knightGVR, "Knight", "galahad", map[string]any{"domain": "build"}, map[string]any{"phase": "Ready"})
-	seed(knightGVR, "Knight", "lancelot", map[string]any{"domain": "plan"}, map[string]any{"phase": "Ready"})
 	seed(missionGVR, "Mission", "smoke-mission", map[string]any{
 		"objective":     "smoke",
 		"costBudgetUSD": "10.00",
 		"roundTableRef": map[string]any{"name": "table-a"},
 	}, map[string]any{"phase": "Running", "totalCost": "1.00"})
-	seed(chainGVR, "Chain", "smoke-chain", map[string]any{
-		"steps": []any{map[string]any{"name": "plan", "knightRef": map[string]any{"name": "lancelot"}, "task": "plan"}},
-	}, map[string]any{"phase": "Succeeded"})
 
 	router := buildRouter(routerDeps{
 		namespace:     ns,
@@ -182,8 +199,8 @@ func TestSmokeUIAndRouter(t *testing.T) {
 	}
 	listOf("/api/roundtables", 1, []string{"name", "namespace", "phase", "knightsReady", "knightsTotal", "natsPrefix", "costBudgetUSD", "totalCost"})
 	chains := listOf("/api/chains", 1, []string{"name", "namespace", "phase", "currentStep", "startTime", "completionTime", "steps"})
-	if chains[0]["name"] != "smoke-chain" {
-		t.Errorf("/api/chains name = %v, want smoke-chain", chains[0]["name"])
+	if chains[0]["name"] != "fanout-scan" {
+		t.Errorf("/api/chains name = %v, want fanout-scan", chains[0]["name"])
 	}
 
 	var tables struct {
