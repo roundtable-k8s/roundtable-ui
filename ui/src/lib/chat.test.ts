@@ -45,4 +45,12 @@ describe('mergeTurn', () => {
     const m = mergeTurn(turn, { taskId: '', output: 'new', error: 'boom', model: 'm' })
     expect(m).toMatchObject({ taskId: 't1', output: 'new', error: 'boom', model: 'm', id: 1, message: 'hi' })
   })
+  it('keeps the trace id from an earlier poll when a later one omits it', () => {
+    const withTrace: ChatTurn = { ...turn, traceId: 'abc123' }
+    expect(mergeTurn(withTrace, { taskId: 't1', status: 'succeeded' }).traceId).toBe('abc123')
+    expect(mergeTurn(withTrace, { taskId: 't1', traceId: '' }).traceId).toBe('abc123')
+  })
+  it('takes a trace id that arrives later', () => {
+    expect(mergeTurn(turn, { taskId: 't1', traceId: 'def456' }).traceId).toBe('def456')
+  })
 })

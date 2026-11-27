@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { TasksPage } from './Tasks'
 import type { NatsEvent } from '../hooks/useWebSocket'
+import { resetConfigCache } from '../hooks/useConfig'
 
 const tables = [
   { name: 'fleet-a', prefix: 'fleet-a' },
@@ -47,6 +48,40 @@ afterEach(() => {
   vi.useRealTimers()
   // drop the own-property override so jsdom's prototype getter applies again
   delete (document as unknown as { hidden?: boolean }).hidden
+})
+
+describe('TasksPage trace link', () => {
+  const TRACE = '0af7651916cd43dd8448eb211c80319c'
+  const configure = (cfg: Record<string, unknown>) => {
+    resetConfigCache()
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/tables' ? Promise.resolve({ tables })
+        : url === '/api/config' ? Promise.resolve(cfg)
+          : Promise.resolve({ taskId: 'invoke-rt-ui-1', status: 'succeeded', traceId: TRACE }))
+    apiPost.mockResolvedValueOnce({ taskId: 'invoke-rt-ui-1', runId: 'r1', status: 'pending', traceId: TRACE })
+  }
+  const dispatch = async () => {
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    await userEvent.type(screen.getByLabelText('Quest'), 'fix it{Enter}')
+    await waitFor(() => expect(apiPost).toHaveBeenCalled())
+    await screen.findByText('invoke-rt-ui-1')
+  }
+
+  it('links a dispatched task to its trace when a trace URL template is configured', async () => {
+    configure({ traceUrlTemplate: 'https://t.example/trace/{traceId}' })
+    await dispatch()
+    const link = await screen.findByRole('link', { name: /View trace/ }, { timeout: 8000 })
+    expect(link).toHaveAttribute('href', `https://t.example/trace/${TRACE}`)
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  }, 15000)
+
+  it('shows no trace link without a configured template', async () => {
+    configure({})
+    await dispatch()
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/config'))
+    expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  }, 15000)
 })
 
 describe('TasksPage', () => {

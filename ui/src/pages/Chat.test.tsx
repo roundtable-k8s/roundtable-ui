@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChatPage, STALE_TURN_MS } from './Chat'
 import { parseKnights } from '../lib/chat'
+import { resetConfigCache } from '../hooks/useConfig'
 import { ApiError } from '../lib/api'
 
 const apiPost = vi.fn()
@@ -30,6 +31,34 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers() })
 
 describe('ChatPage', () => {
+  const TRACE = '0af7651916cd43dd8448eb211c80319c'
+  it('links a reply to its trace when a trace URL template is configured', async () => {
+    resetConfigCache()
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/chat/knights' ? Promise.resolve({ knights: [{ name: 'galahad' }] })
+        : url === '/api/config' ? Promise.resolve({ traceUrlTemplate: 'https://t.example/trace/{traceId}' })
+          : Promise.resolve({ taskId: 't1', status: 'succeeded', output: 'hi back', traceId: TRACE }))
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    const link = await screen.findByRole('link', { name: /View trace/ }, { timeout: 8000 })
+    expect(link).toHaveAttribute('href', `https://t.example/trace/${TRACE}`)
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  }, 15000)
+
+  it('shows no trace link without a configured template', async () => {
+    resetConfigCache()
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/chat/knights' ? Promise.resolve({ knights: [{ name: 'galahad' }] })
+        : url === '/api/config' ? Promise.resolve({})
+          : Promise.resolve({ taskId: 't1', status: 'succeeded', output: 'hi back', traceId: TRACE }))
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    expect(await screen.findByText('hi back', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  }, 15000)
+
   it('sends a message, shows the pending turn, then the answer', async () => {
     render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
     await userEvent.type(await screen.findByLabelText('Message'), 'hello <b>there</b>')
