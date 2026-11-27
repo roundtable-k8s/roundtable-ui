@@ -233,7 +233,7 @@ nix flake check    # verifies the tool versions and that knight-tools contains t
 
 The dashboard is deployed as part of the Round Table operator chart. The chart is published only as an OCI artifact (there is no classic Helm repository, so no repository needs to be added). The dashboard is enabled by default.
 
-The chart wires the dashboard's `GATEWAY_TOKEN` to the gateway's own token Secret, so the install above needs no gateway settings. To send a token from a different Secret, set `dashboard.gateway.tokenSecret` and `dashboard.gateway.tokenKey` (the dashboard re-reads the token on a 401). The gateway's token Secret is set with `gateway.auth.existingSecret` and `gateway.auth.secretKey`.
+With the default `gateway.enabled`, the chart sets the dashboard's `GATEWAY_URL` and mounts the gateway's own token Secret as a file via `GATEWAY_TOKEN_FILE`, so the install above needs no gateway settings. To send a token from a different Secret, set `dashboard.gateway.tokenSecret` and `dashboard.gateway.tokenKey` (the dashboard re-reads the token on a 401). The gateway's token Secret is set with `gateway.auth.existingSecret` and `gateway.auth.secretKey`.
 
 ```bash
 # Install/upgrade Round Table with the dashboard exposed through an ingress
