@@ -22,6 +22,19 @@ import (
 // if the informer can't sync (e.g. watch is forbidden) reads fall back to a
 // direct list.
 
+// listPageSize is the page size of the informers' initial list and of the
+// chain watcher's relist (#471), so a namespace with hundreds of Chains is
+// not decoded in one response.
+const listPageSize = 100
+
+// pagedListOptions sets the list page size; the reflector follows the
+// continue token. Watches ignore Limit.
+func pagedListOptions(o *metav1.ListOptions) {
+	if o.Limit == 0 {
+		o.Limit = listPageSize
+	}
+}
+
 // listCacheSyncTimeout bounds how long a read waits for an informer's first sync.
 // It is a variable so tests can shorten it.
 var listCacheSyncTimeout = 5 * time.Second
@@ -65,11 +78,11 @@ func cachedList(ctx context.Context, client dynamic.Interface, gvr schema.GroupV
 	listCacheMu.Lock()
 	e, ok := listCacheInformers[key]
 	if !ok {
-		e = &listCacheEntry{
-			inf: dynamicinformer.NewFilteredDynamicInformer(client, gvr, namespace, 0,
-				cache.Indexers{}, nil).Informer(),
-			stop: make(chan struct{}),
-		}
+		inf := dynamicinformer.NewFilteredDynamicInformer(client, gvr, namespace, 0,
+			cache.Indexers{}, pagedListOptions).Informer()
+		// Trim objects before they are stored (#471); must be set before Run.
+		_ = inf.SetTransform(listCacheTransform(gvr == chainGVR))
+		e = &listCacheEntry{inf: inf, stop: make(chan struct{})}
 		listCacheInformers[key] = e
 		go e.inf.Run(e.stop)
 	}

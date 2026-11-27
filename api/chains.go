@@ -188,7 +188,7 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 				RunID:       getStr(im, "runId"),
 				TaskID:      getStr(im, "taskId"),
 				Error:       getStr(im, "error"),
-				OutputBytes: len(getStr(im, "output")),
+				OutputBytes: outputLen(im),
 				Retries:     getInt(im, "retries"),
 			}
 			item.StartTime = optStr(getStr(im, "startedAt"))
@@ -240,7 +240,7 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 				Phase:       getStr(bm, "phase"),
 				TaskID:      getStr(bm, "taskId"),
 				Error:       getStr(bm, "error"),
-				OutputBytes: len(getStr(bm, "output")),
+				OutputBytes: outputLen(bm),
 				Retries:     getInt(bm, "retries"),
 			}
 			bs.Knight = bodyKnight[bs.Name]

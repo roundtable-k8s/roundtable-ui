@@ -181,21 +181,34 @@ func (c *chainWatcher) sleep(ctx context.Context) {
 // last seen and deletes for chains that disappeared. Returns the list's
 // resourceVersion to watch from.
 func (c *chainWatcher) relist(ctx context.Context) (string, error) {
-	list, err := c.client.Resource(chainGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return "", err
-	}
 	var domains map[string]knightInfo
-	present := make(map[string]bool, len(list.Items))
-	for i := range list.Items {
-		item := &list.Items[i]
-		name := item.GetName()
-		present[name] = true
-		if prev, ok := c.seen[name]; ok && prev == item.GetResourceVersion() {
-			continue
+	present := make(map[string]bool, len(c.seen))
+	// Page the list (#471) so hundreds of Chains with long step outputs are
+	// not decoded in one response. Every page shares the first page's snapshot.
+	var rv, cont string
+	for {
+		list, err := c.client.Resource(chainGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{
+			Limit: listPageSize, Continue: cont,
+		})
+		if err != nil {
+			return "", err
 		}
-		c.seen[name] = item.GetResourceVersion()
-		c.emit(ctx, chainOpUpsert, item, &domains)
+		if rv == "" {
+			rv = list.GetResourceVersion()
+		}
+		for i := range list.Items {
+			item := &list.Items[i]
+			name := item.GetName()
+			present[name] = true
+			if prev, ok := c.seen[name]; ok && prev == item.GetResourceVersion() {
+				continue
+			}
+			c.seen[name] = item.GetResourceVersion()
+			c.emit(ctx, chainOpUpsert, item, &domains)
+		}
+		if cont = list.GetContinue(); cont == "" {
+			break
+		}
 	}
 	for name := range c.seen {
 		if present[name] {
@@ -207,7 +220,7 @@ func (c *chainWatcher) relist(ctx context.Context) (string, error) {
 		gone.SetNamespace(c.namespace)
 		c.emit(ctx, chainOpDelete, gone, &domains)
 	}
-	return list.GetResourceVersion(), nil
+	return rv, nil
 }
 
 // watchOnce consumes one watch stream. It returns the last resourceVersion
