@@ -60,6 +60,28 @@ export interface Mission {
   tokens?: TokenTotals | null
   /** The part of totalCost spent by subscription-billed knights (notional). */
   notionalCostUSD?: string
+  /** Detail endpoint only: metadata.creationTimestamp. */
+  createdAt?: string
+  /** Detail endpoint only: status.conditions. */
+  conditions?: MissionCondition[]
+  /** Detail endpoint only: per-knight cost, malformed entries dropped. */
+  costBreakdown?: MissionKnightCost[]
+  /** Detail endpoint only: status.result, capped at 4000 characters. */
+  result?: string
+}
+
+export interface MissionCondition {
+  type: string
+  status: string
+  reason?: string
+  message?: string
+  lastTransitionTime?: string
+}
+
+export interface MissionKnightCost {
+  name: string
+  costUSD: string
+  ephemeral: boolean
 }
 
 export function useMissions(refreshInterval = 10000) {
