@@ -62,6 +62,7 @@ export function BriefingsPage() {
   const [contentError, setContentError] = useState<ContentError | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const listLoaded = useRef(false)
+  const prevList = useRef<BriefingEntry[]>([])
 
   const loadList = useCallback(async (signal: AbortSignal) => {
     try {
@@ -72,7 +73,16 @@ export function BriefingsPage() {
       setBriefings(sorted)
       setListError(null)
       // Keep the open briefing on refresh; auto-select the newest only when nothing is selected yet.
-      setSelected((prev) => prev ?? sorted[0] ?? null)
+      // If the open entry was dropped, fall back to the nearest one (same index, clamped).
+      const previous = prevList.current
+      prevList.current = sorted
+      setSelected((prev) => {
+        if (!prev) return sorted[0] ?? null
+        const key = entryKey(prev)
+        if (sorted.some((b) => entryKey(b) === key)) return prev
+        const oldIndex = previous.findIndex((b) => entryKey(b) === key)
+        return sorted[Math.min(Math.max(oldIndex, 0), sorted.length - 1)] ?? null
+      })
     } catch (e) {
       if (signal.aborted) return
       // A failed refresh keeps the list on screen; only a failed first load is shown as an error.
@@ -93,16 +103,18 @@ export function BriefingsPage() {
 
   // Keyed by value, not object identity: a list refresh must not refetch the open briefing.
   const selectedKey = selected ? entryKey(selected) : ''
+  const selectedName = selected?.name ?? ''
+  const selectedDir = selected?.dir ?? ''
 
   useEffect(() => {
-    if (!selected) return
+    if (!selectedKey) return
     const ctl = new AbortController()
     setContentLoading(true)
     setContentError(null)
     setContent('')
 
-    const date = selected.name.replace('.md', '')
-    const query = selected.dir ? `?dir=${encodeURIComponent(selected.dir)}` : ''
+    const date = selectedName.replace('.md', '')
+    const query = selectedDir ? `?dir=${encodeURIComponent(selectedDir)}` : ''
     apiGetText(`/api/briefings/${date}${query}`, { signal: ctl.signal })
       .then((text) => {
         // A late answer for a previous selection must not overwrite the current one.
@@ -119,7 +131,7 @@ export function BriefingsPage() {
         setContentLoading(false)
       })
     return () => ctl.abort()
-  }, [selectedKey, retryCount])
+  }, [selectedKey, selectedName, selectedDir, retryCount])
 
   // The list is newest first, so "older" is the next index and "newer" the previous one.
   const selectedIndex = selected ? briefings.findIndex((b) => entryKey(b) === selectedKey) : -1

@@ -67,4 +67,14 @@ describe('useRunning', () => {
     const { result } = renderHook(() => useRunning())
     await waitFor(() => expect(result.current.error).toBe('boom'))
   })
+
+  it('refresh reloads the snapshot after an error', async () => {
+    apiGet.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({ tasks: [t('a')] })
+    const { result } = renderHook(() => useRunning())
+    await waitFor(() => expect(result.current.error).toBe('boom'))
+    act(() => result.current.refresh())
+    await waitFor(() => expect(result.current.error).toBeNull())
+    expect(apiGet).toHaveBeenCalledTimes(2)
+    expect([...result.current.tasks.keys()]).toEqual(['a'])
+  })
 })

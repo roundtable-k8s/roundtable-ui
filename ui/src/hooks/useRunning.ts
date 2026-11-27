@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiGet, ApiError } from '../lib/api'
 import { useWebSocket } from './useWebSocket'
 import {
@@ -15,6 +15,8 @@ export interface RunningState {
   error: string | null
   /** The API has no /api/running endpoint (older backend). */
   unavailable: boolean
+  /** Re-fetch the snapshot (used by the Retry button). */
+  refresh: () => void
 }
 
 /**
@@ -45,8 +47,13 @@ export function useRunning(): RunningState {
 
   // Fetch on mount (even if the live feed is down) and on every reconnect.
   const fetched = useRef(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const refresh = useCallback(() => setReloadKey((k) => k + 1), [])
+  const lastReload = useRef(0)
   useEffect(() => {
-    if (!connected && fetched.current) return
+    const manual = reloadKey !== lastReload.current
+    lastReload.current = reloadKey
+    if (!connected && fetched.current && !manual) return
     fetched.current = true
     const controller = new AbortController()
     const replay = new Map<string, RunningTask | null>()
@@ -74,7 +81,7 @@ export function useRunning(): RunningState {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [connected])
+  }, [connected, reloadKey])
 
-  return { tasks, loading, error, unavailable }
+  return { tasks, loading, error, unavailable, refresh }
 }
