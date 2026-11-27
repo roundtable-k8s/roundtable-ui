@@ -8,6 +8,7 @@ import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { getKnightConfig } from '../lib/knights'
 import { parseEvent, resultFailureReason } from '../lib/events'
+import { computeKnightActivity } from '../lib/knightActivity'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 import { useCards } from '../hooks/useCards'
@@ -49,74 +50,7 @@ export function FleetPage() {
     [knights, cards, skillFilter, notIsolatedOnly],
   )
 
-  const knightActivity = useMemo(() => {
-    const now = Date.now()
-    const windowMs = 30 * 60 * 1000 // 30 min
-    const intervalMs = windowMs / 5
-    const activity: Record<string, { recent: number; lastActive: string | null; busy: boolean; sparkline: number[] }> = {}
-
-    // Track pending tasks (task sent but no result yet) per knight
-    const pendingTasks = new Set<string>()
-    const resultsSeen = new Set<string>()
-
-    // Only process events within our activity window (#43 — bounded memory)
-    const windowedEvents = events.filter(e => {
-      const ts = new Date(e.timestamp).getTime()
-      return now - ts <= windowMs
-    })
-
-    for (const event of windowedEvents) {
-      const name = parseEvent(event).knight
-      if (!name) continue
-
-      const ts = new Date(event.timestamp).getTime()
-
-      if (!activity[name]) {
-        activity[name] = { recent: 0, lastActive: null, busy: false, sparkline: [0, 0, 0, 0, 0] }
-      }
-
-      if (event.type === 'result') {
-        activity[name].recent++
-        resultsSeen.add(`${name}:${event.timestamp}`)
-        if (!activity[name].lastActive || event.timestamp > activity[name].lastActive!) {
-          activity[name].lastActive = event.timestamp
-        }
-        // Sparkline bucket
-        const bucket = Math.min(4, Math.floor((now - ts) / intervalMs))
-        activity[name].sparkline[4 - bucket]++
-      }
-
-      if (event.type === 'task') {
-        pendingTasks.add(name)
-      }
-    }
-
-    // Normalize sparkline values to 0-1
-    for (const a of Object.values(activity)) {
-      const max = Math.max(1, ...a.sparkline)
-      a.sparkline = a.sparkline.map(v => v / max)
-    }
-
-    // Mark busy: has task but fewer results than tasks in recent window
-    for (const event of windowedEvents) {
-      if (event.type !== 'task') continue
-      const name = parseEvent(event).knight
-      if (!name) continue
-      const ts = new Date(event.timestamp).getTime()
-      if (now - ts > 60000) continue // only last 60s for busy detection
-      if (activity[name]) {
-        // Check if there's a result after this task
-        const hasResult = events.some(e =>
-          e.type === 'result' &&
-          parseEvent(e).knight === name &&
-          new Date(e.timestamp).getTime() > ts
-        )
-        if (!hasResult) activity[name].busy = true
-      }
-    }
-
-    return activity
-  }, [events])
+  const knightActivity = useMemo(() => computeKnightActivity(events, Date.now()), [events])
 
   // Aggregate costs from result events (#40)
   const costStats = useMemo(() => {
