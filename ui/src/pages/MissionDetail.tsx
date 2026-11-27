@@ -166,7 +166,7 @@ export function MissionDetailPage() {
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <MissionPhaseBadge phase={mission.phase} />
             <TableBadge table={mission.table} />
-            <span className="ml-auto"><DeleteMission name={mission.name} onDeleted={() => navigate('/missions')} /></span>
+            <div className="ml-auto"><DeleteMission name={mission.name} onDeleted={() => navigate('/missions')} /></div>
           </div>
           <MissionBody m={mission} />
         </>
