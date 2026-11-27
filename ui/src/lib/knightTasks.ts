@@ -11,9 +11,14 @@ export interface TaskRow {
   traceId?: string
 }
 
-/** Schedules that wake `knight`: a knight target of that name, or a table with one. */
-export function schedulesFor(knight: string, schedules: Schedule[] | null | undefined): Schedule[] {
-  return (schedules ?? []).filter((s) => s.target?.knight === knight && (s.target.kind === 'knight' || s.target.kind === 'table' || !!s.table))
+/**
+ * Schedules that wake a knight: knight-kind targets with the same name. When both
+ * the knight (ignoring "none") and the schedule have a table, the tables must match.
+ */
+export function schedulesFor(knight: string, table: string | undefined, schedules: Schedule[] | null | undefined): Schedule[] {
+  const kt = table && table !== 'none' ? table : undefined
+  return (schedules ?? []).filter((s) =>
+    s.target?.kind === 'knight' && s.target.knight === knight && !(kt && s.table && s.table !== kt))
 }
 
 const num = (v: unknown): number | undefined => {

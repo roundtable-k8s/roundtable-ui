@@ -330,7 +330,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
           {card && <KnightCardSection entry={card} fallbackMax={knightDetail?.concurrency ?? knight.concurrency} />}
 
           {/* Recent tasks and schedules (#510) */}
-          <KnightRecentWork knight={knight.name} />
+          <KnightRecentWork knight={knight.name} table={knight.table} />
 
           {/* Isolation (#269) */}
           {(knightDetail?.isolation ?? knight.isolation) && (

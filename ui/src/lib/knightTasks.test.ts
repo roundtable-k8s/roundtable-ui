@@ -7,7 +7,7 @@ const sched = (name: string, target: Schedule['target'], over: Partial<Schedule>
 })
 
 describe('schedulesFor', () => {
-  it('keeps knight-targeted schedules with the same name, and table schedules naming it', () => {
+  it('keeps only knight-kind schedules with the same name', () => {
     const list = [
       sched('a', { kind: 'knight', summary: '', knight: 'galahad' }),
       sched('b', { kind: 'knight', summary: '', knight: 'bors' }),
@@ -15,10 +15,17 @@ describe('schedulesFor', () => {
       sched('d', { kind: 'chain', summary: '', knight: 'galahad' }),
       sched('e', { kind: 'chain', summary: '', knight: 'galahad' }, { table: 't1' }),
     ]
-    expect(schedulesFor('galahad', list).map((s) => s.name)).toEqual(['a', 'e'])
+    expect(schedulesFor('galahad', undefined, list).map((s) => s.name)).toEqual(['a'])
+  })
+  it('requires equal tables when both sides have one', () => {
+    const k = { kind: 'knight', summary: '', knight: 'galahad' } as Schedule['target']
+    const list = [sched('alpha', k, { table: 'alpha' }), sched('beta', k, { table: 'beta' }), sched('none', k)]
+    expect(schedulesFor('galahad', 'alpha', list).map((s) => s.name)).toEqual(['alpha', 'none'])
+    expect(schedulesFor('galahad', 'none', list).map((s) => s.name)).toEqual(['alpha', 'beta', 'none'])
+    expect(schedulesFor('galahad', undefined, list)).toHaveLength(3)
   })
   it('tolerates a missing list', () => {
-    expect(schedulesFor('x', undefined)).toEqual([])
+    expect(schedulesFor('x', undefined, undefined)).toEqual([])
   })
 })
 

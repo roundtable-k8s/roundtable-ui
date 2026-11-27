@@ -13,13 +13,12 @@ const POLL_MS = 30_000
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 /** Drawer section: the knight's last gateway tasks and the schedules that target it. */
-export function KnightRecentWork({ knight }: { knight: string }) {
+export function KnightRecentWork({ knight, table }: { knight: string; table?: string }) {
   const tasksQ = usePolledFetch<unknown>(`/api/gateway/tasks?knight=${encodeURIComponent(knight)}&limit=10`, POLL_MS, null)
   const schedQ = usePolledFetch<{ schedules?: Schedule[] } | Schedule[] | null>('/api/schedules', POLL_MS, null)
   const rows = taskRows(tasksQ.data)
   const all = Array.isArray(schedQ.data) ? schedQ.data : schedQ.data?.schedules
-  const schedules = schedulesFor(knight, all)
-  const unconfigured = (e: number | undefined) => e === 503
+  const schedules = schedulesFor(knight, table, all)
 
   return (
     <section aria-label="recent work" className="space-y-4">
@@ -40,7 +39,7 @@ export function KnightRecentWork({ knight }: { knight: string }) {
             ))}
           </ul>
         </ListState>
-        {tasksQ.error && unconfigured(tasksQ.errorStatus) && <p className="text-xs text-gray-500">The gateway is not configured on this dashboard.</p>}
+        {tasksQ.error && tasksQ.errorStatus === 503 && <p className="text-xs text-gray-500">The gateway is not configured on this dashboard.</p>}
       </div>
       <div>
         <h3 className="text-sm font-semibold text-gray-300 mb-2">Schedules</h3>
@@ -50,14 +49,14 @@ export function KnightRecentWork({ knight }: { knight: string }) {
             {schedules.map((s) => (
               <li key={`${s.namespace}/${s.name}`} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Link to={scheduleLink(s.namespace, s.name)} className="text-blue-400 hover:text-blue-300">{sanitizeText(s.name)}</Link>
-                <code className="text-xs text-gray-400">{s.cron}</code>
+                <code className="text-xs text-gray-400">{sanitizeText(s.cron)}</code>
                 <span className="text-gray-400">{s.suspended ? '—' : until(s.nextRunAt)}</span>
                 {s.suspended && <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Suspended</span>}
               </li>
             ))}
           </ul>
         </ListState>
-        {schedQ.error && unconfigured(schedQ.errorStatus) && <p className="text-xs text-gray-500">The gateway is not configured on this dashboard.</p>}
+        {schedQ.error && schedQ.errorStatus === 503 && <p className="text-xs text-gray-500">The gateway is not configured on this dashboard.</p>}
       </div>
     </section>
   )
