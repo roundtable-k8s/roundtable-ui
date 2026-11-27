@@ -36,7 +36,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1005,7 +1004,7 @@ func knightHandler(namespace string) http.HandlerFunc {
 		defer kcancel()
 		crObj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
 		if err != nil {
-			writeGetError(w, r, err, "Knight", "knight", name)
+			writeK8sError(w, r, err, "read", "Knight")
 			return
 		}
 
@@ -1989,7 +1988,7 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 
 		obj, err := dynClient.Resource(chainGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			writeGetError(w, r, err, "Chain", "chain", name)
+			writeK8sError(w, r, err, "read", "Chain")
 			return
 		}
 
@@ -2333,7 +2332,7 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 
 		obj, err := dynClient.Resource(missionGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			writeGetError(w, r, err, "Mission", "mission", name)
+			writeK8sError(w, r, err, "read", "Mission")
 			return
 		}
 
@@ -2436,8 +2435,7 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 			metav1.CreateOptions{},
 		)
 		if err != nil {
-			code, msg := k8sErrorStatus(r.Context(), err, "create")
-			jsonError(w, msg, code)
+			writeK8sError(w, r, err, "create", "mission")
 			return
 		}
 
@@ -2468,8 +2466,7 @@ func missionDeleteHandler(namespace string) http.HandlerFunc {
 
 		err := dynClient.Resource(missionGVR).Namespace(namespace).Delete(r.Context(), name, metav1.DeleteOptions{})
 		if err != nil {
-			code, msg := k8sErrorStatus(r.Context(), err, "delete")
-			jsonError(w, msg, code)
+			writeK8sError(w, r, err, "delete", "mission")
 			return
 		}
 
@@ -2672,7 +2669,7 @@ func roundTableDetailHandler(namespace string) http.HandlerFunc {
 
 		obj, err := dynClient.Resource(roundTableGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 		if err != nil {
-			writeGetError(w, r, err, "RoundTable", "roundtable", name)
+			writeK8sError(w, r, err, "read", "RoundTable")
 			return
 		}
 
@@ -2744,23 +2741,6 @@ func parseRoundTableResource(obj map[string]interface{}) RoundTableSummary {
 }
 
 // --- NATS KV helpers and handlers ---
-
-// writeGetError answers a failed Kubernetes Get: 404 only when the object is
-// really missing, 502 for a timeout or unavailable API server, 500 otherwise.
-// The error is logged; the body carries a fixed message, never the raw error.
-func writeGetError(w http.ResponseWriter, r *http.Request, err error, label, kind, name string) {
-	if apierrors.IsNotFound(err) {
-		jsonError(w, label+" not found", http.StatusNotFound)
-		return
-	}
-	slog.ErrorContext(r.Context(), "Get "+kind+" failed", kind, name, "error", err)
-	status := http.StatusInternalServerError
-	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) || apierrors.IsServiceUnavailable(err) ||
-		errors.Is(err, context.DeadlineExceeded) {
-		status = http.StatusBadGateway
-	}
-	jsonError(w, "Failed to read "+strings.ToLower(label), status)
-}
 
 // lookupKVBucket returns a handle to an existing NATS KV bucket. It never
 // creates the bucket: the operator owns the results buckets, and a GET must not

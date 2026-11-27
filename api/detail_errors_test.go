@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -54,13 +56,45 @@ func TestDetailHandlers_GetErrors(t *testing.T) {
 
 	// A really missing object is still 404.
 	for _, c := range cases {
-		router := setupTestRouter()
-		withQueueFixture(t, newFakeJetStream(), time.Now())
+		t.Run(c.name+" missing", func(t *testing.T) {
+			router := setupTestRouter()
+			withQueueFixture(t, newFakeJetStream(), time.Now())
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, c.path, nil))
+			if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), c.notFound) {
+				t.Errorf("status %d body %s, want 404 %s", w.Code, w.Body.String(), c.notFound)
+			}
+		})
+	}
+}
+
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return &buf
+}
+
+func TestWriteK8sError_Logging(t *testing.T) {
+	get := func(err error) (*httptest.ResponseRecorder, string) {
+		buf := captureSlog(t)
 		w := httptest.NewRecorder()
-		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, c.path, nil))
-		if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), c.notFound) {
-			t.Errorf("%s missing: status %d body %s, want 404 %s", c.path, w.Code, w.Body.String(), c.notFound)
-		}
+		writeK8sError(w, httptest.NewRequest(http.MethodGet, "/api/triggers/x", nil), err, "read", "trigger")
+		return w, buf.String()
+	}
+	w, logs := get(errors.New("boom internal"))
+	if w.Code != 500 || !strings.Contains(logs, "level=ERROR") || !strings.Contains(logs, "boom internal") {
+		t.Errorf("generic: %d, log %q", w.Code, logs)
+	}
+	w, logs = get(context.Canceled)
+	if w.Code != 500 || strings.Contains(logs, "level=ERROR") || !strings.Contains(logs, "level=DEBUG") {
+		t.Errorf("canceled: %d, log %q", w.Code, logs)
+	}
+	w, logs = get(apierrors.NewNotFound(schema.GroupResource{Resource: "triggers"}, "x"))
+	if w.Code != 404 || logs != "" {
+		t.Errorf("not found: %d, log %q", w.Code, logs)
 	}
 }
 

@@ -221,3 +221,18 @@ func TestMissionHandler_Cost(t *testing.T) {
 		t.Errorf("chain detail cost: %+v", c)
 	}
 }
+
+func TestParseCost(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want float64
+		ok   bool
+	}{
+		{"1.5", 1.5, true}, {"0", 0, true}, {"", 0, false}, {"abc", 0, false},
+		{"NaN", 0, false}, {"Inf", 0, false}, {"+Inf", 0, false}, {"-Inf", 0, false}, {"infinity", 0, false},
+	} {
+		if v, ok := parseCost(c.in); v != c.want || ok != c.ok {
+			t.Errorf("parseCost(%q) = %v, %v; want %v, %v", c.in, v, ok, c.want, c.ok)
+		}
+	}
+}
