@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -399,4 +400,45 @@ func TestCardsInvalidValueDropsSnapshotEntry(t *testing.T) {
 	waitFor("invalid card dropped", func() bool { _, c := getCards(t, store, ""); return len(c) == 0 })
 	putCard(t, kv, "personal", "galahad", "v2")
 	waitFor("valid card back", func() bool { _, c := getCards(t, store, ""); return len(c) == 1 })
+}
+
+func TestCardsInvalidValueBroadcastsDelete(t *testing.T) {
+	conn, jsc := startCardsNATS(t)
+	kv := createCardsBucket(t, jsc, defaultCardsBucket)
+	putCard(t, kv, "personal", "galahad", "v1")
+	store := testCardStore(conn, jsc, "personal")
+	events := make(chan []byte, 8)
+	store.subscribe(func(b []byte) { events <- b })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { store.run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	next := func() string {
+		select {
+		case b := <-events:
+			return string(b)
+		case <-time.After(3 * time.Second):
+			t.Fatal("timeout waiting for event")
+			return ""
+		}
+	}
+	if ev := next(); !strings.Contains(ev, chainOpUpsert) {
+		t.Fatalf("want upsert, got %s", ev)
+	}
+	if _, err := kv.Put(context.Background(), "personal.galahad", []byte("{not json")); err != nil {
+		t.Fatal(err)
+	}
+	if ev := next(); !strings.Contains(ev, chainOpDelete) || !strings.Contains(ev, `"deleted":true`) {
+		t.Fatalf("want delete, got %s", ev)
+	}
+	if _, err := kv.Put(context.Background(), "personal.galahad", []byte("{still bad")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ev := <-events:
+		t.Fatalf("unexpected event %s", ev)
+	case <-time.After(300 * time.Millisecond):
+	}
 }

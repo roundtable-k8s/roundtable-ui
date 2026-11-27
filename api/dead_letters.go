@@ -204,6 +204,10 @@ func idempotencyKey(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if len(vals) == 0 {
 		return "", true
 	}
+	if len(vals) > 1 {
+		jsonError(w, "Multiple Idempotency-Key headers are not allowed", http.StatusBadRequest)
+		return "", false
+	}
 	k := strings.TrimSpace(vals[0])
 	valid := k != "" && len(k) <= 255
 	for i := 0; valid && i < len(k); i++ {

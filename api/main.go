@@ -638,16 +638,7 @@ func main() {
 	r := buildRouter(d)
 
 	// CORS — defaults to same-origin (no origins = same-origin only) (#57)
-	corsOpts := cors.Options{
-		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "Idempotency-Key"},
-		ExposedHeaders:   []string{"Idempotent-Replay"},
-		AllowCredentials: false,
-	}
-	if origins := envOr("ALLOWED_ORIGINS", ""); origins != "" {
-		corsOpts.AllowedOrigins = strings.Split(origins, ",")
-	}
-	handler := cors.New(corsOpts).Handler(r)
+	handler := newCORSHandler(envOr("ALLOWED_ORIGINS", ""), r)
 
 	srv := newHTTPServer(":"+port, handler)
 
@@ -3233,3 +3224,18 @@ func (w *wsWriter) write(msgType int, data []byte) bool {
 
 func (w *wsWriter) isClosed() bool { return w.closed.Load() }
 func (w *wsWriter) markClosed()    { w.closed.Store(true) }
+
+// newCORSHandler wraps next with the API's CORS policy. Without origins only
+// same-origin requests are allowed.
+func newCORSHandler(origins string, next http.Handler) http.Handler {
+	corsOpts := cors.Options{
+		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Idempotency-Key"},
+		ExposedHeaders:   []string{"Idempotent-Replay"},
+		AllowCredentials: false,
+	}
+	if origins != "" {
+		corsOpts.AllowedOrigins = strings.Split(origins, ",")
+	}
+	return cors.New(corsOpts).Handler(next)
+}
