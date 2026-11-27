@@ -457,3 +457,27 @@ func TestSlimChain_DropsLoopHistory(t *testing.T) {
 		t.Errorf("slim list carries loop history: %s", b)
 	}
 }
+
+// A history entry without a taskId cannot be matched by id, so it must still
+// be dropped when a live entry of the same step and round exists.
+func TestParseChainResource_LoopHistoryWithoutTaskIDNotDuplicated(t *testing.T) {
+	obj := loadChainFixture(t, "loop-history.json")
+	hist := stepStatusMap(t, obj, "fixloop")["loop"].(map[string]interface{})["history"].([]interface{})
+	for _, h := range hist {
+		hm := h.(map[string]interface{})
+		if hm["step"] == "fix" && hm["round"] == float64(3) {
+			delete(hm, "taskId")
+		}
+	}
+	l := stepByName(t, parseChainResource(obj, nil), "fixloop").Loop
+	if len(l.Rounds) != 3 {
+		t.Fatalf("rounds = %+v", l.Rounds)
+	}
+	r3 := l.Rounds[2]
+	if len(r3.Steps) != 2 {
+		t.Fatalf("round 3 steps = %+v, want fix once and rereview", r3.Steps)
+	}
+	if r3.Steps[0].Name != "fix" || r3.Steps[0].OutputSummary != "" || r3.Steps[0].OutputBytes != len("patched") {
+		t.Errorf("round 3 fix should be the live entry: %+v", r3.Steps[0])
+	}
+}
