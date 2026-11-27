@@ -5,6 +5,7 @@ import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
 import { formatAge, formatCost, formatUptime, formatTimestamp, formatNumber } from '../lib/format'
+import { SnapshotButton } from './SnapshotButton'
 import { PodsPanel } from './PodsPanel'
 import { KnightEventsPanel } from './KnightEventsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
@@ -511,20 +512,26 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
           )}
 
           {/* Workspace snapshots (#470) */}
-          {knightDetail?.workspaceSnapshots && knightDetail.workspaceSnapshots.length > 0 && (
+          {knightDetail && (
             <div>
               <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
                 <Camera className="w-4 h-4" />
-                Workspace snapshots ({knightDetail.workspaceSnapshots.length})
+                Workspace snapshots ({knightDetail.workspaceSnapshots?.length ?? 0})
                 {knightDetail.workspaceSnapshotsCondition && (
                   <span className="text-xs text-gray-500 font-normal">
                     WorkspaceSnapshots: {knightDetail.workspaceSnapshotsCondition.status}
                     {knightDetail.workspaceSnapshotsCondition.reason ? ` (${knightDetail.workspaceSnapshotsCondition.reason})` : ''}
                   </span>
                 )}
+                <span className="ml-auto">
+                  <SnapshotButton name={knight.name} namespace={knight.namespace} knight={knightDetail} onDetail={(d) => { detailAbort.current?.abort(); setDetailLoading(false); setKnightDetail(d) }} />
+                </span>
               </h3>
+              {(knightDetail.workspaceSnapshots?.length ?? 0) === 0 ? (
+                <p className="text-xs text-gray-500 bg-roundtable-slate border border-roundtable-steel/50 rounded-lg px-3 py-2">No snapshots yet</p>
+              ) : (<>
               <ul className="bg-roundtable-slate border border-roundtable-steel/50 rounded-lg divide-y divide-roundtable-steel/30">
-                {knightDetail.workspaceSnapshots.map((snap) => (
+                {knightDetail.workspaceSnapshots!.map((snap) => (
                   <li key={snap.name} className="px-3 py-2 flex items-center gap-2 text-xs">
                     <span className="font-mono text-gray-200 truncate">{sanitizeText(snap.name)}</span>
                     <SnapshotCopyButton name={snap.name} />
@@ -538,6 +545,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
               <p className="text-xs text-gray-500 mt-2">
                 Fork from one with <code className="font-mono">spec.workspace.fromSnapshot</code>
               </p>
+              </>)}
             </div>
           )}
 
