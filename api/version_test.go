@@ -36,8 +36,27 @@ func TestVersionHandler(t *testing.T) {
 }
 
 func TestVersionRouteRequiresAuth(t *testing.T) {
-	h := routerFor(t, nil)
-	if w := do(h, "GET", "/api/version"); w.Code == http.StatusNotFound {
-		t.Fatal("route not registered")
+	t.Setenv("DASHBOARD_API_KEY", "secret")
+	r := setupTestRouter()
+	r.Use(authMiddleware)
+
+	if w := do(r, "GET", "/api/version"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("no key: status %d, want 401", w.Code)
+	}
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("with key: status %d, want 200", w.Code)
+	}
+}
+
+func TestVersionCommitFromLdflags(t *testing.T) {
+	old := commit
+	commit = "abcdef0123"
+	defer func() { commit = old }()
+	if got := currentVersion().Commit; got != "abcdef0123" {
+		t.Errorf("commit %q", got)
 	}
 }

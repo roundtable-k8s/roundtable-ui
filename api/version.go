@@ -10,6 +10,10 @@ import (
 // -ldflags "-X main.version=<v>" (Dockerfile ARG VERSION).
 var version = "dev"
 
+// commit is the git SHA; set with -X main.commit=<sha> (Dockerfile ARG COMMIT).
+// Used when Go's embedded VCS info is absent (the Docker build has no .git).
+var commit = ""
+
 type versionInfo struct {
 	Version   string `json:"version"`
 	Commit    string `json:"commit"`
@@ -19,13 +23,15 @@ type versionInfo struct {
 
 // currentVersion combines the ldflags version with the VCS data Go embeds.
 func currentVersion() versionInfo {
-	v := versionInfo{Version: version}
+	v := versionInfo{Version: version, Commit: commit}
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		v.GoVersion = bi.GoVersion
 		for _, s := range bi.Settings {
 			switch s.Key {
 			case "vcs.revision":
-				v.Commit = s.Value
+				if v.Commit == "" {
+					v.Commit = s.Value
+				}
 			case "vcs.time":
 				v.BuildTime = s.Value
 			}
