@@ -1,20 +1,30 @@
 /** Chat with a knight through the gateway proxy (/api/chat). */
 
-/** Task record from the gateway; cost and tool calls appear when it carries them. */
-export interface ChatTask {
+/** Usage a gateway task record carries; each field is absent when the gateway did not report it. */
+export interface ChatUsage {
+  /** USD; notional (API-equivalent) when billing is "subscription". */
+  cost?: number
+  billing?: string
+  durationMs?: number
+  tokens?: { input: number; output: number }
+  turns?: number
+  toolCalls?: number
+  usageLimited?: boolean
+}
+
+/** Task record from the gateway; usage appears when it carries it. */
+export interface ChatTask extends ChatUsage {
   taskId: string
   runId?: string
   status?: string
   output?: string
   error?: string
   model?: string
-  costUsd?: number
-  toolCalls?: number
   /** Trace ID of the gateway's server span; the UI links it when a trace URL is configured. */
   traceId?: string
 }
 
-export interface ChatTurn {
+export interface ChatTurn extends ChatUsage {
   id: number
   message: string
   taskId?: string
@@ -22,8 +32,6 @@ export interface ChatTurn {
   output?: string
   error?: string
   model?: string
-  costUsd?: number
-  toolCalls?: number
   traceId?: string
 }
 
@@ -53,6 +61,12 @@ export function parseKnights(data: unknown): ChatKnight[] {
   return Array.from(out.values()).sort((a, b) => knightKey(a).localeCompare(knightKey(b)))
 }
 
+function isTokens(v: unknown): v is { input: number; output: number } {
+  return typeof v === 'object' && v !== null
+    && typeof (v as { input?: unknown }).input === 'number'
+    && typeof (v as { output?: unknown }).output === 'number'
+}
+
 export function mergeTurn(turn: ChatTurn, t: ChatTask): ChatTurn {
   return {
     ...turn,
@@ -61,8 +75,13 @@ export function mergeTurn(turn: ChatTurn, t: ChatTask): ChatTurn {
     output: t.output ?? turn.output,
     error: t.error ?? turn.error,
     model: t.model ?? turn.model,
-    costUsd: typeof t.costUsd === 'number' ? t.costUsd : turn.costUsd,
+    cost: typeof t.cost === 'number' ? t.cost : turn.cost,
+    billing: typeof t.billing === 'string' && t.billing !== '' ? t.billing : turn.billing,
+    durationMs: typeof t.durationMs === 'number' ? t.durationMs : turn.durationMs,
+    tokens: isTokens(t.tokens) ? t.tokens : turn.tokens,
+    turns: typeof t.turns === 'number' ? t.turns : turn.turns,
     toolCalls: typeof t.toolCalls === 'number' ? t.toolCalls : turn.toolCalls,
+    usageLimited: typeof t.usageLimited === 'boolean' ? t.usageLimited : turn.usageLimited,
     traceId: t.traceId || turn.traceId,
   }
 }
