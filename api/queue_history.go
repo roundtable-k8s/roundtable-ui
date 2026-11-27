@@ -173,18 +173,9 @@ func newClusterQueueSampler(namespace string) *queueSampler {
 		s.listEvents = func(ctx context.Context) ([]corev1.Event, error) {
 			// Only HPA and KEDA ScaledObject events matter (parseScaleEvent);
 			// list each kind server-side rather than every Event (#411).
-			var all []corev1.Event
-			for _, kind := range scaleEventKinds {
-				list, err := k8sClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
-					FieldSelector: "involvedObject.kind=" + kind,
-					Limit:         scaleEventLimit,
-				})
-				if err != nil {
-					return nil, err
-				}
-				all = append(all, list.Items...)
-			}
-			return all, nil
+			return listScaleEvents(ctx, func(ctx context.Context, opts metav1.ListOptions) (*corev1.EventList, error) {
+				return k8sClient.CoreV1().Events(namespace).List(ctx, opts)
+			})
 		}
 	}
 	return s
@@ -193,7 +184,41 @@ func newClusterQueueSampler(namespace string) *queueSampler {
 // scaleEventKinds are the involvedObject kinds parseScaleEvent understands.
 var scaleEventKinds = []string{"HorizontalPodAutoscaler", "ScaledObject"}
 
-const scaleEventLimit = 500
+const (
+	scaleEventLimit = 500 // page size of each Events list call
+	// scaleEventMaxPages bounds the pages read per kind so a huge namespace
+	// cannot stall the sampler; the newest events are read first.
+	scaleEventMaxPages = 5
+)
+
+// listScaleEvents reads the scale events of every kind, one page of
+// scaleEventLimit at a time, following ListMeta.Continue until the list is
+// exhausted or scaleEventMaxPages pages were read.
+func listScaleEvents(ctx context.Context, list func(context.Context, metav1.ListOptions) (*corev1.EventList, error)) ([]corev1.Event, error) {
+	var all []corev1.Event
+	for _, kind := range scaleEventKinds {
+		opts := metav1.ListOptions{
+			FieldSelector: "involvedObject.kind=" + kind,
+			Limit:         scaleEventLimit,
+		}
+		for page := 1; ; page++ {
+			res, err := list(ctx, opts)
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, res.Items...)
+			if res.Continue == "" {
+				break
+			}
+			if page >= scaleEventMaxPages {
+				slog.WarnContext(ctx, "queue sampler: scale events truncated", "kind", kind, "pages", page, "pageSize", scaleEventLimit)
+				break
+			}
+			opts.Continue = res.Continue
+		}
+	}
+	return all, nil
+}
 
 func (s *queueSampler) capacity() int {
 	if s.interval <= 0 {

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -350,5 +352,71 @@ func TestQueueHistoryHandlers(t *testing.T) {
 	var all []knightQueueHistory
 	if err := json.Unmarshal(w.Body.Bytes(), &all); err != nil || len(all) != 1 || all[0].Knight != "kay" {
 		t.Fatalf("unexpected /api/queues/history body %s", w.Body.String())
+	}
+}
+
+// pagingEvents serves n events of one kind through the Events list contract:
+// Limit is the page size and Continue carries the offset of the next page.
+func pagingEvents(t *testing.T, n int, calls *[]metav1.ListOptions) func(context.Context, metav1.ListOptions) (*corev1.EventList, error) {
+	return func(_ context.Context, opts metav1.ListOptions) (*corev1.EventList, error) {
+		*calls = append(*calls, opts)
+		kind := strings.TrimPrefix(opts.FieldSelector, "involvedObject.kind=")
+		if kind != "HorizontalPodAutoscaler" {
+			return &corev1.EventList{}, nil
+		}
+		start := 0
+		if opts.Continue != "" {
+			v, err := strconv.Atoi(opts.Continue)
+			if err != nil {
+				t.Fatalf("bad continue token %q", opts.Continue)
+			}
+			start = v
+		}
+		end := min(n, start+int(opts.Limit))
+		list := &corev1.EventList{}
+		for i := start; i < end; i++ {
+			list.Items = append(list.Items, corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: strconv.Itoa(i)}})
+		}
+		if end < n {
+			list.Continue = strconv.Itoa(end)
+		}
+		return list, nil
+	}
+}
+
+func TestListScaleEventsFollowsContinue(t *testing.T) {
+	var calls []metav1.ListOptions
+	items, err := listScaleEvents(context.Background(), pagingEvents(t, 1200, &calls))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1200 {
+		t.Fatalf("read %d events, want 1200", len(items))
+	}
+	// 1200 HPA events take three pages of 500; ScaledObject is one empty page.
+	if len(calls) != 4 {
+		t.Fatalf("list calls = %d, want 4", len(calls))
+	}
+	if calls[1].Continue != "500" || calls[2].Continue != "1000" {
+		t.Errorf("continue tokens = %q, %q", calls[1].Continue, calls[2].Continue)
+	}
+	for _, c := range calls {
+		if c.Limit != scaleEventLimit {
+			t.Errorf("page size = %d, want %d", c.Limit, scaleEventLimit)
+		}
+	}
+}
+
+func TestListScaleEventsPageBound(t *testing.T) {
+	var calls []metav1.ListOptions
+	items, err := listScaleEvents(context.Background(), pagingEvents(t, 10000, &calls))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := scaleEventMaxPages * scaleEventLimit; len(items) != want {
+		t.Fatalf("read %d events, want the bound of %d", len(items), want)
+	}
+	if hpa := len(calls) - 1; hpa != scaleEventMaxPages {
+		t.Fatalf("HPA pages = %d, want %d", hpa, scaleEventMaxPages)
 	}
 }

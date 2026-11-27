@@ -128,3 +128,30 @@ func TestGatewayListsPassThroughGatewayErrors(t *testing.T) {
 		t.Errorf("unconfigured: got %d %s", w.Code, w.Body)
 	}
 }
+
+func TestGatewayListLimitClamped(t *testing.T) {
+	r, calls := gatewayListRouter(t, 200, `{"tasks":[],"runs":[]}`)
+	for _, path := range []string{"/api/gateway/tasks?limit=100000", "/api/gateway/runs?limit=100000"} {
+		if w := doReq(r, "GET", path, ""); w.Code != 200 {
+			t.Fatalf("%s: got %d %s", path, w.Code, w.Body)
+		}
+	}
+	for _, c := range *calls {
+		if c.query != "limit=200" {
+			t.Errorf("%s gateway query = %q, want limit=200", c.path, c.query)
+		}
+	}
+}
+
+func TestGatewayListLimitAtOrBelowCapUnchanged(t *testing.T) {
+	r, calls := gatewayListRouter(t, 200, `{}`)
+	if w := doReq(r, "GET", "/api/gateway/tasks?limit=200", ""); w.Code != 200 {
+		t.Fatalf("got %d", w.Code)
+	}
+	if q := (*calls)[0].query; q != "limit=200" {
+		t.Errorf("query = %q", q)
+	}
+	if w := doReq(r, "GET", "/api/gateway/tasks?limit=0", ""); w.Code != 400 {
+		t.Errorf("limit=0 got %d, want 400", w.Code)
+	}
+}
