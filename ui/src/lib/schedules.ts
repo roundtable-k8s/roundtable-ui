@@ -46,7 +46,7 @@ export interface Schedule {
   concurrency?: ScheduleConcurrency
   /** Seconds after a missed fire time during which it may still start; unset means none. */
   startingDeadlineSeconds?: number
-  /** Who suspended the schedule, from its suspend annotation. */
+  /** What suspends the schedule: "spec", "annotation" or both, comma-separated ("spec,annotation"). */
   suspendedBy?: string
 }
 
@@ -130,6 +130,13 @@ export function describePolicy(s: Pick<Schedule, 'concurrency'>): string {
   const c = s.concurrency
   if (!c?.policy) return ''
   return c.maxActive && c.maxActive > 0 ? `${c.policy}, up to ${c.maxActive} active` : c.policy
+}
+
+/** "annotation", or "spec and annotation" for "spec,annotation"; "" when nothing suspends it. */
+export function describeSuspension(s: Pick<Schedule, 'suspendedBy'>): string {
+  const parts = (s.suspendedBy ?? '').split(',').map((p) => p.trim()).filter(Boolean)
+  if (parts.length <= 1) return parts[0] ?? ''
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
 }
 
 /** "5m 0s" for a starting deadline; "none" when unset. */

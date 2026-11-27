@@ -9,7 +9,7 @@ import { SafeMarkdown } from '../components/SafeMarkdown'
 import { TraceLink } from '../components/TraceLink'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
 import {
-  RUN_HISTORY_LIMIT, describePolicy, describeDeadline, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass, phaseToOutcome,
+  RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass, phaseToOutcome,
   runResultText, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -69,27 +69,21 @@ function ScheduleSummary({ s }: { s: Schedule }) {
           </dd>
         </div>
       </dl>
-      {(s.concurrency || s.startingDeadlineSeconds !== undefined || s.suspendedBy) && (
+      {(s.concurrency || s.startingDeadlineSeconds !== undefined || describeSuspension(s)) && (
         <section aria-label="policy" className="mt-4 border-t border-roundtable-steel pt-3">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-gray-500">Policy</dt>
               <dd className="text-white">{describePolicy(s) || '—'}</dd>
             </div>
-            {s.concurrency?.maxActive ? (
-              <div>
-                <dt className="text-gray-500">Max active</dt>
-                <dd className="text-white">{s.concurrency.maxActive}</dd>
-              </div>
-            ) : null}
             <div>
               <dt className="text-gray-500">Starting deadline</dt>
               <dd className="text-white">{describeDeadline(s)}</dd>
             </div>
-            {s.suspendedBy && (
+            {describeSuspension(s) && (
               <div>
-                <dt className="text-gray-500">Suspended by</dt>
-                <dd className="text-white">{s.suspendedBy} <span className="text-gray-500">· annotation</span></dd>
+                <dt className="text-gray-500">Suspension source</dt>
+                <dd className="text-white">{describeSuspension(s)}</dd>
               </div>
             )}
           </dl>
