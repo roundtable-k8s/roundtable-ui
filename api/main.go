@@ -84,7 +84,9 @@ type KnightStatus struct {
 	Restarts  int32  `json:"restarts"`
 	Age       string `json:"age"`
 	// CreatedAt is the pod's creation time (the Knight CR's when there is no pod), RFC 3339.
-	CreatedAt       string            `json:"createdAt,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	// StartedAt is when the first container started running (falls back to the pod start time); empty without a pod.
+	StartedAt       string            `json:"startedAt,omitempty"`
 	Image           string            `json:"image"`
 	Skills          int               `json:"skills"`
 	NixTools        int               `json:"nixTools"`
@@ -772,6 +774,7 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 	podStatus := "offline"
 	var restarts int32
 	var ready bool
+	var startedAt string
 	var image string
 	var labels map[string]string
 	age := time.Since(cr.GetCreationTimestamp().Time).Round(time.Second).String()
@@ -783,6 +786,9 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 		}
 		age = time.Since(pod.CreationTimestamp.Time).Round(time.Second).String()
 		createdAt = pod.CreationTimestamp.UTC().Format(time.RFC3339)
+		if pod.Status.StartTime != nil {
+			startedAt = pod.Status.StartTime.UTC().Format(time.RFC3339)
+		}
 		if len(pod.Spec.Containers) > 0 {
 			image = pod.Spec.Containers[0].Image
 		}
@@ -790,6 +796,9 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 			cs := pod.Status.ContainerStatuses[0]
 			restarts = cs.RestartCount
 			ready = cs.Ready
+			if r := cs.State.Running; r != nil && !r.StartedAt.IsZero() {
+				startedAt = r.StartedAt.UTC().Format(time.RFC3339)
+			}
 			if ready {
 				podStatus = "online"
 			} else if pod.Status.Phase == "Running" {
@@ -825,6 +834,7 @@ func buildKnightStatus(cr *unstructured.Unstructured, pod *corev1.Pod, scaling *
 		Restarts:           restarts,
 		Age:                age,
 		CreatedAt:          createdAt,
+		StartedAt:          startedAt,
 		Image:              image,
 		Labels:             labels,
 		Phase:              getStr(status, "phase"),
