@@ -140,4 +140,19 @@ describe('FailedTasksPage', () => {
     await userEvent.selectOptions(screen.getByLabelText('State'), 'open')
     await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith('/api/dead-letters?state=open', expect.anything()))
   })
+
+  it('marks the rows stale while a response for another state is pending', async () => {
+    renderPage()
+    await screen.findAllByTestId('dead-letter-row')
+    const box = screen.getByTestId('dead-letters-rows')
+    expect(box).toHaveAttribute('aria-busy', 'false')
+    let resolveOpen!: (v: unknown) => void
+    apiGet.mockImplementationOnce(() => new Promise((r) => { resolveOpen = r }))
+    await userEvent.selectOptions(screen.getByLabelText('State'), 'open')
+    await waitFor(() => expect(box).toHaveAttribute('aria-busy', 'true'))
+    expect(box.className).toContain('opacity-50')
+    await act(async () => { resolveOpen({ deadLetters: letters }) })
+    expect(box).toHaveAttribute('aria-busy', 'false')
+    expect(box.className).not.toContain('opacity-50')
+  })
 })

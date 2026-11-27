@@ -1,3 +1,4 @@
+import React from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -70,6 +71,17 @@ describe('App shell accessibility', { timeout: 15000 }, () => {
     expect(screen.getByText('Page not found')).toBeTruthy()
     expect(document.title).toBe('Page not found - Round Table')
     expect(screen.getByRole('link', { name: 'Back to Command Center' }).getAttribute('href')).toBe('/')
+  })
+
+  it('renders the not-found title as h1 and keeps ?table= on the way back', () => {
+    renderAt('/does-not-exist?table=dev')
+    expect(screen.getByRole('heading', { level: 1, name: 'Page not found' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to Command Center' }).getAttribute('href')).toBe('/?table=dev')
+  })
+
+  it('does not focus main on first load, even when effects run twice (StrictMode)', () => {
+    render(<React.StrictMode><MemoryRouter initialEntries={['/']}><App /></MemoryRouter></React.StrictMode>)
+    expect(document.activeElement).not.toBe(document.getElementById('main'))
   })
 })
 

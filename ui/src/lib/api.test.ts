@@ -226,6 +226,7 @@ describe('401 and 403 without a body message', () => {
     expect(err.message).toBe('Not signed in or not allowed (401 Unauthorized)')
 
     fetchMock.mockResolvedValue(res(403, ''))
+    expect((await apiGet('/x').catch((e) => e)).message).toBe('Not signed in or not allowed (403)')
     const forbidden = await apiGet('/x').catch((e) => e)
     expect(forbidden.status).toBe(403)
     expect(forbidden.message).toContain('Not signed in or not allowed')
@@ -239,5 +240,21 @@ describe('401 and 403 without a body message', () => {
   it('other statuses still show the status line', async () => {
     fetchMock.mockResolvedValue(res(500, '', 'Internal Server Error'))
     expect((await apiGet('/x').catch((e) => e)).message).toBe('500 Internal Server Error')
+  })
+})
+
+describe('caller abort after headers', () => {
+  it('still cancels the body read', async () => {
+    const ctl = new AbortController()
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+      const body = new ReadableStream({
+        start(c) { init.signal?.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError'))) },
+      })
+      return Promise.resolve(new Response(body, { status: 200 }))
+    })
+    const response = await apiFetch('/x', { signal: ctl.signal })
+    const read = response.text()
+    ctl.abort()
+    await expect(read).rejects.toMatchObject({ name: 'AbortError' })
   })
 })

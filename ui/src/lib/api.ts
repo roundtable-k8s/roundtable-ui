@@ -57,7 +57,7 @@ async function toApiError(res: Response): Promise<ApiError> {
   }
   if (!message) {
     message = res.status === 401 || res.status === 403
-      ? `Not signed in or not allowed (${res.status} ${res.statusText})`.trim()
+      ? `Not signed in or not allowed (${res.status}${res.statusText ? ` ${res.statusText}` : ''})`
       : `${res.status} ${res.statusText}`
   }
   return new ApiError(res.status, message, field)
@@ -89,9 +89,11 @@ export async function apiFetch(url: string, options?: ApiRequestInit): Promise<R
     ? setTimeout(() => { timedOut = true; controller.abort() }, timeoutMs)
     : undefined
 
+  let failed = false
   try {
     return await fetch(url, { ...init, headers, signal: controller.signal })
   } catch (e) {
+    failed = true
     if (timedOut) {
       const method = (init.method ?? 'GET').toUpperCase()
       throw new ApiError(0, `Request timed out after ${describeSeconds(timeoutMs)}: ${method} ${pathOf(url)}`)
@@ -99,7 +101,8 @@ export async function apiFetch(url: string, options?: ApiRequestInit): Promise<R
     throw e
   } finally {
     clearTimeout(timer)
-    callerSignal?.removeEventListener('abort', onCallerAbort)
+    // On success keep the listener: aborting the caller's signal must still cancel the body read.
+    if (failed) callerSignal?.removeEventListener('abort', onCallerAbort)
   }
 }
 
