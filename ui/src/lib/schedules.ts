@@ -62,6 +62,10 @@ export interface ScheduleRun {
   resultAvailable: boolean
   /** 32-hex trace ID of the run, when the gateway knows it. */
   traceId?: string
+  /** Knight targets only. */
+  turns?: number
+  /** Knight targets only; absent means unknown, not 0. */
+  toolCalls?: number
 }
 
 export interface ScheduleRunStep {
@@ -72,6 +76,40 @@ export interface ScheduleRunStep {
   outputTruncated?: boolean
 }
 
+/** A pull request a task opened or updated (gateway PRRef). */
+export interface ScheduleRunPR {
+  repo?: string
+  number?: number
+  url?: string
+  action?: string
+}
+
+/** The task a knight-target run created. */
+export interface ScheduleRunTask {
+  run?: string
+  knight?: string
+  status?: string
+  output?: string
+  error?: string
+  model?: string
+  verdict?: string
+  prs?: ScheduleRunPR[]
+  traceId?: string
+  createdAt?: string
+  completedAt?: string
+}
+
+/** The mission a mission-target run created. */
+export interface ScheduleRunMission {
+  name?: string
+  namespace?: string
+  phase?: string
+  done?: boolean
+  result?: string
+  traceId?: string
+  totalCost?: string
+}
+
 /** A run's result (GET …/runs/{run}). */
 export interface ScheduleRunResult {
   schedule: string
@@ -79,7 +117,9 @@ export interface ScheduleRunResult {
   run: string
   chain?: string
   namespace?: string
-  phase: string
+  phase?: string
+  task?: ScheduleRunTask
+  mission?: ScheduleRunMission
   done?: boolean
   createdAt?: string
   startedAt?: string
@@ -198,10 +238,30 @@ export function outcomeClass(outcome: string): string {
  */
 export function runResultText(r: ScheduleRunResult): string {
   if (r.output) return r.output
+  if (r.target === 'knight' || (!r.target && r.task)) return r.task?.output || r.task?.error || ''
+  if (r.target === 'mission' || (!r.target && r.mission)) return r.mission?.result || ''
   const parts = (r.steps ?? [])
     .filter((s) => s.output || s.error)
     .map((s) => `## ${s.name}\n\n${s.output ?? ''}${s.error ? `${s.output ? '\n\n' : ''}Error: ${s.error}` : ''}`)
   return parts.join('\n\n')
+}
+
+/** Outcome of a run result: the phase, else the knight task status or mission phase. */
+/** "repo#12", or "repo" / "#12" / "" for whatever the PR reference carries. */
+export function prLabel(pr: ScheduleRunPR): string {
+  return `${pr.repo ?? ''}${pr.number != null ? `#${pr.number}` : ''}`
+}
+
+export function runResultOutcome(r: ScheduleRunResult): string {
+  return phaseToOutcome(r.phase || r.task?.status || r.mission?.phase || '')
+}
+
+/** "3 turns · 12 tool calls"; tool calls are left out when unreported; "" when nothing is reported. */
+export function describeTurns(r: Pick<ScheduleRun, 'turns' | 'toolCalls'>): string {
+  const parts: string[] = []
+  if (r.turns != null) parts.push(`${r.turns} ${r.turns === 1 ? 'turn' : 'turns'}`)
+  if (r.toolCalls != null) parts.push(`${r.toolCalls} ${r.toolCalls === 1 ? 'tool call' : 'tool calls'}`)
+  return parts.join(' · ')
 }
 
 export interface ScheduleList {
