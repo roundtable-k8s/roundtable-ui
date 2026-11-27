@@ -70,11 +70,56 @@ describe('ChatPage', () => {
     expect(screen.getByText('hello <b>there</b>')).toBeInTheDocument()
     expect(await screen.findByText('run-1')).toBeInTheDocument()
 
-    taskStatus = { taskId: 't1', status: 'succeeded', output: 'hi back', model: 'opus', costUsd: 0.5, toolCalls: 3 }
+    taskStatus = { taskId: 't1', status: 'succeeded', output: 'hi back', model: 'opus', cost: 0.5, toolCalls: 3 }
     expect(await screen.findByText('hi back', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByText('Model opus')).toBeInTheDocument()
     expect(screen.getByText('$0.50')).toBeInTheDocument()
     expect(screen.getByText('3 tool calls')).toBeInTheDocument()
+  })
+
+  it('shows the usage the gateway sends: cost, tokens, turns, tool calls and duration', async () => {
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    taskStatus = {
+      taskId: 't1', status: 'succeeded', output: 'done', model: 'opus', cost: 0.42, billing: 'api',
+      tokens: { input: 1200, output: 300 }, turns: 3, toolCalls: 2, durationMs: 8200,
+    }
+    expect(await screen.findByText('done', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getByText('$0.42')).toBeInTheDocument()
+    expect(screen.queryByText('notional')).toBeNull()
+    expect(screen.getByText('1.2k in / 300 out')).toBeInTheDocument()
+    expect(screen.getByText('3 turns')).toBeInTheDocument()
+    expect(screen.getByText('2 tool calls')).toBeInTheDocument()
+    expect(screen.getByText('8.2s')).toBeInTheDocument()
+  })
+
+  it('marks the cost of a subscription-billed reply as notional', async () => {
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    taskStatus = { taskId: 't1', status: 'succeeded', output: 'sub', cost: 0.3, billing: 'subscription' }
+    expect(await screen.findByText('sub', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getByText('$0.30')).toBeInTheDocument()
+    expect(screen.getByText('notional')).toBeInTheDocument()
+    expect(screen.queryByText('tool calls')).toBeNull()
+  })
+
+  it('shows no usage labels when the reply carries none', async () => {
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    taskStatus = { taskId: 't1', status: 'succeeded', output: 'bare' }
+    expect(await screen.findByText('bare', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.queryByText(/\$0\.00|undefined|tool calls|turns?$|notional/)).toBeNull()
+  })
+
+  it('flags a reply that hit the usage limit', async () => {
+    render(<MemoryRouter initialEntries={['/chat?knight=galahad']}><ChatPage /></MemoryRouter>)
+    await userEvent.type(await screen.findByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    taskStatus = { taskId: 't1', status: 'failed', error: 'stopped', usageLimited: true }
+    expect(await screen.findByText('Usage limit reached', {}, { timeout: 4000 })).toBeInTheDocument()
   })
 
   it('stops polling and fails the turn when the task is gone (404)', async () => {

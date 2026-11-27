@@ -8,7 +8,9 @@ import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
 import { UntrustedText } from '../components/UntrustedText'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { TraceLink } from '../components/TraceLink'
-import { formatCost } from '../lib/format'
+import { formatMsLadder } from '../lib/format'
+import { tokensText } from '../lib/cost'
+import { CostTag } from '../components/CostTag'
 import { sanitizeText } from '../lib/untrusted'
 import { isFinalStatus, mergeTurn, knightKey, parseKnights, type ChatKnight, type ChatTask, type ChatTurn } from '../lib/chat'
 
@@ -206,7 +208,10 @@ export function ChatPage() {
                 </div>
                 <div className="bg-roundtable-slate border border-roundtable-steel rounded-lg p-3 mr-8">
                   {t.status === 'failed' ? (
-                    <UntrustedText text={t.error || 'Task failed'} as="p" className="text-sm text-red-400 whitespace-pre-wrap break-words" />
+                    <>
+                      <UntrustedText text={t.error || 'Task failed'} as="p" className="text-sm text-red-400 whitespace-pre-wrap break-words" />
+                      {t.usageLimited && <p className="mt-1 text-xs text-yellow-400">Usage limit reached</p>}
+                    </>
                   ) : t.status === 'succeeded' ? (
                     <UntrustedText text={t.output ?? ''} as="p" className="text-sm text-gray-200 whitespace-pre-wrap break-words" />
                   ) : (
@@ -219,8 +224,11 @@ export function ChatPage() {
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500">
                     {t.model && <span>Model {sanitizeText(t.model)}</span>}
-                    {t.costUsd !== undefined && <span>{formatCost(t.costUsd)}</span>}
+                    {t.cost !== undefined && <CostTag costUSD={String(t.cost)} notional={t.billing === 'subscription'} />}
+                    {t.tokens && <span>{tokensText(t.tokens)}</span>}
+                    {t.turns !== undefined && <span>{t.turns} {t.turns === 1 ? 'turn' : 'turns'}</span>}
                     {t.toolCalls !== undefined && <span>{t.toolCalls} tool calls</span>}
+                    {t.durationMs !== undefined && <span>{formatMsLadder(t.durationMs)}</span>}
                     {t.taskId && (
                       <button type="button" className="inline-flex items-center gap-1 text-roundtable-gold hover:underline"
                         onClick={() => setActivityTask(t.taskId!)}>
