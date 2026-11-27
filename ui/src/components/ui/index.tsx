@@ -132,22 +132,22 @@ export function RefreshButton({ onClick, loading = false, disabled = false, upda
   /** Epoch ms of the last successful fetch; shown as "Updated hh:mm:ss" before the button. */
   updatedAt?: number | null
 }) {
-  const stamp = updatedAt != null ? new Date(updatedAt).toISOString() : null
+  const stamp = updatedAt != null ? new Date(updatedAt) : null
   return (
     <>
       {stamp && (
-        <span className="text-xs text-gray-500" aria-live="off" title={new Date(updatedAt!).toLocaleString()}>
+        <span className="text-xs text-gray-500" aria-live="off" title={stamp.toLocaleString()}>
           Updated {formatTimestamp(stamp)}
         </span>
       )}
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-roundtable-steel/50 hover:bg-roundtable-steel text-gray-300 rounded-lg transition-colors disabled:opacity-50"
-    >
-      <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-      Refresh
-    </button>
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-roundtable-steel/50 hover:bg-roundtable-steel text-gray-300 rounded-lg transition-colors disabled:opacity-50"
+      >
+        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        Refresh
+      </button>
     </>
   )
 }

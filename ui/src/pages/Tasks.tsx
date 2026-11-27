@@ -140,7 +140,7 @@ function PullRequests({ prs }: { prs?: PullRequestRef[] }) {
         const href = safeUrl(pr.url)
         const label = sanitizeText(prLabel(pr))
         return (
-          <li key={i}>
+          <li key={pr.url || i}>
             {/^https?:/i.test(href) ? (
               <a href={href} target="_blank" rel="noopener noreferrer" className="text-roundtable-gold hover:underline">{label}</a>
             ) : (

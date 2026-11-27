@@ -94,7 +94,7 @@ describe('ChainsPage fan-out', () => {
   it('names the step item table and scopes its headers', async () => {
     renderPage('/chains?chain=doc-sweep')
     const step = await screen.findByRole('region', { name: 'step review-each' })
-    const table = within(step).getByRole('table', { name: 'Chain steps' })
+    const table = within(step).getByRole('table', { name: 'review-each items' })
     for (const th of within(table).getAllByRole('columnheader')) expect(th).toHaveAttribute('scope', 'col')
   })
 

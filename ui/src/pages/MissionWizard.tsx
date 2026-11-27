@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useTables } from '../hooks/useTables'
 import { validateMissionForm, firstInvalidStep, stepOfField } from '../lib/missionForm'
 import { Target, Plus, X, ArrowLeft, Rocket, Brain, Settings } from 'lucide-react'
@@ -61,6 +61,7 @@ interface MissionWizardProps {
 }
 
 export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
+  const blockedHintId = useId()
   const [form, setForm] = useState<MissionForm>({ ...INITIAL_FORM })
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
@@ -158,7 +159,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   return (
     <Modal onClose={onClose} closeOnEscape={false} title="Create Mission" icon={<Target className="w-5 h-5 text-roundtable-gold" />}>
         {/* Step indicators */}
-        <span id="wiz-blocked-hint" className="sr-only">Fix the earlier step first</span>
+        <span id={blockedHintId} className="sr-only">Fix the earlier step first</span>
         <ol aria-label="Mission steps" className="flex items-center gap-2 px-6 pt-4">
           {steps.map((s, i) => {
             const blocked = invalidStep >= 0 && i > invalidStep
@@ -170,7 +171,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   disabled={blocked}
                   aria-current={i === step ? 'step' : undefined}
                   title={blocked ? 'Fix the earlier step first' : undefined}
-                  aria-describedby={blocked ? 'wiz-blocked-hint' : undefined}
+                  aria-describedby={blocked ? blockedHintId : undefined}
                   className={`w-full text-center text-xs py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     i === step
                       ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
