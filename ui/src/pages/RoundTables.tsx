@@ -4,7 +4,7 @@ import { Crown, Shield, DollarSign, ChevronDown, Settings, CheckSquare } from 'l
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
-import { budgetText, formatCost } from '../lib/format'
+import { budgetText, countLabel, formatCost } from '../lib/format'
 import type { RoundTable } from '../lib/types'
 import { PageHeader, RefreshButton, ListState, PhaseBadge, ProgressBar } from '../components/ui'
 
@@ -25,7 +25,7 @@ export function RoundTablesPage() {
 
   return (
     <div>
-      <PageHeader icon={Crown} title="Round Tables">
+      <PageHeader icon={Crown} title="Round Tables" subtitle={loading || (error && roundTables.length === 0) ? undefined : countLabel(roundTables.length, roundTables.length, 'round tables')}>
         <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />
       </PageHeader>
 

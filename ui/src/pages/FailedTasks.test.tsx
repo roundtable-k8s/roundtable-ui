@@ -57,6 +57,7 @@ describe('FailedTasksPage', () => {
     renderPage()
     expect(await screen.findAllByTestId('dead-letter-row')).toHaveLength(2)
     expect(apiGet).toHaveBeenCalledWith('/api/dead-letters', expect.anything())
+    expect(screen.getByText('2 failed tasks')).toBeInTheDocument()
     expect(screen.getByText('deadline exceeded')).toBeInTheDocument()
   })
 
@@ -77,6 +78,7 @@ describe('FailedTasksPage', () => {
     const rows = await screen.findAllByTestId('dead-letter-row')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('rt-ui')
+    expect(screen.getByText('1 failed task')).toBeInTheDocument()
   })
 
   it('applies a ?table= switch made while a slow response is in flight', async () => {
@@ -152,6 +154,7 @@ describe('FailedTasksPage', () => {
     apiGet.mockResolvedValue({ deadLetters: Array.from({ length: 100 }, (_, i) => dl({ taskId: `t${i}` })) })
     renderPage()
     expect(await screen.findByTestId('dead-letters-cap')).toHaveTextContent('Showing the newest 100')
+    expect(screen.getByText('100+ failed tasks')).toBeInTheDocument()
   })
 
   it('shows no cap note when everything is listed', async () => {

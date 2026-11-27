@@ -80,6 +80,7 @@ describe('MissionsPage', () => {
     }
     renderPage()
     expect(screen.getAllByTestId('mission-card').map((c) => c.textContent)).toEqual(['a', 'b', 'c'])
+    expect(screen.getByText('3 missions')).toBeInTheDocument()
     expect(screen.getByText('Total Missions').closest('div.rounded-xl')).toHaveTextContent('3')
     expect(screen.getByText('$3.50')).toBeInTheDocument()
   })
@@ -90,6 +91,7 @@ describe('MissionsPage', () => {
     const filters = screen.getByText('Phase:').nextElementSibling as HTMLElement
     await userEvent.click(within(filters).getByText('Failed'))
     expect(screen.getAllByTestId('mission-card').map((c) => c.textContent)).toEqual(['b'])
+    expect(screen.getByText('1 of 2 missions')).toBeInTheDocument()
 
     await userEvent.click(within(filters).getByText('Expired'))
     expect(screen.getByText('No missions match your filters.')).toBeInTheDocument()

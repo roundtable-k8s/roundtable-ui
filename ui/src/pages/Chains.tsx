@@ -6,7 +6,7 @@ import { UntrustedText } from '../components/UntrustedText'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
 import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
-import { formatDuration, formatRelativeTime, until } from '../lib/format'
+import { countLabel, formatDuration, formatRelativeTime, until } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainRunGroup, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
 import { TraceLink } from '../components/TraceLink'
@@ -908,7 +908,7 @@ export function ChainsPage() {
 
   return (
     <div>
-      <PageHeader icon={Link} title="Chain Executions">
+      <PageHeader icon={Link} title="Chain Executions" subtitle={(loading || error) && chains.length === 0 ? undefined : countLabel(chains.length, listTotal ?? chains.length, 'chains')}>
         {connected ? (
           <span className="flex items-center gap-1.5 text-xs text-green-400">
             <Radio className="w-3 h-3" />

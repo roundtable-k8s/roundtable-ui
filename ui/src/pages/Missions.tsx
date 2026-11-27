@@ -8,7 +8,7 @@ import { MissionCard } from '../components/MissionCard'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
 import { MissionWizard } from './MissionWizard'
 import { PageHeader, RefreshButton, StatCard, ListState } from '../components/ui'
-import { formatCost } from '../lib/format'
+import { countLabel, formatCost } from '../lib/format'
 
 const PHASE_FILTERS = [
   'All',
@@ -52,7 +52,7 @@ export function MissionsPage() {
   return (
     <div>
       {/* Header */}
-      <PageHeader icon={Target} title="Missions">
+      <PageHeader icon={Target} title="Missions" subtitle={loading || (error && missions.length === 0) ? undefined : countLabel(filteredMissions.length, missions.length, 'missions')}>
         <button
           onClick={() => setShowWizard(true)}
           className="flex items-center gap-2 px-3 py-1.5 text-sm bg-roundtable-gold/20 border border-roundtable-gold/30 text-roundtable-gold rounded-lg hover:bg-roundtable-gold/30 transition-colors"

@@ -4,7 +4,7 @@ import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, ListState, TableBadge } from '../components/ui'
-import { formatRelativeTime, until } from '../lib/format'
+import { countLabel, formatRelativeTime, until } from '../lib/format'
 import { chainLink, TRIGGER_DOCS_URL, type Trigger } from '../lib/triggers'
 
 const POLL_MS = 10000
@@ -98,7 +98,7 @@ export function TriggersPage() {
   const { data, loading, error, updatedAt, refresh } = usePolledFetch<Trigger[]>(withTable('/api/triggers', table), POLL_MS, [])
   return (
     <div>
-      <PageHeader icon={Zap} title="Triggers" subtitle="What starts your chains: schedules, NATS subjects and webhooks">
+      <PageHeader icon={Zap} title="Triggers" subtitle={[!loading && !(error && data.length === 0) && countLabel(data.length, data.length, 'triggers'), 'What starts your chains: schedules, NATS subjects and webhooks'].filter(Boolean).join(' · ')}>
         <Link to="/schedules" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
           <CalendarClock className="w-4 h-4" aria-hidden /> Schedules
         </Link>

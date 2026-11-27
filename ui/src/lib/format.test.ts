@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  budgetText, formatCost, formatDateTime, formatDay, formatNumber, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
+  budgetText, countLabel, formatCost, formatDateTime, formatDay, formatNumber, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
   formatSecondsLadder, formatTimestamp, formatTimestampOrDate, formatUptime, until,
 } from './format'
 
@@ -186,5 +186,21 @@ describe('formatDay', () => {
   })
   it('returns unparsable input as-is', () => {
     expect(formatDay('nope')).toBe('nope')
+  })
+})
+
+describe('countLabel', () => {
+  it('pluralises', () => {
+    expect(countLabel(3, 3, 'triggers')).toBe('3 triggers')
+    expect(countLabel(1, 1, 'trigger')).toBe('1 trigger')
+    expect(countLabel(1, 1, 'triggers')).toBe('1 trigger')
+    expect(countLabel(0, 0, 'triggers')).toBe('0 triggers')
+  })
+  it('says N of M when a filter hides some', () => {
+    expect(countLabel(5, 12, 'missions')).toBe('5 of 12 missions')
+    expect(countLabel(0, 1, 'missions')).toBe('0 of 1 mission')
+  })
+  it('uses an explicit singular', () => {
+    expect(countLabel(1, 1, 'entries', 'entry')).toBe('1 entry')
   })
 })

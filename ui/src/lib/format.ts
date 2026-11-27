@@ -155,3 +155,13 @@ export function until(iso?: string): string {
   if (sec < 86400) return `in ${Math.floor(sec / 3600)}h`
   return `in ${Math.floor(sec / 86400)}d`
 }
+
+/**
+ * Item count for a page header: "3 triggers", "1 trigger", or "5 of 12 missions"
+ * when a filter hides some. Pass `noun1` when the singular is not `noun` minus its "s".
+ */
+export function countLabel(shown: number, total: number, noun: string, noun1?: string): string {
+  const one = noun1 ?? (noun.endsWith('s') ? noun.slice(0, -1) : noun)
+  if (shown < total) return `${shown} of ${total} ${total === 1 ? one : noun}`
+  return `${shown} ${shown === 1 ? one : noun}`
+}

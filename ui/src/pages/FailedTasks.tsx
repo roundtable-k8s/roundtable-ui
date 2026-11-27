@@ -6,6 +6,7 @@ import { inTable } from '../lib/tables'
 import { apiGet, apiPost } from '../lib/api'
 import { PageHeader, RefreshButton } from '../components/ui'
 import { DeadLettersView } from '../components/DeadLettersView'
+import { countLabel } from '../lib/format'
 import { DEAD_LETTER_CAP } from '../hooks/useOpenDeadLetters'
 import { DEAD_LETTERS_URL, deadLetterUrl, type DeadLetter, type RetryResult } from '../lib/deadLetters'
 
@@ -67,7 +68,7 @@ export function FailedTasksPage() {
 
   return (
     <div>
-      <PageHeader icon={Skull} title="Failed & lost">
+      <PageHeader icon={Skull} title="Failed & lost" subtitle={(loading || error) && entries.length === 0 ? undefined : capped ? `${entries.length}+ failed tasks` : countLabel(entries.length, entries.length, 'failed tasks', 'failed task')}>
         <RefreshButton onClick={load} loading={loading} />
       </PageHeader>
       <div className="mb-4">
