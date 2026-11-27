@@ -39,6 +39,8 @@ func scheduleRoutes(api *mux.Router, g *gatewayClient, wrapRun func(http.Handler
 	api.HandleFunc("/schedules/{namespace}/{name}/runs/{run}", scheduleRunResultHandler(g)).Methods("GET")
 	api.HandleFunc("/schedules/{namespace}/{name}/next", scheduleNextHandler(g)).Methods("GET")
 	api.HandleFunc("/schedules/preview", schedulePreviewHandler(g)).Methods("GET")
+	api.HandleFunc("/schedules/suspend", scheduleTableActionHandler(g, "suspend")).Methods("POST")
+	api.HandleFunc("/schedules/resume", scheduleTableActionHandler(g, "resume")).Methods("POST")
 }
 
 // scheduleCountQuery validates the optional ?count= of the next-fire-times
@@ -124,6 +126,46 @@ func readScheduleBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 		return nil, false
 	}
 	return b, true
+}
+
+// scheduleTableActionHandler proxies POST /v1/schedules/suspend and
+// POST /v1/schedules/resume: every schedule of one table at once. The body
+// must name the table; an optional namespace narrows it. Only those two
+// fields are forwarded. The gateway's answer ({changed, unchanged, failed})
+// is relayed with its status.
+func scheduleTableActionHandler(g *gatewayClient, action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw, ok := readScheduleBody(w, r)
+		if !ok {
+			return
+		}
+		var in struct {
+			Table     *string `json:"table"`
+			Namespace *string `json:"namespace"`
+		}
+		if err := json.Unmarshal(raw, &in); err != nil {
+			jsonError(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		if in.Table == nil || !validK8sName.MatchString(*in.Table) {
+			jsonError(w, "table is required (a Kubernetes name)", http.StatusBadRequest)
+			return
+		}
+		out := map[string]string{"table": *in.Table}
+		if in.Namespace != nil && *in.Namespace != "" {
+			if !validK8sName.MatchString(*in.Namespace) {
+				jsonError(w, "Invalid namespace", http.StatusBadRequest)
+				return
+			}
+			out["namespace"] = *in.Namespace
+		}
+		body, err := json.Marshal(out)
+		if err != nil {
+			jsonError(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		g.relay(w, r, http.MethodPost, "/v1/schedules/"+action, nil, body)
+	}
 }
 
 // scheduleListHandler proxies GET /v1/schedules?namespace=&table=.

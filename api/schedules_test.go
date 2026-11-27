@@ -292,3 +292,90 @@ func TestScheduleManifestBodyTooLarge(t *testing.T) {
 		t.Fatalf("got %d %s", w.Code, w.Body)
 	}
 }
+
+func TestScheduleTableActionForwardsBody(t *testing.T) {
+	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+		io.WriteString(w, `{"changed":["a"],"unchanged":[],"failed":[]}`)
+	}}
+	srv := f.server(t)
+	r := scheduleRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+
+	cases := []struct{ action, body, wantBody string }{
+		{"suspend", `{"table":"knights"}`, `{"table":"knights"}`},
+		{"resume", `{"table":"knights","namespace":"roundtable"}`, `{"namespace":"roundtable","table":"knights"}`},
+		{"suspend", `{"table":"knights","namespace":"","bogus":1}`, `{"table":"knights"}`},
+	}
+	for i, c := range cases {
+		w := doReq(r, "POST", "/api/schedules/"+c.action, c.body)
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"changed":["a"]`) {
+			t.Errorf("%s %s: got %d %s", c.action, c.body, w.Code, w.Body)
+			continue
+		}
+		got := f.calls[i]
+		if got.method != "POST" || got.path != "/v1/schedules/"+c.action || got.query != "" || got.auth != "Bearer tok" || got.body != c.wantBody {
+			t.Errorf("%s %s: gateway call %+v", c.action, c.body, got)
+		}
+	}
+}
+
+func TestScheduleTableActionValidation(t *testing.T) {
+	f := &fakeGateway{}
+	srv := f.server(t)
+	r := scheduleRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+
+	for _, body := range []string{
+		``,
+		`not json`,
+		`[]`,
+		`{}`,
+		`{"table":null}`,
+		`{"table":""}`,
+		`{"table":42}`,
+		`{"table":"Knights"}`,
+		`{"table":"knights","namespace":"Bad_NS"}`,
+		`{"table":"knights","namespace":42}`,
+	} {
+		for _, action := range []string{"suspend", "resume"} {
+			w := doReq(r, "POST", "/api/schedules/"+action, body)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("%s %q: got %d %s", action, body, w.Code, w.Body)
+			}
+		}
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("invalid bodies reached the gateway: %+v", f.calls)
+	}
+}
+
+func TestScheduleTableActionPassesGatewayStatusThrough(t *testing.T) {
+	cases := []struct {
+		status int
+		body   string
+	}{
+		{http.StatusForbidden, `{"error":"forbidden"}`},
+		{http.StatusServiceUnavailable, `{"error":"unavailable"}`},
+		{http.StatusOK, `{"changed":[],"unchanged":["b"],"failed":[{"name":"c","error":"boom"}]}`},
+	}
+	for _, c := range cases {
+		f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+			w.WriteHeader(c.status)
+			io.WriteString(w, c.body)
+		}}
+		srv := f.server(t)
+		r := scheduleRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+		w := doReq(r, "POST", "/api/schedules/resume", `{"table":"knights"}`)
+		if w.Code != c.status || w.Body.String() != c.body {
+			t.Errorf("status %d: got %d %s", c.status, w.Code, w.Body)
+		}
+	}
+}
+
+func TestScheduleTableActionGatewayNotConfigured(t *testing.T) {
+	r := scheduleRouter(&gatewayClient{http: http.DefaultClient})
+	for _, action := range []string{"suspend", "resume"} {
+		w := doReq(r, "POST", "/api/schedules/"+action, `{"table":"knights"}`)
+		if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "Gateway not configured") {
+			t.Errorf("%s: got %d %s", action, w.Code, w.Body)
+		}
+	}
+}

@@ -138,6 +138,13 @@ export interface ScheduleSuspendState {
   message?: string
 }
 
+/** Answer of POST /api/schedules/suspend and /resume: every schedule of one table. */
+export interface TableSchedulesResult {
+  changed: string[]
+  unchanged: string[]
+  failed: { name: string; error: string }[]
+}
+
 /** Answer of POST …/run. */
 export interface ScheduleRunNow {
   schedule: string
