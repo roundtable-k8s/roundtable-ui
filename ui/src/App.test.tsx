@@ -6,7 +6,8 @@ import App from './App'
 import type { NatsEvent } from './hooks/useWebSocket'
 
 let wsEvents: NatsEvent[] = []
-vi.mock('./hooks/useWebSocket', () => ({
+vi.mock('./hooks/useWebSocket', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./hooks/useWebSocket')>()),
   useWebSocket: () => ({ events: wsEvents, connected: true }),
   WebSocketProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
