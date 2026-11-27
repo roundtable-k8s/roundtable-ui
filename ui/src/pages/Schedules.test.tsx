@@ -277,4 +277,50 @@ describe('SchedulesPage policy and suspension', () => {
     expect(within(plain).queryByTestId('schedule-policy')).toBeNull()
     expect(within(plain).queryByTestId('schedule-suspended-by')).toBeNull()
   })
+
+  it('shows Pause all and Resume all only when a table is selected', async () => {
+    serve()
+    renderPage()
+    await rowFor('morning-digest')
+    expect(screen.queryByRole('button', { name: /Pause all/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Resume all/ })).toBeNull()
+  })
+
+  it('pauses every schedule of the table after a confirmation and shows the summary with failures', async () => {
+    serve()
+    mockApiPost.mockResolvedValue({
+      table: 'fleet-a', changed: ['morning-digest'], unchanged: [], failed: [{ name: 'weekly-report', error: 'gateway timeout' }],
+    })
+    renderPage('/schedules?table=fleet-a')
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause all in fleet-a' }))
+    const dialog = await screen.findByTestId('table-action-dialog')
+    expect(dialog).toHaveTextContent('Suspend 2 schedules of table fleet-a? Nothing is deleted; Resume all undoes it.')
+    expect(mockApiPost).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause all' }))
+    const notice = await screen.findByTestId('schedule-notice')
+    expect(notice).toHaveTextContent('Paused 1, 0 already paused, 1 failed')
+    expect(within(notice).getByTestId('schedule-notice-failed')).toHaveTextContent('weekly-report: gateway timeout')
+    expect(mockApiPost).toHaveBeenCalledTimes(1)
+    expect(mockApiPost).toHaveBeenCalledWith('/api/schedules/suspend', { table: 'fleet-a', namespace: 'roundtable' })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/schedules?table=fleet-a', expect.anything())
+  })
+
+  it('resumes the suspended schedules of the table and reports the unchanged ones', async () => {
+    serve()
+    mockApiPost.mockResolvedValue({ table: 'fleet-b', changed: [], unchanged: ['cluster-scan'], failed: [] })
+    renderPage('/schedules?table=fleet-b')
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume all in fleet-b' }))
+    fireEvent.click(within(await screen.findByTestId('table-action-dialog')).getByRole('button', { name: 'Resume all' }))
+    expect(await screen.findByTestId('schedule-notice')).toHaveTextContent('Resumed 0, 1 already running, 0 failed')
+    expect(mockApiPost).toHaveBeenCalledWith('/api/schedules/resume', { table: 'fleet-b', namespace: 'roundtable' })
+  })
+
+  it('sends nothing when the table action is cancelled', async () => {
+    serve()
+    renderPage('/schedules?table=fleet-a')
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause all in fleet-a' }))
+    fireEvent.click(within(await screen.findByTestId('table-action-dialog')).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByTestId('table-action-dialog')).toBeNull())
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
 })
