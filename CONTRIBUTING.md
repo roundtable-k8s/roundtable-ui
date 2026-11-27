@@ -58,6 +58,15 @@ cd ui && npm test && npm run build
 `gofmt -l .` must print nothing. `npm run build` also type-checks (`tsc -b`)
 and writes the bundle to `api/static`.
 
+The API smoke test serves that bundle through the real router, with fake
+Kubernetes clients and no NATS. It is skipped unless the bundle is built, so
+build the UI first to run it:
+
+```bash
+cd ui && npm ci && npm run build
+cd api && go test -run Smoke ./...
+```
+
 ## Code Style
 
 - Add a dependency to `ui/package.json` only when code imports it, and commit the updated `ui/package-lock.json` with it
