@@ -7,7 +7,7 @@ import { useTables } from '../hooks/useTables'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { PageHeader, ErrorBanner, Spinner } from '../components/ui'
 import { sanitizeText } from '../lib/untrusted'
-import { scheduleApi, type Schedule } from '../lib/schedules'
+import { scheduleApi, schedulePreviewUrl, type Schedule, type ScheduleNextRuns } from '../lib/schedules'
 import { CRON_PRESETS, CronError, formatInZone, nextRuns } from '../lib/cron'
 import {
   buildRequest, emptyForm, fieldMessage, formFieldFor, formFromManifest, manifestYaml,
@@ -54,24 +54,58 @@ function border(error?: string): string {
   return error ? 'border-red-500/60' : 'border-roundtable-steel'
 }
 
-/** The next three run times of the form's cron in its time zone. */
+const PREVIEW_DEBOUNCE_MS = 400
+
+/** The cron's next runs: the gateway's answer (local and UTC), or the local parser when the gateway is unreachable. */
 export function NextRunsPreview({ cron, timeZone, now }: { cron: string; timeZone: string; now: Date }) {
-  let runs: Date[] = []
-  let error = ''
-  try {
-    runs = nextRuns(cron, timeZone, now, 3)
-  } catch (e) {
-    error = e instanceof CronError ? e.message : 'Cannot compute the next runs'
-  }
   const zone = timeZone || 'UTC'
+  const [remote, setRemote] = useState<ScheduleNextRuns | null>(null)
+  const [hint, setHint] = useState('')
+  const [fallback, setFallback] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    const timer = setTimeout(() => {
+      apiGet<ScheduleNextRuns>(schedulePreviewUrl(cron, zone, 5))
+        .then((r) => { if (live) { setRemote(r); setHint(''); setFallback(false) } })
+        .catch((e) => {
+          if (!live) return
+          if (e instanceof ApiError && e.status >= 400 && e.status < 500) {
+            setRemote(null); setHint(e.message); setFallback(false)
+          } else {
+            setRemote(null); setHint(''); setFallback(true)
+          }
+        })
+    }, PREVIEW_DEBOUNCE_MS)
+    return () => { live = false; clearTimeout(timer) }
+  }, [cron, zone])
+
+  let local: Date[] = []
+  let localError = ''
+  if (fallback || (!remote && !hint)) {
+    try {
+      local = nextRuns(cron, zone, now, 3)
+    } catch (e) {
+      localError = e instanceof CronError ? e.message : 'Cannot compute the next runs'
+    }
+  }
+  const times = remote?.times ?? []
   return (
     <div data-testid="next-runs" className="rounded-lg border border-roundtable-steel bg-roundtable-navy/60 px-3 py-2 text-xs">
       <div className="text-gray-400 mb-1">Next runs ({zone})</div>
-      {error
-        ? <p className="text-amber-300">{error}</p>
-        : runs.length === 0
-          ? <p className="text-gray-500">No run in the next five years.</p>
-          : <ol className="space-y-0.5 text-gray-200">{runs.map((r) => <li key={r.getTime()} title={r.toISOString()}>{formatInZone(r, zone)}</li>)}</ol>}
+      {hint
+        ? <p role="alert" className="text-amber-300">{sanitizeText(hint)}</p>
+        : remote
+          ? times.length === 0
+            ? <p className="text-gray-500">No run in the next five years.</p>
+            : <ol className="space-y-0.5 text-gray-200">{times.map((t) => (
+              <li key={t.time} title={t.time}>{sanitizeText(t.local)} <span className="text-gray-500">· {sanitizeText(t.time)} UTC</span></li>
+            ))}</ol>
+          : localError
+            ? <p className="text-amber-300">{localError}</p>
+            : local.length === 0
+              ? <p className="text-gray-500">No run in the next five years.</p>
+              : <ol className="space-y-0.5 text-gray-200">{local.map((r) => <li key={r.getTime()} title={r.toISOString()}>{formatInZone(r, zone)}</li>)}</ol>}
     </div>
   )
 }

@@ -155,6 +155,30 @@ export function scheduleApi(namespace: string, name: string, ...rest: string[]):
   return ['/api/schedules', namespace, name, ...rest].map((p, i) => (i === 0 ? p : encodeURIComponent(p))).join('/')
 }
 
+/** One cron tick answered by the gateway: UTC and in the schedule's zone. */
+export interface ScheduleNextTime {
+  time: string
+  local: string
+}
+
+/** The gateway's next fire times (preview and /next). Cron ticks only: skip rules are not applied. */
+export interface ScheduleNextRuns {
+  times: ScheduleNextTime[]
+  timeZone?: string
+  suspended?: boolean
+}
+
+/** URL of the gateway's cron preview for an expression and zone. */
+export function schedulePreviewUrl(cron: string, timeZone: string, count = 5): string {
+  const q = new URLSearchParams({ cron, timeZone: timeZone || 'UTC', count: String(count) })
+  return `/api/schedules/preview?${q.toString()}`
+}
+
+/** URL of a saved schedule's next fire times. */
+export function scheduleNextUrl(namespace: string, name: string, count = 5): string {
+  return `${scheduleApi(namespace, name, 'next')}?count=${count}`
+}
+
 /** Dashboard route of a schedule's detail view. */
 export function scheduleLink(namespace: string, name: string): string {
   return `/schedules/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
