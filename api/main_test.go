@@ -1391,11 +1391,11 @@ func TestGetInt(t *testing.T) {
 	}
 }
 
-// TestRoundTableHandlerWithWarmPoolAndPolicies tests enriched RoundTable fields
-func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
+// TestRoundTableHandlerWithPolicies tests enriched RoundTable fields
+func TestRoundTableHandlerWithPolicies(t *testing.T) {
 	router := setupTestRouter()
 
-	// Create RoundTable CR with warmPool and policies
+	// Create RoundTable CR with policies
 	roundtable := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "ai.roundtable.io/v1alpha1",
@@ -1424,11 +1424,6 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 				"totalCost":           "$125.50",
 				"totalTasksCompleted": int64(5000),
 				"activeMissions":      int64(3),
-				"warmPool": map[string]interface{}{
-					"available":    int64(5),
-					"provisioning": int64(2),
-					"claimed":      int64(3),
-				},
 			},
 		},
 	}
@@ -1480,23 +1475,6 @@ func TestRoundTableHandlerWithWarmPoolAndPolicies(t *testing.T) {
 
 	if rt.NATSPrefix != "fleet-b" {
 		t.Errorf("expected NATS prefix 'fleet-b', got '%s'", rt.NATSPrefix)
-	}
-
-	// Test WarmPool
-	if rt.WarmPool == nil {
-		t.Fatal("expected warmPool to be present")
-	}
-
-	if rt.WarmPool.Available != 5 {
-		t.Errorf("expected warmPool.available 5, got %d", rt.WarmPool.Available)
-	}
-
-	if rt.WarmPool.Provisioning != 2 {
-		t.Errorf("expected warmPool.provisioning 2, got %d", rt.WarmPool.Provisioning)
-	}
-
-	if rt.WarmPool.Claimed != 3 {
-		t.Errorf("expected warmPool.claimed 3, got %d", rt.WarmPool.Claimed)
 	}
 
 	// Test Policies
