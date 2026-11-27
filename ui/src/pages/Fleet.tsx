@@ -182,7 +182,7 @@ export function FleetPage() {
         <div className="mb-6">
           <ErrorBanner>
             <p>⚠️ {error}</p>
-            <p className="text-red-400/60 text-sm mt-1">API may not be running. Start with: cd api && go run .</p>
+            <p className="text-red-400/60 text-sm mt-1">Check that the dashboard API is reachable and look at its pod logs.</p>
           </ErrorBanner>
         </div>
       )}

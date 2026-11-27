@@ -24,6 +24,7 @@ export function ArchitecturePage() {
   const [missions, setMissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'unreachable'>('checking')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -34,6 +35,7 @@ export function ArchitecturePage() {
     ])
     if (rt.status === 'fulfilled') setRoundTables(rt.value)
     if (ms.status === 'fulfilled') setMissions(ms.value)
+    setApiStatus(rt.status === 'fulfilled' || ms.status === 'fulfilled' ? 'connected' : 'unreachable')
     const failure = [rt, ms].find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
     setError(failure ? (failure.reason instanceof Error ? failure.reason.message : 'Unknown error') : null)
     setLoading(false)
@@ -48,7 +50,8 @@ export function ArchitecturePage() {
   const roundTableCount = roundTables.length
   const activeMissionsCount = missions.filter(m => m.phase !== 'Succeeded' && m.phase !== 'Failed' && m.phase !== 'Expired').length
   const totalMissionsCount = missions.length
-  const natsStreams = [...new Set(roundTables.map(rt => rt.natsPrefix).filter(Boolean))].join(', ') || 'fleet-*'
+  const natsPrefixes = [...new Set(roundTables.map(rt => rt.natsPrefix).filter(Boolean))]
+  const natsStats = natsPrefixes.length > 0 ? `Streams: ${natsPrefixes.join(', ')}` : 'no NATS prefix reported'
 
   const COMPONENTS: ComponentNode[] = [
     { 
@@ -68,7 +71,7 @@ export function ArchitecturePage() {
       icon: <Server className="w-6 h-6" />, 
       color: 'text-green-400 border-green-500/30 bg-green-500/10', 
       connections: ['nats', 'k8s'],
-      stats: 'Running'
+      stats: apiStatus === 'checking' ? 'Checking…' : apiStatus === 'connected' ? 'Connected' : 'Unreachable'
     },
     { 
       id: 'k8s', 
@@ -87,7 +90,7 @@ export function ArchitecturePage() {
       icon: <MessageSquare className="w-6 h-6" />, 
       color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10', 
       connections: ['knights'],
-      stats: `Streams: ${natsStreams}`
+      stats: natsStats
     },
     { 
       id: 'operator', 
@@ -124,7 +127,7 @@ export function ArchitecturePage() {
       </p>
 
       <ListState loading={isLoading} error={error} what="architecture data" onRetry={fetchData}
-        count={liveCount || (isLoading || error ? 0 : COMPONENTS.length)}
+        count={liveCount || (isLoading ? 0 : COMPONENTS.length)}
         emptyTitle="No architecture data.">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
         {COMPONENTS.map(comp => (
@@ -177,8 +180,8 @@ export function ArchitecturePage() {
       <div className="mt-6 bg-roundtable-slate border border-roundtable-steel rounded-xl p-6">
         <h2 className="text-lg font-bold text-white mb-4">Tech Stack</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div><h4 className="text-gray-400 mb-1">Frontend</h4><p className="text-white">React 19 + TypeScript</p><p className="text-gray-500">Vite, Tailwind CSS</p></div>
-          <div><h4 className="text-gray-400 mb-1">API</h4><p className="text-white">Go 1.23</p><p className="text-gray-500">Gorilla Mux, WebSocket</p></div>
+          <div><h4 className="text-gray-400 mb-1">Frontend</h4><p className="text-white">React + TypeScript</p><p className="text-gray-500">Vite, Tailwind CSS</p></div>
+          <div><h4 className="text-gray-400 mb-1">API</h4><p className="text-white">Go</p><p className="text-gray-500">Gorilla Mux, WebSocket</p></div>
           <div><h4 className="text-gray-400 mb-1">Messaging</h4><p className="text-white">NATS + JetStream</p><p className="text-gray-500">Pub/Sub, persistence</p></div>
           <div><h4 className="text-gray-400 mb-1">Orchestration</h4><p className="text-white">Kubernetes CRDs</p><p className="text-gray-500">Custom operator</p></div>
         </div>

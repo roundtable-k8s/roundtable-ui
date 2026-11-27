@@ -58,6 +58,30 @@ describe('ArchitecturePage', () => {
     expect(screen.queryByText('Loading architecture data…')).toBeNull()
   })
 
+  it('shows the API as connected and reports a missing NATS prefix', async () => {
+    mockApi([{ name: 'a' }], [])
+    renderPage()
+    expect(await screen.findByText('Connected')).toBeInTheDocument()
+    expect(screen.getByText('no NATS prefix reported')).toBeInTheDocument()
+    expect(screen.queryByText(/fleet-\*/)).toBeNull()
+    expect(screen.queryByText('Running')).toBeNull()
+  })
+
+  it('shows the API as unreachable when both endpoints fail', async () => {
+    mockApi(new Error('rt down'), new Error('missions down'))
+    renderPage()
+    expect(await screen.findByText('Unreachable')).toBeInTheDocument()
+    expect(screen.queryByText('Connected')).toBeNull()
+  })
+
+  it('does not show version numbers in the tech stack', async () => {
+    mockApi([], [])
+    renderPage()
+    await screen.findByText('Tech Stack')
+    expect(screen.getByText('React + TypeScript')).toBeInTheDocument()
+    expect(screen.queryByText(/React 1\d|Go 1\.\d/)).toBeNull()
+  })
+
   it('still renders and shows a banner when one endpoint fails', async () => {
     mockApi([{ name: 'a', natsPrefix: 'fleet-a' }], new Error('missions down'))
     renderPage()

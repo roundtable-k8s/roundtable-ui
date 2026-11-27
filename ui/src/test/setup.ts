@@ -3,7 +3,7 @@ import { expect, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import * as React from 'react'
 
-// React 19 compatibility: Set IS_REACT_ACT_ENVIRONMENT
+// React 18 compatibility: Set IS_REACT_ACT_ENVIRONMENT
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
