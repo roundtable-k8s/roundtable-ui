@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { ChainTimeline } from './ChainTimeline'
 import type { Chain, ChainStep } from '../lib/types'
 
@@ -48,7 +48,33 @@ describe('ChainTimeline', () => {
     render(<ChainTimeline chain={chain} now={T0 + 200_000} onSelect={onSelect} />)
     fireEvent.click(screen.getByRole('button', { name: 'b' }))
     expect(onSelect).toHaveBeenCalledWith('b')
-    fireEvent.click(screen.getByTestId('bar-c'))
-    expect(onSelect).toHaveBeenCalledWith('c')
+  })
+  it('keeps loop rounds inside the step bar', () => {
+    const c = { ...chain, steps: [step('loop', { startTime: iso(0), completionTime: iso(10), loop: { iteration: 1, maxIterations: 3, rounds: [
+      { iteration: 1, steps: [{ name: 'x', phase: 'Succeeded', startTime: iso(0), completionTime: iso(30) }] },
+    ] } })] } as Chain
+    render(<ChainTimeline chain={c} now={T0 + 200_000} />)
+    const r = screen.getByTestId('round-loop-1')
+    expect(parseFloat(r.style.left) + parseFloat(r.style.width)).toBeLessThanOrEqual(100)
+    expect(parseFloat(r.style.left)).toBeGreaterThanOrEqual(0)
+  })
+  it('ticks while the chain runs so the running bar grows', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(T0 + 10_000)
+      const c = { ...chain, phase: 'Running', completionTime: undefined, steps: [step('a', { phase: 'Running', startTime: iso(0) })] } as unknown as Chain
+      render(<ChainTimeline chain={c} />)
+      const w1 = parseFloat(screen.getByTestId('bar-a').style.width)
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(parseFloat(screen.getByTestId('bar-a').style.width)).toBeGreaterThanOrEqual(w1)
+      expect(screen.getByTestId('bar-a')).toHaveAttribute('aria-label', 'a: Running, 11s')
+    } finally { vi.useRealTimers() }
+  })
+  it('does not tick for a finished chain', () => {
+    vi.useFakeTimers()
+    try {
+      render(<ChainTimeline chain={chain} />)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
   })
 })

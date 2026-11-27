@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, Check } from 'lucide-react'
 
 /** Raw URLs of the operator repo's quickstart manifests, pinned to main. */
@@ -13,12 +13,15 @@ export const FIRST_RUN_DOCS = 'https://github.com/roundtable-k8s/roundtable/blob
  */
 export function FirstRun() {
   const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(timer.current), [])
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(FIRST_RUN_COMMAND)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => setCopied(false), 2000)
     } catch { /* clipboard denied; the command is still visible to select */ }
   }
 

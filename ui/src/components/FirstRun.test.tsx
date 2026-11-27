@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { FirstRun, FIRST_RUN_COMMAND } from './FirstRun'
 
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.useRealTimers()
+  if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
+  else delete (navigator as unknown as Record<string, unknown>).clipboard
 })
 
 describe('FirstRun', () => {
@@ -42,5 +46,16 @@ describe('FirstRun', () => {
     fireEvent.click(screen.getByRole('button', { name: /Copy command/ }))
     await waitFor(() => expect(writeText).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: /Copy command/ })).toBeInTheDocument()
+  })
+
+  it('clears the Copied timer on unmount', async () => {
+    vi.useFakeTimers()
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const { unmount } = render(<FirstRun />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Copy command/ })) })
+    expect(vi.getTimerCount()).toBe(1)
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

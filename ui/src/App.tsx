@@ -32,6 +32,7 @@ const CostDashboardPage = lazy(() => import('./pages/CostDashboard').then(m => (
 const ArchitecturePage = lazy(() => import('./pages/Architecture').then(m => ({ default: m.ArchitecturePage })))
 const RunningPage = lazy(() => import('./pages/Running').then(m => ({ default: m.RunningPage })))
 const RunsPage = lazy(() => import('./pages/Runs').then(m => ({ default: m.RunsPage })))
+import { withTable } from './lib/tables'
 const OvernightPage = lazy(() => import('./pages/Overnight').then(m => ({ default: m.OvernightPage })))
 const QueuesPage = lazy(() => import('./pages/Queues').then(m => ({ default: m.QueuesPage })))
 const FailedTasksPage = lazy(() => import('./pages/FailedTasks').then(m => ({ default: m.FailedTasksPage })))
@@ -195,7 +196,7 @@ export default function App() {
               <Link
                 key={path}
                 aria-current={active ? 'page' : undefined}
-                to={table ? `${path}?table=${encodeURIComponent(table)}` : path}
+                to={withTable(path, table)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   active
                     ? 'bg-roundtable-gold/10 text-roundtable-gold border border-roundtable-gold/20'
@@ -266,7 +267,7 @@ export default function App() {
             <Route path="*" element={
               <div>
                 <EmptyState titleAs="h1" title="Page not found" sub="The page you asked for does not exist." />
-                <p className="text-center"><Link to={table ? `/?table=${encodeURIComponent(table)}` : '/'} className="text-roundtable-gold underline">Back to Command Center</Link></p>
+                <p className="text-center"><Link to={withTable('/', table)} className="text-roundtable-gold underline">Back to Command Center</Link></p>
               </div>
             } />
           </Routes>

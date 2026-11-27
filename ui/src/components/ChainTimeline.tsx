@@ -1,16 +1,28 @@
+import { useEffect, useState } from 'react'
 import type { Chain } from '../lib/types'
 import { timelineRows } from '../lib/chainTimeline'
 import { phaseColor } from '../lib/status'
 import { formatSecondsLadder } from '../lib/format'
 import { CostTag } from './CostTag'
 
+const clampPct = (n: number) => Math.min(100, Math.max(0, n))
+
 /** Chain run timeline: one bar per step on the run's shared time axis. */
-export function ChainTimeline({ chain, now = Date.now(), selected, onSelect }: {
+export function ChainTimeline({ chain, now: nowProp, selected, onSelect }: {
   chain: Chain
   now?: number
   selected?: string | null
   onSelect?: (name: string) => void
 }) {
+  const running = nowProp === undefined && !chain.completionTime && chain.phase === 'Running'
+  const [tick, setTick] = useState(() => Date.now())
+  useEffect(() => {
+    if (!running) return
+    setTick(Date.now())
+    const id = setInterval(() => setTick(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [running])
+  const now = nowProp ?? (running ? tick : Date.now())
   const rows = timelineRows(chain, now)
   const byName = new Map((chain.steps ?? []).map(s => [s.name, s]))
   if (rows.length === 0) return <p className="text-xs text-gray-500">No steps.</p>
@@ -29,19 +41,22 @@ export function ChainTimeline({ chain, now = Date.now(), selected, onSelect }: {
             <div className="relative h-5 flex-1 bg-roundtable-navy rounded">
               {row.startPct !== undefined && (
                 <div data-testid={`bar-${row.name}`} role="img" aria-label={label}
-                  onClick={() => onSelect?.(row.name)}
-                  className={`absolute top-0 h-5 rounded border cursor-pointer overflow-hidden whitespace-nowrap px-1 leading-5 ${phaseColor(row.phase)}`}
+                  className={`absolute top-0 h-5 rounded border overflow-hidden whitespace-nowrap px-1 leading-5 ${phaseColor(row.phase)}`}
                   style={{ left: `${row.startPct}%`, width: `${row.widthPct}%`, minWidth: '2px' }}>
-                  {row.rounds?.map(r => (
+                  {row.rounds?.map(r => {
+                    const left = clampPct(row.widthPct ? ((r.startPct - (row.startPct ?? 0)) / row.widthPct) * 100 : 0)
+                    const width = clampPct(row.widthPct ? (r.widthPct / row.widthPct) * 100 : 100)
+                    return (
                     <span key={r.iteration} data-testid={`round-${row.name}-${r.iteration}`}
                       aria-label={`Round ${r.iteration}: ${formatSecondsLadder(r.durationMs / 1000)}`}
                       title={`Round ${r.iteration}: ${formatSecondsLadder(r.durationMs / 1000)}`}
                       className="absolute top-0 h-5 border-l border-r border-black/40 bg-white/20"
                       style={{
-                        left: `${row.widthPct ? ((r.startPct - (row.startPct ?? 0)) / row.widthPct) * 100 : 0}%`,
-                        width: `${row.widthPct ? (r.widthPct / row.widthPct) * 100 : 100}%`,
+                        left: `${left}%`,
+                        width: `${Math.min(width, 100 - left)}%`,
                       }} />
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

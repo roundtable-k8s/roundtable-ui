@@ -528,7 +528,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
                 </span>
               </h3>
               {knightDetail.workspaceSnapshotsCondition?.message && (
-                <p className="text-xs text-amber-300 mb-2 break-words">{sanitizeText(knightDetail.workspaceSnapshotsCondition.message)}</p>
+                <p className={`text-xs mb-2 ${knightDetail.workspaceSnapshotsCondition.status === 'False' ? 'text-amber-300' : 'text-gray-400'} break-words`}>{sanitizeText(knightDetail.workspaceSnapshotsCondition.message)}</p>
               )}
               {(knightDetail.workspaceSnapshots?.length ?? 0) === 0 ? (
                 <p className="text-xs text-gray-500 bg-roundtable-slate border border-roundtable-steel/50 rounded-lg px-3 py-2">No snapshots yet</p>
@@ -739,6 +739,8 @@ function ActivityEntry({ entry }: { entry: any }) {
 
 function SnapshotCopyButton({ name }: { name: string }) {
   const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(timer.current), [])
   return (
     <button
       type="button"
@@ -748,7 +750,8 @@ function SnapshotCopyButton({ name }: { name: string }) {
         try {
           await navigator.clipboard.writeText(name)
           setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
+          clearTimeout(timer.current)
+          timer.current = setTimeout(() => setCopied(false), 1500)
         } catch { /* clipboard denied */ }
       }}
     >
