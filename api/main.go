@@ -900,6 +900,53 @@ type KnightDetail struct {
 	Containers      []ContainerDetail `json:"containers"`
 	Conditions      []PodCondition    `json:"conditions"`
 	GeneratedSkills []GeneratedSkill  `json:"generatedSkills,omitempty"`
+	// WorkspaceSnapshots lists status.workspace.snapshots, oldest first (#470).
+	WorkspaceSnapshots []WorkspaceSnapshot `json:"workspaceSnapshots,omitempty"`
+	// WorkspaceSnapshotsCondition is the operator's WorkspaceSnapshots condition.
+	WorkspaceSnapshotsCondition *WorkspaceSnapshotsCondition `json:"workspaceSnapshotsCondition,omitempty"`
+}
+
+type WorkspaceSnapshot struct {
+	Name       string `json:"name"`
+	CreatedAt  string `json:"createdAt,omitempty"`
+	ReadyToUse bool   `json:"readyToUse"`
+}
+
+type WorkspaceSnapshotsCondition struct {
+	Status  string `json:"status"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// buildWorkspaceSnapshots reads status.workspace.snapshots from a Knight CR,
+// skipping malformed entries (no name), oldest first (#470).
+func buildWorkspaceSnapshots(obj *unstructured.Unstructured) []WorkspaceSnapshot {
+	ws := getNestedMap(getNestedMap(obj.Object, "status"), "workspace")
+	var out []WorkspaceSnapshot
+	for _, e := range getSlice(ws, "snapshots") {
+		m, ok := e.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name := getStr(m, "name")
+		if name == "" {
+			continue
+		}
+		out = append(out, WorkspaceSnapshot{Name: name, CreatedAt: getStr(m, "createdAt"), ReadyToUse: getBool(m, "readyToUse")})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt < out[j].CreatedAt })
+	return out
+}
+
+// buildWorkspaceSnapshotsCondition returns the WorkspaceSnapshots condition, or nil.
+func buildWorkspaceSnapshotsCondition(obj *unstructured.Unstructured) *WorkspaceSnapshotsCondition {
+	for _, c := range getSlice(getNestedMap(obj.Object, "status"), "conditions") {
+		m, ok := c.(map[string]interface{})
+		if ok && getStr(m, "type") == "WorkspaceSnapshots" {
+			return &WorkspaceSnapshotsCondition{Status: getStr(m, "status"), Reason: getStr(m, "reason"), Message: getStr(m, "message")}
+		}
+	}
+	return nil
 }
 
 type ContainerDetail struct {
@@ -974,6 +1021,8 @@ func knightHandler(namespace string) http.HandlerFunc {
 		}
 		detail.Pods = buildKnightPods(pods, listPodMetrics(kctx, namespace))
 		detail.Scaling = scaling
+		detail.WorkspaceSnapshots = buildWorkspaceSnapshots(crObj)
+		detail.WorkspaceSnapshotsCondition = buildWorkspaceSnapshotsCondition(crObj)
 		detail.Isolation = buildKnightIsolation(crObj, podPtr, tableDefaultsFor(kctx, namespace, knightTableName(crObj)))
 		if podPtr != nil {
 			pod := podPtr

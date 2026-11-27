@@ -141,3 +141,16 @@ export const WithoutAgentCard: Story = {
     onClose: () => {},
   },
 }
+
+export const WithWorkspaceSnapshots: Story = {
+  args: {
+    knight: {
+      ...mockKnight,
+      workspaceSnapshots: [
+        { name: 'galahad-snap-1', createdAt: '2026-01-01T00:00:00Z', readyToUse: true },
+        { name: 'galahad-snap-2', createdAt: '2026-02-01T00:00:00Z', readyToUse: false },
+      ],
+    },
+    onClose: () => {},
+  },
+}

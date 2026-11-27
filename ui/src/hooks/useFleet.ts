@@ -85,6 +85,12 @@ export interface KnightIsolation {
   egressRestricted?: KnightCondition
 }
 
+export interface WorkspaceSnapshot {
+  name: string
+  createdAt?: string
+  readyToUse: boolean
+}
+
 export interface Knight {
   /** Kubernetes namespace of the Knight; the gateway invoke body takes it. */
   namespace?: string
@@ -118,6 +124,8 @@ export interface Knight {
   pods?: KnightPod[]
   scaling?: KnightScaling
   isolation?: KnightIsolation
+  workspaceSnapshots?: WorkspaceSnapshot[]
+  workspaceSnapshotsCondition?: { status: string; reason?: string; message?: string }
 }
 
 export function useFleet(refreshInterval = 10000) {
