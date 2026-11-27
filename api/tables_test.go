@@ -376,10 +376,10 @@ func TestTablesColdStartSurvivesLeaderDisconnect(t *testing.T) {
 	withTwoTables(t)
 	src := newTableSource(tablesTestNS, "", "")
 	var discoverCtxErr error
-	real := src.discover
+	discover := src.discover
 	src.discoverFn = func(ctx context.Context) ([]TableInfo, error) {
 		discoverCtxErr = ctx.Err()
-		return real(ctx)
+		return discover(ctx)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // the leader's client is already gone
