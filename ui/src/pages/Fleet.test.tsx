@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { FleetPage } from './Fleet'
 import type { Knight } from '../hooks/useFleet'
 import { cardKey, type CardMap } from '../lib/cards'
@@ -24,6 +24,7 @@ vi.mock('../components/KnightDetailDrawer', () => ({
     knight ? <div data-testid="drawer">{`${knight.name}:${knight.restarts}`}<button onClick={onClose}>close</button></div> : null,
 }))
 
+const Where = () => <div data-testid="where">{useLocation().search}</div>
 const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)
 
 beforeEach(() => {
@@ -156,28 +157,27 @@ describe('Fleet name/status filter, paging and focus (#401)', () => {
     expect(screen.getByTestId('fleet-count').textContent).toBe('1/3')
   })
 
-  it('renders 60 cards and shows more on demand; a filter resets the page', async () => {
-    const user = userEvent.setup()
+  it('renders 60 cards and shows more on demand; a filter resets the page', () => {
     knights = many(150)
-    render(<MemoryRouter><FleetPage /></MemoryRouter>)
-    expect(names()).toHaveLength(60)
-    await user.click(screen.getByRole('button', { name: 'Show 60 more (90 left)' }))
-    expect(names()).toHaveLength(120)
-    await user.click(screen.getByRole('button', { name: 'Show 60 more (30 left)' }))
-    expect(names()).toHaveLength(150)
-    expect(screen.queryByRole('button', { name: /Show 60 more/ })).toBeNull()
-    await user.click(screen.getByLabelText('Filter by name'))
-    await user.paste('knight-0')
-    expect(names()).toHaveLength(60)
+    const { container } = render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    const count = () => container.querySelectorAll('h3').length
+    expect(count()).toBe(60)
+    fireEvent.click(screen.getByText('Show 60 more (90 left)'))
+    expect(count()).toBe(120)
+    fireEvent.click(screen.getByText('Show 60 more (30 left)'))
+    expect(count()).toBe(150)
+    expect(screen.queryByText(/Show 60 more/)).toBeNull()
+    fireEvent.change(screen.getByLabelText('Filter by name'), { target: { value: 'knight-0' } })
+    expect(count()).toBe(60)
     expect(screen.getByTestId('fleet-count').textContent).toBe('100/150')
-  }, 30000)
+  })
 
-  it('?knight= opens the drawer once; closing removes the parameter', async () => {
-    const user = userEvent.setup()
-    render(<MemoryRouter initialEntries={['/fleet?knight=kay']}><FleetPage /></MemoryRouter>)
+  it('?knight= opens the drawer once; closing removes the parameter', () => {
+    render(<MemoryRouter initialEntries={['/fleet?knight=kay']}><FleetPage /><Where /></MemoryRouter>)
     expect(screen.getByTestId('drawer').textContent).toContain('kay')
-    await user.click(screen.getByText('close'))
+    fireEvent.click(screen.getByText('close'))
     expect(screen.queryByTestId('drawer')).toBeNull()
+    expect(screen.getByTestId('where').textContent).not.toContain('knight=')
   })
 
   it('shows nothing special for an unknown ?knight=', () => {
