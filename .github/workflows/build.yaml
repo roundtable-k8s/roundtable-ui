@@ -7,6 +7,12 @@ on:
   merge_group:
     types: [checks_requested]
 
+# Only pull request runs cancel their superseded runs: the image is pushed from
+# push runs on main and from merge queue runs, which must always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
