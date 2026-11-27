@@ -14,6 +14,7 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 // Memory bound of the list cache (#471).
@@ -25,9 +26,9 @@ const (
 	memTestOutputKB = 4
 	// listCacheHeapBudget is the steady-state heap the list cache may add for
 	// memTestChains Chains and memTestKnights Knights. Measured at about
-	// 3 MiB with the trim (about 60 MiB without it); the budget leaves headroom
-	// and still fails long before the 64 MiB target of #471.
-	listCacheHeapBudget = 24 << 20
+	// 8.7 MiB with the trim and 18.9 MiB without it; the budget leaves about
+	// 60% headroom and fails when the trim is lost (the #471 target is 64 MiB).
+	listCacheHeapBudget = 14 << 20
 )
 
 // bigOutput is a step output of n KiB with multi-byte runes in it.
@@ -124,8 +125,26 @@ func memTestClient() *fake.FakeDynamicClient {
 	for i := 0; i < memTestKnights; i++ {
 		objs = append(objs, &unstructured.Unstructured{Object: memTestKnight(i)})
 	}
-	return fake.NewSimpleDynamicClientWithCustomListKinds(k8sruntime.NewScheme(),
+	fc := fake.NewSimpleDynamicClientWithCustomListKinds(k8sruntime.NewScheme(),
 		map[schema.GroupVersionResource]string{chainGVR: "ChainList", knightGVR: "KnightList"}, objs...)
+	// The fake tracker hands out copies that share string data with its own
+	// objects, which would hide the outputs from the measurement. Decode
+	// every list from JSON instead, as a real list response is.
+	for res, kind := range map[string]string{"chains": "Chain", "knights": "Knight"} {
+		fc.PrependReactor("list", res, func(a k8stesting.Action) (bool, k8sruntime.Object, error) {
+			obj, err := fc.Tracker().List(a.GetResource(), a.GetResource().GroupVersion().WithKind(kind), a.GetNamespace())
+			if err != nil {
+				return true, nil, err
+			}
+			raw, err := json.Marshal(obj)
+			if err != nil {
+				return true, nil, err
+			}
+			list := &unstructured.UnstructuredList{}
+			return true, list, list.UnmarshalJSON(raw)
+		})
+	}
+	return fc
 }
 
 func heapInUse() uint64 {

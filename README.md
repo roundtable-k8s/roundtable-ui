@@ -286,6 +286,27 @@ The dashboard API server is configured via environment variables:
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector endpoint; setting it (or the traces one below) enables trace export | _(unset: no export)_ |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Traces-specific OTLP/HTTP endpoint (same effect as above) | _(unset)_ |
 | `OTEL_SERVICE_NAME` | `service.name` of the exported spans | `roundtable-ui` |
+| `GOMEMLIMIT` | Go soft memory limit. When unset the API sets it to 90% of the container (cgroup v2 or v1) memory limit at start, so the garbage collector works before the kernel OOM-kills the process. See [Memory](#memory) | _(90% of the container limit)_ |
+
+### Memory
+
+The Knight, Chain, Mission and Trigger lists are served from informer caches
+that hold every object of the namespace. Before an object is cached its
+`metadata.managedFields` are dropped and, for Chains, step outputs are cut to
+the 500-byte list preview (fan-out item and loop step outputs are replaced
+by their length); the Chain detail endpoint reads the Chain directly, so it
+still returns full outputs. Initial lists are paged (100 objects per page).
+
+`TestListCacheHeapBudget` (`api/listcache_mem_test.go`) syncs the caches for
+400 Chains (6 steps with 4 KiB outputs, a fan-out and a loop each) and 20
+Knights and fails above 14 MiB of heap. Measured: about 2.2 MiB per 100
+Chains (8.7 MiB for 400 Chains and 20 Knights), against 4.7 MiB per 100
+Chains (18.9 MiB) without the trim.
+
+Recommended container resources for a namespace of that size: request
+`memory: 128Mi`, limit `memory: 256Mi`. Raise the limit with the number of
+Chains (keep at least 3 MiB per 100 Chains above the request) rather than
+setting `GOMEMLIMIT` above the container limit.
 
 ### Tracing
 
