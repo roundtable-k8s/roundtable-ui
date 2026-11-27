@@ -1,4 +1,5 @@
 import { apiGet } from '../lib/api'
+import { GlanceStrip } from '../components/GlanceStrip'
 import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader } from 'lucide-react'
@@ -267,6 +268,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
           <Spinner size="sm" /> Loading…
         </div>
       )}
+
+      <GlanceStrip knights={fleetError || (fleetLoading && knights.length === 0) ? null : knights} />
 
       {/* Top-level metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
