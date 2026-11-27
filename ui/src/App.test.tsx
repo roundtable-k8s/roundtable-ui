@@ -184,7 +184,7 @@ describe('command palette shortcut', () => {
     await waitFor(() => expect(paletteFetches(f).length).toBeGreaterThan(0))
   })
 
-  it('ignores Ctrl+K while typing in an input', () => {
+  it('ignores Ctrl+K while typing in an input', async () => {
     const f = vi.fn(() => Promise.resolve(new Response('[]')))
     vi.stubGlobal('fetch', f)
     renderAt('/')
@@ -193,6 +193,8 @@ describe('command palette shortcut', () => {
     try {
       input.focus()
       fireEvent.keyDown(input, { key: 'k', ctrlKey: true })
+      // Let any deferred palette open/fetch run before asserting it did not happen.
+      await act(() => new Promise((r) => setTimeout(r, 20)))
       expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
       expect(paletteFetches(f)).toEqual([])
     } finally {

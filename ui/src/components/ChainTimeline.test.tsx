@@ -66,7 +66,7 @@ describe('ChainTimeline', () => {
       render(<ChainTimeline chain={c} />)
       const w1 = parseFloat(screen.getByTestId('bar-a').style.width)
       act(() => { vi.advanceTimersByTime(1000) })
-      expect(parseFloat(screen.getByTestId('bar-a').style.width)).toBeGreaterThanOrEqual(w1)
+      expect(parseFloat(screen.getByTestId('bar-a').style.width)).toBeGreaterThan(w1)
       expect(screen.getByTestId('bar-a')).toHaveAttribute('aria-label', 'a: Running, 11s')
     } finally { vi.useRealTimers() }
   })
