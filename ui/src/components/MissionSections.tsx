@@ -8,8 +8,7 @@ import { phaseColor } from '../lib/status'
 import { CostTag } from './CostTag'
 import { tokensText } from '../lib/cost'
 
-export
-function MissionResults({ name }: { name: string }) {
+export function MissionResults({ name }: { name: string }) {
   const [data, setData] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
