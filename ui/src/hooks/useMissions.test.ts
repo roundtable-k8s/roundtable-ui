@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { createElement, type ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { useMissions } from './useMissions'
+import { routerWrapper, json } from '../test/hookHelpers'
 
 const fetchMock = vi.fn()
-const wrapper = (search = '') => ({ children }: { children: ReactNode }) =>
-  createElement(MemoryRouter, { initialEntries: ['/missions' + search] }, children)
-const json = (body: unknown, init?: ResponseInit) => new Response(JSON.stringify(body), init)
+const wrapper = routerWrapper('/missions')
 
 beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock) })
 afterEach(() => { vi.unstubAllGlobals() })

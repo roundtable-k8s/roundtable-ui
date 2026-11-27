@@ -1,4 +1,3 @@
-import { formatMsLadder } from './format'
 /**
  * Live task activity stream as seen by the browser (#184, #214).
  *
@@ -17,6 +16,7 @@ import { formatMsLadder } from './format'
  * Everything in an event is attacker-influenced text: render it with
  * UntrustedText / sanitizeText only (#188).
  */
+import { formatMsLadder } from './format'
 
 export type ActivityType =
   | 'task.started'

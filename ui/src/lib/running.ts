@@ -1,4 +1,3 @@
-import { formatSecondsLadder } from './format'
 /**
  * In-flight task registry as seen by the browser (#183, #200).
  *
@@ -9,6 +8,7 @@ import { formatSecondsLadder } from './format'
  * Field names follow the task activity event contract
  * (roundtable-k8s/roundtable#249, pkg/nats ActivityEvent).
  */
+import { formatSecondsLadder } from './format'
 
 export type RunningStatus = 'running' | 'stale' | 'lost'
 

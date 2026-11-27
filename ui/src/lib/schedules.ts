@@ -1,9 +1,9 @@
-import { formatCost, formatSecondsLadder } from './format'
 /**
  * Schedules: Triggers with a spec.source.schedule, served by the gateway's
  * /v1/schedules routes and proxied by the dashboard API under /api/schedules
  * (roundtable-k8s/roundtable docs/gateway.md, "Schedules").
  */
+import { formatCost, formatSecondsLadder } from './format'
 
 /** Who owns a schedule. Git-managed schedules cannot be edited or deleted here. */
 export type ManagedBy = 'git' | 'api' | 'other'

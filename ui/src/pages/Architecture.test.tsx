@@ -35,7 +35,7 @@ beforeEach(() => {
 })
 
 describe('ArchitecturePage', () => {
-  it('shows the spinner while loading', async () => {
+  it('shows the spinner while loading', () => {
     mockApiGet.mockImplementation(() => new Promise(() => {}))
     renderPage()
     expect(screen.getByRole('status')).toBeInTheDocument()
