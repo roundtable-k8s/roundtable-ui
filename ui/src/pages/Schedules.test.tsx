@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { SchedulesPage } from './Schedules'
 import { apiGet, apiPost, apiDelete } from '../lib/api'
 import type { Schedule } from '../lib/schedules'
@@ -46,8 +46,12 @@ function serve(list: Schedule[] = schedules) {
   })
 }
 
+function UrlProbe() {
+  return <span data-testid="url-search">{useLocation().search}</span>
+}
+
 function renderPage(path = '/schedules') {
-  return render(<MemoryRouter initialEntries={[path]}><SchedulesPage /></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[path]}><UrlProbe /><SchedulesPage /></MemoryRouter>)
 }
 
 async function rowFor(name: string) {
@@ -165,6 +169,24 @@ describe('SchedulesPage', () => {
     const rows = screen.getAllByRole('row').slice(1)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('cluster-scan')
+  })
+
+  it('keeps the knight filter in the URL', async () => {
+    serve()
+    renderPage('/schedules?knight=galahad')
+    await rowFor('cluster-scan')
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(1)
+    fireEvent.change(screen.getByLabelText('Knight'), { target: { value: 'gawain' } })
+    expect(screen.getByTestId('url-search')).toHaveTextContent('?knight=gawain')
+    fireEvent.change(screen.getByLabelText('Knight'), { target: { value: '' } })
+    expect(screen.getByTestId('url-search').textContent).toBe('')
+  })
+
+  it('shows the empty filtered state for a knight with no schedules', async () => {
+    serve()
+    renderPage('/schedules?knight=nobody')
+    expect(await screen.findByText(/match/i)).toBeInTheDocument()
+    expect(screen.queryAllByRole('row')).toHaveLength(0)
   })
 
   it('filters by the table in the URL', async () => {

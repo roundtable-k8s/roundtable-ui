@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useUrlParam } from '../hooks/useUrlParam'
 import { Link } from 'react-router-dom'
 import { CalendarClock, ExternalLink, GitBranch, Link2, Pencil, Plus, Shield, Target, Play, Pause, PlayCircle, Trash2, Zap } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
@@ -236,7 +237,7 @@ export function SchedulesPage() {
   const { data, loading, error, refresh } = usePolledFetch<ScheduleList>(withTable('/api/schedules', table), POLL_MS, { schedules: [] })
   // Task text is not in the gateway's schedule view: read it from the Triggers.
   const { data: triggers } = usePolledFetch<Trigger[]>('/api/triggers', POLL_MS, [])
-  const [knight, setKnight] = useState('')
+  const [knight, setKnight] = useUrlParam('knight', '')
   const [pending, setPending] = useState<Pending>(null)
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
@@ -309,6 +310,7 @@ export function SchedulesPage() {
           <select id="schedule-knight" value={knight} onChange={(e) => setKnight(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1 text-sm text-white">
             <option value="">All knights</option>
+            {knight && !knights.includes(knight) && <option value={knight}>{knight}</option>}
             {knights.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </div>

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Target, Filter, Plus } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
+import { useUrlParam } from '../hooks/useUrlParam'
 import { useMissions } from '../hooks/useMissions'
 import { MissionCard } from '../components/MissionCard'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
@@ -27,7 +28,7 @@ export function MissionsPage() {
   const { missions, loading, error, refresh } = useMissions()
   const { table } = useTableFilter()
   const navigate = useNavigate()
-  const [phaseFilter, setPhaseFilter] = useState('All')
+  const [phaseFilter, setPhaseFilter] = useUrlParam('phase', 'All', PHASE_FILTERS)
   const [showWizard, setShowWizard] = useState(false)
 
   // Filtered missions

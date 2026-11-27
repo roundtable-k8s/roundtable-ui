@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Skull } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
+import { useUrlParam } from '../hooks/useUrlParam'
 import { inTable } from '../lib/tables'
 import { apiGet, apiPost } from '../lib/api'
 import { PageHeader, RefreshButton } from '../components/ui'
@@ -17,7 +18,8 @@ export function FailedTasksPage() {
   const { table } = useTableFilter()
   const [all, setAll] = useState<DeadLetter[]>([])
   const [total, setTotal] = useState<number | undefined>(undefined)
-  const [state, setState] = useState<StateFilter>('all')
+  const [stateParam, setState] = useUrlParam('state', 'all', STATES)
+  const state = stateParam as StateFilter
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // The state the rows on screen were loaded for; differs from `state` while a new response is pending.
@@ -70,7 +72,7 @@ export function FailedTasksPage() {
       </PageHeader>
       <div className="mb-4">
         <label htmlFor="dl-state" className="text-sm text-gray-400 mb-1 block">State</label>
-        <select id="dl-state" value={state} onChange={(e) => setState(e.target.value as StateFilter)}
+        <select id="dl-state" value={state} onChange={(e) => setState(e.target.value)}
           className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-white">
           {STATES.map((s) => <option key={s} value={s}>{s === 'all' ? 'All states' : s}</option>)}
         </select>

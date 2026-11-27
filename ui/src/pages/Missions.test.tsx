@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { MissionsPage } from './Missions'
 import type { Mission } from '../hooks/useMissions'
 
@@ -26,8 +26,13 @@ function mission(name: string, phase: string, totalCost = '0'): Mission {
   }
 }
 
-const renderPage = () => render(
-  <MemoryRouter initialEntries={['/missions']}>
+function UrlProbe() {
+  return <span data-testid="url-search">{useLocation().search}</span>
+}
+
+const renderPage = (url = '/missions') => render(
+  <MemoryRouter initialEntries={[url]}>
+    <UrlProbe />
     <Routes>
       <Route path="/missions" element={<MissionsPage />} />
       <Route path="/missions/:name" element={<div>detail page</div>} />
@@ -91,6 +96,23 @@ describe('MissionsPage', () => {
 
     await userEvent.click(screen.getByText('Clear filters'))
     expect(screen.getAllByTestId('mission-card')).toHaveLength(2)
+  })
+
+  it('keeps the phase filter in the URL', async () => {
+    state = { loading: false, error: null, missions: [mission('a', 'Active'), mission('b', 'Failed')] }
+    renderPage('/missions?phase=Failed')
+    expect(screen.getAllByTestId('mission-card').map((c) => c.textContent)).toEqual(['b'])
+    const filters = screen.getByText('Phase:').nextElementSibling as HTMLElement
+    await userEvent.click(within(filters).getByText('Active'))
+    expect(screen.getByTestId('url-search')).toHaveTextContent('?phase=Active')
+    await userEvent.click(screen.getByText(/Clear filters/))
+    expect(screen.getByTestId('url-search').textContent).toBe('')
+  })
+
+  it('ignores an unknown phase in the URL', () => {
+    state = { loading: false, error: null, missions: [mission('a', 'Active')] }
+    renderPage('/missions?phase=Bogus')
+    expect(screen.getAllByTestId('mission-card')).toHaveLength(1)
   })
 
   it('refreshes when the refresh button is clicked', async () => {
