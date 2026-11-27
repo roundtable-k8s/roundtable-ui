@@ -11,6 +11,7 @@ import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet
 import { IsolationBadge } from './IsolationBadge'
 import { egressHostLabels, optOutSummary } from '../lib/isolation'
 import { sanitizeText } from '../lib/untrusted'
+import { KnightRecentWork } from './KnightRecentWork'
 import { PodLogsViewer } from './PodLogsViewer'
 import { cardLoad, type CardEntry } from '../lib/cards'
 
@@ -327,6 +328,9 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
 
           {/* Agent card (#243) */}
           {card && <KnightCardSection entry={card} fallbackMax={knightDetail?.concurrency ?? knight.concurrency} />}
+
+          {/* Recent tasks and schedules (#510) */}
+          <KnightRecentWork knight={knight.name} table={knight.table} />
 
           {/* Isolation (#269) */}
           {(knightDetail?.isolation ?? knight.isolation) && (
