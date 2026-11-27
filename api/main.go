@@ -2033,6 +2033,77 @@ type MissionSummary struct {
 	NotionalCostUSD string       `json:"notionalCostUSD,omitempty"`
 }
 
+// MissionConditionDTO is one status condition of a Mission (detail only).
+type MissionConditionDTO struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason,omitempty"`
+	Message            string `json:"message,omitempty"`
+	LastTransitionTime string `json:"lastTransitionTime,omitempty"`
+}
+
+// MissionKnightCostDTO is one entry of status.costBreakdown (detail only).
+type MissionKnightCostDTO struct {
+	Name      string `json:"name"`
+	CostUSD   string `json:"costUSD"`
+	Ephemeral bool   `json:"ephemeral"`
+}
+
+// maxMissionResultChars caps the result text in the detail response.
+const maxMissionResultChars = 4000
+
+// MissionDetail is the response of GET /api/missions/{name}: the list shape
+// plus the fields that explain a mission. The list payload stays slim.
+type MissionDetail struct {
+	MissionSummary
+	CreatedAt     string                 `json:"createdAt,omitempty"`
+	Conditions    []MissionConditionDTO  `json:"conditions,omitempty"`
+	CostBreakdown []MissionKnightCostDTO `json:"costBreakdown,omitempty"`
+	Result        string                 `json:"result,omitempty"`
+}
+
+func parseMissionDetail(obj map[string]interface{}, summary MissionSummary) MissionDetail {
+	status := getNestedMap(obj, "status")
+	d := MissionDetail{
+		MissionSummary: summary,
+		CreatedAt:      getStr(getNestedMap(obj, "metadata"), "creationTimestamp"),
+	}
+	for _, c := range getSlice(status, "conditions") {
+		cm, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		d.Conditions = append(d.Conditions, MissionConditionDTO{
+			Type:               getStr(cm, "type"),
+			Status:             getStr(cm, "status"),
+			Reason:             getStr(cm, "reason"),
+			Message:            getStr(cm, "message"),
+			LastTransitionTime: getStr(cm, "lastTransitionTime"),
+		})
+	}
+	for _, c := range getSlice(status, "costBreakdown") {
+		cm, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		cost := getStr(cm, "costUSD")
+		if _, ok := parseCost(cost); !ok {
+			continue
+		}
+		d.CostBreakdown = append(d.CostBreakdown, MissionKnightCostDTO{
+			Name:      getStr(cm, "name"),
+			CostUSD:   cost,
+			Ephemeral: getBool(cm, "ephemeral"),
+		})
+	}
+	if r := []rune(getStr(status, "result")); len(r) > maxMissionResultChars {
+		d.Result = string(r[:maxMissionResultChars])
+	} else {
+		d.Result = string(r)
+	}
+	return d
+}
+
 func missionsHandler(namespace string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if dynClient == nil {
@@ -2088,7 +2159,7 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 		applyMissionNotional(&mission, missionChainIndex(r.Context(), dynClient, namespace))
 		setSpanTable(r.Context(), mission.RoundTableRef)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mission)
+		json.NewEncoder(w).Encode(parseMissionDetail(obj.Object, mission))
 	}
 }
 
