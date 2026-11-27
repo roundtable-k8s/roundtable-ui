@@ -104,6 +104,28 @@ func TestChatKnightsAndTask(t *testing.T) {
 	}
 }
 
+func TestChatKnightsLoadQuery(t *testing.T) {
+	const body = `{"knights":[{"name":"galahad","queue":{"pending":2,"inFlight":1}}]}`
+	f := &fakeGateway{handler: func(c gwCall, w http.ResponseWriter) { io.WriteString(w, body) }}
+	srv := f.server(t)
+	r := chatRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+
+	w := doReq(r, "GET", "/api/chat/knights?load=true&namespace=prod", "")
+	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != body {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	if f.calls[0].query != "load=true&namespace=prod" {
+		t.Errorf("query %q", f.calls[0].query)
+	}
+	if w := doReq(r, "GET", "/api/chat/knights", ""); w.Code != 200 || f.calls[1].query != "" {
+		t.Errorf("no query: %d %q", w.Code, f.calls[1].query)
+	}
+	n := len(f.calls)
+	if w := doReq(r, "GET", "/api/chat/knights?load=maybe", ""); w.Code != http.StatusBadRequest || len(f.calls) != n {
+		t.Errorf("load=maybe: %d, calls %d", w.Code, len(f.calls))
+	}
+}
+
 func TestChatEventsStreamsAndFallsBack(t *testing.T) {
 	f := &fakeGateway{handler: func(c gwCall, w http.ResponseWriter) {
 		if c.path == "/v1/tasks/t1/events" {

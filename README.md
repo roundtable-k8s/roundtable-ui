@@ -397,7 +397,7 @@ The dashboard exposes a comprehensive REST API:
 
 ### Chat
 Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
-- `GET /api/chat/knights` — Knights the gateway can reach (`GET /v1/knights`)
+- `GET /api/chat/knights` — Knights the gateway can reach (`GET /v1/knights`). Optional `namespace`; `load=true` (only `true` or `false`, else 400) adds each knight's `queue: {pending, inFlight}` from the gateway
 - `POST /api/chat/{knight}` — Send a chat turn (`POST /v1/knights/{knight}/invoke`, `timeoutSeconds: 0`). Body `{message, runId?, model?, namespace?}`; `message` is 1-10000 characters, pass an earlier turn's `runId` to continue its session. Returns the gateway task record at once; rate limited (429)
 - `GET /api/chat/tasks/{taskId}` — Task status and output (same as `GET /api/tasks/dispatch/{taskId}`)
 - `GET /api/chat/tasks/{taskId}/events` — Server-sent events of the task, streamed from the gateway; a non-200 answer (404 when the gateway has no events endpoint, message `Task events not available`) is relayed as JSON so the client can fall back to polling
