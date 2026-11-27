@@ -21,7 +21,7 @@ const renderAt = (url: string, allowed?: readonly string[]) =>
   render(<MemoryRouter initialEntries={[url]}><Probe allowed={allowed} /></MemoryRouter>)
 
 describe('useUrlParam', () => {
-  it('returns the default when absent and the URL value when present', () => {
+  it('returns the default when the param is absent', () => {
     renderAt('/p')
     expect(screen.getByTestId('v')).toHaveTextContent('all')
   })
