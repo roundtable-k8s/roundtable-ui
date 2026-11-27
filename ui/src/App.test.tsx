@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 import type { NatsEvent } from './hooks/useWebSocket'
@@ -117,6 +117,23 @@ describe('Kubernetes health banner', () => {
     renderAt('/')
     await waitFor(() => expect(f).toHaveBeenCalled())
     expect(screen.queryByText(BANNER)).toBeNull()
+  })
+
+  it('hides the banner after a failed later poll', async () => {
+    vi.useFakeTimers()
+    try {
+      const ok = new Response(JSON.stringify({ status: 'ok', kubernetes: 'unavailable', nats: 'connected' }), { headers: { 'Content-Type': 'application/json' } })
+      const f = vi.fn().mockResolvedValueOnce(ok).mockResolvedValue(new Response('boom', { status: 500 }))
+      vi.stubGlobal('fetch', f)
+      renderAt('/')
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByRole('alert').textContent).toBe(BANNER)
+      await act(async () => { await vi.advanceTimersByTimeAsync(60000) })
+      expect(f.mock.calls.length).toBeGreaterThanOrEqual(2)
+      expect(screen.queryByText(BANNER)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows no banner when the health request fails', async () => {
