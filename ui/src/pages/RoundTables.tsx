@@ -6,6 +6,7 @@ import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
 import { budgetText, formatCost } from '../lib/format'
 import type { RoundTable } from '../lib/types'
+import { countLabel } from '../lib/format'
 import { PageHeader, RefreshButton, ListState, PhaseBadge, ProgressBar } from '../components/ui'
 
 export function RoundTablesPage() {
@@ -25,7 +26,7 @@ export function RoundTablesPage() {
 
   return (
     <div>
-      <PageHeader icon={Crown} title="Round Tables">
+      <PageHeader icon={Crown} title="Round Tables" subtitle={loading || (error && roundTables.length === 0) ? undefined : countLabel(roundTables.length, roundTables.length, 'round tables')}>
         <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />
       </PageHeader>
 

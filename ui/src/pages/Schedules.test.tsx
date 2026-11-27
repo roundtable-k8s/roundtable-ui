@@ -80,6 +80,7 @@ describe('SchedulesPage', () => {
     serve()
     renderPage()
     const digest = await rowFor('morning-digest')
+    expect(screen.getByText(/^\d+ schedules? · What runs on a cadence/)).toBeInTheDocument()
     expect(digest).toHaveTextContent('digest')
     expect(digest).toHaveTextContent('Digest for {{ .Event.Time }}')
     expect(within(digest).getByText('at 07:00 on Monday to Friday')).toHaveAttribute('title', '0 7 * * 1-5 (Europe/Berlin)')

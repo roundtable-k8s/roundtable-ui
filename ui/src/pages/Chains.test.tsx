@@ -59,6 +59,7 @@ describe('ChainsPage fan-out', () => {
   it('shows a progress bar with done/running/failed/omitted and the running items with pod and activity link', async () => {
     renderPage('/chains?chain=doc-sweep')
     const step = await screen.findByRole('region', { name: 'step review-each' })
+    expect(screen.getByText('2 chains')).toBeInTheDocument()
 
     const bar = within(step).getByRole('progressbar', { name: 'review-each progress' })
     expect(bar).toHaveAttribute('aria-valuemax', '12')

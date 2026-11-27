@@ -7,7 +7,7 @@ import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { apiDelete, apiPost } from '../lib/api'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Modal } from '../components/ui'
-import { formatDateTime, formatRelativeTime, until } from '../lib/format'
+import { countLabel, formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
@@ -286,7 +286,7 @@ export function SchedulesPage() {
   const schedules = data?.schedules ?? []
   return (
     <div>
-      <PageHeader icon={CalendarClock} title="Schedules" subtitle="What runs on a cadence across the fleet">
+      <PageHeader icon={CalendarClock} title="Schedules" subtitle={[!loading && !(error && all.length === 0) && countLabel(shown.length, all.length, 'schedules'), 'What runs on a cadence across the fleet'].filter(Boolean).join(' · ')}>
         <Link to="/triggers" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
           <Zap className="w-4 h-4" aria-hidden /> All triggers
         </Link>

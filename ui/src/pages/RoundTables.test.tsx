@@ -32,6 +32,7 @@ describe('RoundTablesPage planner and breakdown', () => {
   })
   it('shows planner link and asleep count', () => {
     renderPage()
+    expect(screen.getByText('2 round tables')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'dev-planner' })).toBeTruthy()
     expect(screen.getByTestId('breakdown-roundtable-dev').textContent).toBe('3 ready, 2 asleep, 0 suspended, 0 not ready')
   })

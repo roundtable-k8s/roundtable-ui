@@ -38,6 +38,7 @@ describe('TriggersPage', () => {
     render(<MemoryRouter><TriggersPage /></MemoryRouter>)
     const rows = (await screen.findAllByRole('row')).slice(1)
     expect(rows).toHaveLength(3)
+    expect(screen.getByText(/3 triggers · What starts your chains/)).toBeInTheDocument()
     expect(rows[0]).toHaveTextContent('schedule')
     expect(rows[0]).toHaveTextContent('nightly-scan')
     expect(rows[0]).toHaveTextContent('Ready')
