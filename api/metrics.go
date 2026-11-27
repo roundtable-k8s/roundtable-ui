@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -65,7 +66,13 @@ func routeLabel(r *http.Request) string {
 	return "static"
 }
 
+// slowRequestThreshold is the latency above which an access log line is
+// written at warn level even when the response was successful.
+var slowRequestThreshold = time.Second
+
 func metricsMiddleware(next http.Handler) http.Handler {
+	// LOG_REQUESTS=true also logs fast 2xx/3xx responses at info level.
+	logAll, _ := strconv.ParseBool(envOr("LOG_REQUESTS", ""))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket connections hijack the ResponseWriter; wrapping it would
 		// break the upgrade (statusRecorder doesn't implement http.Hijacker).
@@ -76,8 +83,33 @@ func metricsMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		sr := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sr, r)
+		elapsed := time.Since(start)
 		route := routeLabel(r)
 		httpRequestsTotal.WithLabelValues(route, r.Method, strconv.Itoa(sr.status)).Inc()
-		httpRequestDuration.WithLabelValues(route, r.Method).Observe(time.Since(start).Seconds())
+		httpRequestDuration.WithLabelValues(route, r.Method).Observe(elapsed.Seconds())
+		if r.URL.Path != "/api/health" && r.URL.Path != "/metrics" {
+			logAccess(r, route, sr.status, elapsed, logAll)
+		}
 	})
+}
+
+// logAccess writes one structured line per request. Only the route template
+// is logged: never the raw path, query string, headers or body, so API keys
+// and path ids cannot leak into logs.
+func logAccess(r *http.Request, route string, status int, elapsed time.Duration, logAll bool) {
+	level := slog.LevelInfo
+	switch {
+	case status >= http.StatusInternalServerError:
+		level = slog.LevelError
+	case status >= http.StatusBadRequest || elapsed >= slowRequestThreshold:
+		level = slog.LevelWarn
+	case !logAll:
+		return
+	}
+	slog.LogAttrs(r.Context(), level, "http request",
+		slog.String("method", r.Method),
+		slog.String("route", route),
+		slog.Int("status", status),
+		slog.Float64("duration_ms", float64(elapsed)/float64(time.Millisecond)),
+	)
 }
