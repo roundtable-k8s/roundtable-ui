@@ -71,7 +71,7 @@ export function RoundTablesPage() {
                     <span className="text-gray-400">Mission planning</span>
                     {rt.plannerEnabled !== false && rt.plannerKnight ? (
                       <span>
-                        Planner: <Link to={`/fleet?table=${encodeURIComponent(rt.name)}`} className="text-roundtable-gold hover:underline">{rt.plannerKnight}</Link>
+                        Planner: <Link to={`/fleet?table=${encodeURIComponent(rt.name)}&knight=${encodeURIComponent(rt.plannerKnight)}`} className="text-roundtable-gold hover:underline">{rt.plannerKnight}</Link>
                       </span>
                     ) : (
                       <span className="text-gray-500">Planner: none</span>

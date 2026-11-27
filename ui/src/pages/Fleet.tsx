@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Zap, Crown, DollarSign, TrendingUp, ShieldOff } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Zap, Crown, DollarSign, TrendingUp, ShieldOff, Search } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
@@ -20,6 +21,16 @@ import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as S
 const tableOf = (k: { table?: string }) => (k.table && k.table !== 'none' ? k.table : undefined)
 
 const knightKey = (k: { namespace?: string; name: string }) => `${k.namespace ?? ''}/${k.name}`
+const PAGE_SIZE = 60
+const STATUS_OPTIONS = [
+  ['online', 'Online'],
+  ['starting', 'Starting'],
+  ['offline', 'Offline'],
+  ['scaled-to-zero', 'Scaled to zero'],
+] as const
+const SORT_OPTIONS = [['name', 'Name'], ['status', 'Status'], ['restarts', 'Restarts']] as const
+type SortKey = (typeof SORT_OPTIONS)[number][0]
+const STATUS_RANK: Record<string, number> = { online: 0, busy: 1, starting: 2, 'scaled-to-zero': 3, offline: 4 }
 
 export function FleetPage() {
   const { knights, loading, error, refresh } = useFleet()
@@ -37,18 +48,59 @@ export function FleetPage() {
   }, [selectedKey, selectedKnight, loading])
   const { events } = useWebSocket()
   const { cards } = useCards()
+  const [params, setParams] = useSearchParams()
+  const q = params.get('q') ?? ''
+  const status = params.get('status') ?? ''
+  const sortParam = params.get('sort') ?? ''
+  const sort: SortKey = SORT_OPTIONS.some(([v]) => v === sortParam) ? (sortParam as SortKey) : 'name'
+  const knightParam = params.get('knight') ?? ''
+  const setParam = useCallback((key: string, value: string) => {
+    setParams((prev) => {
+      const p = new URLSearchParams(prev)
+      if (value) p.set(key, value)
+      else p.delete(key)
+      return p
+    }, { replace: true })
+  }, [setParams])
+  const [limit, setLimit] = useState(PAGE_SIZE)
   const [skillFilter, setSkillFilter] = useState<SkillFilterValue>({})
   const [notIsolatedOnly, setNotIsolatedOnly] = useState(false)
   const skillTags = useMemo(() => cardSkillTags(cards.values()), [cards])
   const hasIsolation = knights.some((k) => k.isolation)
   const notIsolatedCount = knights.filter(isNotIsolated).length
-  const visibleKnights = useMemo(
-    () => knights
+  const visibleKnights = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const byName = (a: Knight, b: Knight) => a.name.localeCompare(b.name)
+    const cmp = sort === 'status'
+      ? (a: Knight, b: Knight) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || byName(a, b)
+      : sort === 'restarts'
+        ? (a: Knight, b: Knight) => b.restarts - a.restarts || byName(a, b)
+        : byName
+    return knights
+      .filter((k) => !needle || k.name.toLowerCase().includes(needle))
+      .filter((k) => !status || k.status === status)
       .filter((k) => matchesSkillFilter(cardForKnight(cards, k.name, tableOf(k)), skillFilter))
       .filter((k) => !notIsolatedOnly || isNotIsolated(k))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    [knights, cards, skillFilter, notIsolatedOnly],
-  )
+      .sort(cmp)
+  }, [knights, cards, skillFilter, notIsolatedOnly, q, status, sort])
+
+  // A new filter or sort starts again from the first page.
+  useEffect(() => { setLimit(PAGE_SIZE) }, [q, status, sort, skillFilter, notIsolatedOnly, table])
+
+  // ?knight=<name>: open that knight's drawer once the fleet has it.
+  const openedFor = useRef('')
+  useEffect(() => {
+    if (!knightParam) { openedFor.current = ''; return }
+    if (openedFor.current === knightParam) return
+    const k = knights.find((x) => x.name === knightParam && (!table || tableOf(x) === table))
+    if (!k) return
+    openedFor.current = knightParam
+    setSelectedKey(knightKey(k))
+  }, [knightParam, knights, table])
+  const closeDrawer = () => {
+    setSelectedKey(null)
+    if (knightParam) setParam('knight', '')
+  }
 
   const knightActivity = useMemo(() => computeKnightActivity(events, Date.now()), [events])
 
@@ -185,6 +237,41 @@ export function FleetPage() {
         />
       )}
 
+      {/* Name, status and sort (#401) */}
+      {!loading && (
+        <div className="mb-4 flex flex-wrap items-center gap-2" role="search" aria-label="Filter knights by name and status">
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              aria-label="Filter by name"
+              value={q}
+              onChange={(e) => setParam('q', e.target.value)}
+              placeholder="Filter by name…"
+              className="bg-roundtable-navy border border-roundtable-steel rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-roundtable-gold/50 focus:outline-none w-56"
+            />
+          </div>
+          <select
+            aria-label="Filter by status"
+            value={status}
+            onChange={(e) => setParam('status', e.target.value)}
+            className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1.5 text-sm text-white"
+          >
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+          <select
+            aria-label="Sort by"
+            value={sort}
+            onChange={(e) => setParam('sort', e.target.value === 'name' ? '' : e.target.value)}
+            className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1.5 text-sm text-white"
+          >
+            {SORT_OPTIONS.map(([v, label]) => <option key={v} value={v}>Sort: {label}</option>)}
+          </select>
+          <span className="text-xs text-gray-500" data-testid="fleet-count">{visibleKnights.length}/{knights.length}</span>
+        </div>
+      )}
+
       {/* Isolation filter (#269): only when the API reports isolation */}
       {!loading && hasIsolation && (
         <div className="flex items-center gap-2 mb-4">
@@ -209,7 +296,7 @@ export function FleetPage() {
       {/* Knight grid */}
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {visibleKnights.map((knight) => (
+          {visibleKnights.slice(0, limit).map((knight) => (
             <KnightCard
               key={knight.name}
               knight={knight}
@@ -221,16 +308,27 @@ export function FleetPage() {
           ))}
         </div>
       )}
+      {!loading && visibleKnights.length > limit && (
+        <div className="flex justify-center mt-4">
+          <button
+            type="button"
+            onClick={() => setLimit((n) => n + PAGE_SIZE)}
+            className="text-sm px-4 py-1.5 rounded-lg border border-roundtable-steel bg-roundtable-slate text-gray-300 hover:text-white"
+          >
+            Show {PAGE_SIZE} more ({visibleKnights.length - limit} left)
+          </button>
+        </div>
+      )}
       {!loading && knights.length > 0 && visibleKnights.length === 0 && (
         <p className="text-center text-gray-500 text-sm py-10">
-          {notIsolatedOnly ? 'No knight matches these filters.' : 'No knight has a skill matching this filter.'}
+          {notIsolatedOnly || q || status ? 'No knight matches these filters.' : 'No knight has a skill matching this filter.'}
         </p>
       )}
 
       {/* Knight detail drawer */}
       <KnightDetailDrawer
         knight={selectedKnight}
-        onClose={() => setSelectedKey(null)}
+        onClose={closeDrawer}
         card={selectedKnight ? cardForKnight(cards, selectedKnight.name, tableOf(selectedKnight)) : undefined}
       />
     </div>
