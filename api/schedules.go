@@ -37,6 +37,67 @@ func scheduleRoutes(api *mux.Router, g *gatewayClient, wrapRun func(http.Handler
 	api.Handle("/schedules/{namespace}/{name}/run", wrapRun(scheduleActionHandler(g, "run"))).Methods("POST")
 	api.HandleFunc("/schedules/{namespace}/{name}/runs", scheduleRunsHandler(g)).Methods("GET")
 	api.HandleFunc("/schedules/{namespace}/{name}/runs/{run}", scheduleRunResultHandler(g)).Methods("GET")
+	api.HandleFunc("/schedules/{namespace}/{name}/next", scheduleNextHandler(g)).Methods("GET")
+	api.HandleFunc("/schedules/preview", schedulePreviewHandler(g)).Methods("GET")
+}
+
+// scheduleCountQuery validates the optional ?count= of the next-fire-times
+// routes: a positive integer is forwarded, anything else is a 400 (the
+// gateway applies its own maximum of 50).
+func scheduleCountQuery(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
+	q := url.Values{}
+	if c := r.URL.Query().Get("count"); c != "" {
+		n, err := strconv.Atoi(c)
+		if err != nil || n < 1 {
+			jsonError(w, "count must be a positive integer", http.StatusBadRequest)
+			return nil, false
+		}
+		q.Set("count", strconv.Itoa(n))
+	}
+	return q, true
+}
+
+// scheduleNextHandler proxies GET /v1/schedules/{namespace}/{name}/next?count=.
+func scheduleNextHandler(g *gatewayClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, ok := schedulePath(w, r)
+		if !ok {
+			return
+		}
+		q, ok := scheduleCountQuery(w, r)
+		if !ok {
+			return
+		}
+		g.relay(w, r, http.MethodGet, p+"/next", q, nil)
+	}
+}
+
+// schedulePreviewHandler proxies GET /v1/schedules/preview?cron=&timeZone=&count=.
+// The cron expression is required (at most 256 characters) and timeZone is
+// optional (at most 64 characters). The gateway's 422 for a bad cron or zone
+// is relayed with its message.
+func schedulePreviewHandler(g *gatewayClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cron := r.URL.Query().Get("cron")
+		if cron == "" || len(cron) > 256 {
+			jsonError(w, "cron is required (at most 256 characters)", http.StatusBadRequest)
+			return
+		}
+		tz := r.URL.Query().Get("timeZone")
+		if len(tz) > 64 {
+			jsonError(w, "timeZone must be at most 64 characters", http.StatusBadRequest)
+			return
+		}
+		q, ok := scheduleCountQuery(w, r)
+		if !ok {
+			return
+		}
+		q.Set("cron", cron)
+		if tz != "" {
+			q.Set("timeZone", tz)
+		}
+		g.relay(w, r, http.MethodGet, "/v1/schedules/preview", q, nil)
+	}
 }
 
 // schedulePath validates {namespace}/{name} and returns the gateway path
