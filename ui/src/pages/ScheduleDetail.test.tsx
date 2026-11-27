@@ -205,3 +205,36 @@ describe('ScheduleDetailPage', () => {
     expect(await screen.findByText('schedules list')).toBeInTheDocument()
   })
 })
+
+describe('ScheduleDetailPage policy block', () => {
+  it('shows the policy, starting deadline and suspension source', async () => {
+    mockApi(sched({
+      suspended: true, suspendedBy: 'derek',
+      concurrency: { policy: 'Forbid' }, startingDeadlineSeconds: 300,
+    }))
+    renderPage()
+    const policy = await screen.findByRole('region', { name: 'policy' })
+    expect(policy).toHaveTextContent('Forbid')
+    expect(policy).toHaveTextContent('Starting deadline5m 0s')
+    expect(policy).toHaveTextContent('Suspended by')
+    expect(policy).toHaveTextContent('derek')
+    expect(policy).not.toHaveTextContent('Max active')
+  })
+
+  it('shows none for an unset starting deadline and the max active cap', async () => {
+    mockApi(sched({ concurrency: { policy: 'Allow', maxActive: 2 } }))
+    renderPage()
+    const policy = await screen.findByRole('region', { name: 'policy' })
+    expect(policy).toHaveTextContent('Allow, up to 2 active')
+    expect(policy).toHaveTextContent('Max active2')
+    expect(policy).toHaveTextContent('Starting deadlinenone')
+    expect(policy).not.toHaveTextContent('Suspended by')
+  })
+
+  it('renders no policy block when the gateway omits the fields', async () => {
+    mockApi(sched())
+    renderPage()
+    await screen.findByRole('region', { name: 'summary' })
+    expect(screen.queryByRole('region', { name: 'policy' })).toBeNull()
+  })
+})

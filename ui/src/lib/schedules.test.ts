@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { phaseToOutcome, formatCostUSD, formatSeconds, runResultText, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
+import { describeDeadline, describePolicy, phaseToOutcome, formatCostUSD, formatSeconds, runResultText, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
 
 describe('schedules helpers', () => {
   it('builds encoded API paths and links', () => {
@@ -41,5 +41,20 @@ describe('phaseToOutcome', () => {
     expect(phaseToOutcome('PartiallySucceeded')).toBe('partiallySucceeded')
     expect(phaseToOutcome('Running')).toBe('running')
     expect(phaseToOutcome('')).toBe('unknown')
+  })
+})
+
+describe('schedule policy helpers', () => {
+  it('describes the concurrency policy, with the cap when set', () => {
+    expect(describePolicy({ concurrency: { policy: 'Forbid' } })).toBe('Forbid')
+    expect(describePolicy({ concurrency: { policy: 'Allow', maxActive: 3 } })).toBe('Allow, up to 3 active')
+    expect(describePolicy({ concurrency: { policy: 'Allow', maxActive: 0 } })).toBe('Allow')
+    expect(describePolicy({})).toBe('')
+  })
+
+  it('describes the starting deadline, none when unset', () => {
+    expect(describeDeadline({})).toBe('none')
+    expect(describeDeadline({ startingDeadlineSeconds: 0 })).toBe('0s')
+    expect(describeDeadline({ startingDeadlineSeconds: 300 })).toBe('5m 0s')
   })
 })

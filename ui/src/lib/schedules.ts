@@ -23,6 +23,12 @@ export interface ScheduleFiring {
   skipReason?: string
 }
 
+/** The concurrency policy of a schedule: Allow, Forbid or Replace, with an optional cap on active runs. */
+export interface ScheduleConcurrency {
+  policy: string
+  maxActive?: number
+}
+
 export interface Schedule {
   name: string
   namespace: string
@@ -37,6 +43,11 @@ export interface Schedule {
   lastRunAt?: string
   lastResult?: ScheduleFiring
   managedBy: ManagedBy
+  concurrency?: ScheduleConcurrency
+  /** Seconds after a missed fire time during which it may still start; unset means none. */
+  startingDeadlineSeconds?: number
+  /** Who suspended the schedule, from its suspend annotation. */
+  suspendedBy?: string
 }
 
 /** One firing of a schedule (GET …/runs), newest first. */
@@ -112,6 +123,18 @@ export function scheduleLink(namespace: string, name: string): string {
 /** Runs newest first, whatever order the API returned them in. */
 export function sortRunsNewestFirst(runs: ScheduleRun[]): ScheduleRun[] {
   return [...runs].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+}
+
+/** "Forbid", or "Allow, up to 3 active" when a cap is set; "" when the gateway sent no policy. */
+export function describePolicy(s: Pick<Schedule, 'concurrency'>): string {
+  const c = s.concurrency
+  if (!c?.policy) return ''
+  return c.maxActive && c.maxActive > 0 ? `${c.policy}, up to ${c.maxActive} active` : c.policy
+}
+
+/** "5m 0s" for a starting deadline; "none" when unset. */
+export function describeDeadline(s: Pick<Schedule, 'startingDeadlineSeconds'>): string {
+  return s.startingDeadlineSeconds == null ? 'none' : formatSecondsLadder(s.startingDeadlineSeconds)
 }
 
 /** 212.4 → "3m 32s"; undefined → "—". */
