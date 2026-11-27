@@ -150,6 +150,28 @@ export interface ScheduleRunNow {
 
 export const RUN_HISTORY_LIMIT = 50
 
+/** The Schedules page state filter (?state=). */
+export const SCHEDULE_STATES = ['all', 'active', 'suspended', 'failing'] as const
+export type ScheduleState = (typeof SCHEDULE_STATES)[number]
+
+/** Outcomes of the last firing that count as failing. */
+const FAILING_OUTCOMES = ['failed', 'lost']
+
+/** Whether a schedule's last firing failed or was lost. No lastResult is not failing. */
+export function isFailing(s: Schedule): boolean {
+  return !!s.lastResult && FAILING_OUTCOMES.includes(s.lastResult.outcome)
+}
+
+/** Narrows schedules to one state: all, active (not suspended), suspended, or failing (last firing failed or lost). */
+export function filterSchedules(list: Schedule[], state: ScheduleState | string): Schedule[] {
+  switch (state) {
+    case 'active': return list.filter((s) => !s.suspended)
+    case 'suspended': return list.filter((s) => s.suspended)
+    case 'failing': return list.filter(isFailing)
+    default: return list
+  }
+}
+
 /** Dashboard API path of a schedule, or of one of its sub-routes. */
 export function scheduleApi(namespace: string, name: string, ...rest: string[]): string {
   return ['/api/schedules', namespace, name, ...rest].map((p, i) => (i === 0 ? p : encodeURIComponent(p))).join('/')
