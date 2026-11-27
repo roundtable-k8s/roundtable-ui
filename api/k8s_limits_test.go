@@ -8,7 +8,9 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
@@ -95,5 +97,67 @@ func TestApplyKubeClientLimits(t *testing.T) {
 	applyKubeClientLimits(cfg)
 	if cfg.Timeout != 0 || cfg.QPS != 7.5 || cfg.Burst != 40 {
 		t.Fatalf("override: %v %v", cfg.QPS, cfg.Burst)
+	}
+}
+
+// TestKubeClientsHaveNoHTTPTimeout checks the clients the API really builds
+// from the config: client-go turns rest.Config.Timeout into the HTTP client
+// timeout, so a non-zero value would cut watch streams after that long.
+func TestKubeClientsHaveNoHTTPTimeout(t *testing.T) {
+	const watchLine = `{"type":"ADDED","object":{"kind":"Pod","apiVersion":"v1","metadata":{"name":"p"}}}` + "\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		// Hold the stream open for longer than the configured timeout
+		// below would allow, then send one event.
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-r.Context().Done():
+			return
+		}
+		_, _ = w.Write([]byte(watchLine))
+		w.(http.Flusher).Flush()
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+
+	cfg := &rest.Config{Host: srv.URL, Timeout: 50 * time.Millisecond}
+	applyKubeClientLimits(cfg)
+
+	hc, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hc.Timeout != 0 {
+		t.Fatalf("HTTP client timeout = %v, want 0", hc.Timeout)
+	}
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dynamic.NewForConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// A watch must survive past the 50 ms that a client timeout would allow.
+	w, err := cs.CoreV1().Pods("ns").Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Stop()
+	select {
+	case ev, ok := <-w.ResultChan():
+		if !ok {
+			t.Fatal("watch closed before the event")
+		}
+		if ev.Type != "ADDED" {
+			t.Fatalf("event type = %v, want ADDED", ev.Type)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no watch event; stream was cut")
 	}
 }
