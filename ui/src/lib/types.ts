@@ -13,11 +13,6 @@ export interface RoundTable {
   natsPrefix: string
   costBudgetUSD: string
   totalCost: string
-  warmPool?: {
-    available: number
-    provisioning: number
-    claimed: number
-  }
   policies?: {
     costBudgetUSD: string
     maxConcurrentPlanTasks: number

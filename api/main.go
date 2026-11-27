@@ -2455,13 +2455,6 @@ func parseMissionResource(obj map[string]interface{}) MissionSummary {
 	return mission
 }
 
-// WarmPoolStatusDTO represents the warm pool status fields from the CRD
-type WarmPoolStatusDTO struct {
-	Available    int `json:"available"`
-	Provisioning int `json:"provisioning"`
-	Claimed      int `json:"claimed"`
-}
-
 // PoliciesDTO represents the policies spec fields from the CRD
 type PoliciesDTO struct {
 	CostBudgetUSD          string `json:"costBudgetUSD"`
@@ -2471,21 +2464,20 @@ type PoliciesDTO struct {
 
 // RoundTableSummary is the API response for roundtable list
 type RoundTableSummary struct {
-	Name                string             `json:"name"`
-	Namespace           string             `json:"namespace"`
-	Phase               string             `json:"phase"`
-	KnightsReady        int                `json:"knightsReady"`
-	KnightsTotal        int                `json:"knightsTotal"`
-	NATSPrefix          string             `json:"natsPrefix"`
-	CostBudgetUSD       string             `json:"costBudgetUSD"`
-	TotalCost           string             `json:"totalCost"`
-	TotalTasksCompleted int64              `json:"totalTasksCompleted"`
-	ActiveMissions      int                `json:"activeMissions"`
-	WarmPool            *WarmPoolStatusDTO `json:"warmPool,omitempty"`
-	Policies            *PoliciesDTO       `json:"policies,omitempty"`
-	Description         string             `json:"description,omitempty"`
-	Suspend             bool               `json:"suspend"`
-	Ephemeral           bool               `json:"ephemeral"`
+	Name                string       `json:"name"`
+	Namespace           string       `json:"namespace"`
+	Phase               string       `json:"phase"`
+	KnightsReady        int          `json:"knightsReady"`
+	KnightsTotal        int          `json:"knightsTotal"`
+	NATSPrefix          string       `json:"natsPrefix"`
+	CostBudgetUSD       string       `json:"costBudgetUSD"`
+	TotalCost           string       `json:"totalCost"`
+	TotalTasksCompleted int64        `json:"totalTasksCompleted"`
+	ActiveMissions      int          `json:"activeMissions"`
+	Policies            *PoliciesDTO `json:"policies,omitempty"`
+	Description         string       `json:"description,omitempty"`
+	Suspend             bool         `json:"suspend"`
+	Ephemeral           bool         `json:"ephemeral"`
 	// PlannerKnight is the knight that plans this table's missions (status.plannerKnight).
 	PlannerKnight string `json:"plannerKnight"`
 	// PlannerEnabled is false when spec.planner.enabled is false or the table is ephemeral.
@@ -2602,15 +2594,6 @@ func parseRoundTableResource(obj map[string]interface{}) RoundTableSummary {
 			CostBudgetUSD:          getStr(policies, "costBudgetUSD"),
 			MaxConcurrentPlanTasks: getInt(policies, "maxConcurrentPlanTasks"),
 			MaxMissions:            getInt(policies, "maxMissions"),
-		}
-	}
-
-	// Parse warm pool status
-	if wp := getNestedMap(status, "warmPool"); wp != nil {
-		rt.WarmPool = &WarmPoolStatusDTO{
-			Available:    getInt(wp, "available"),
-			Provisioning: getInt(wp, "provisioning"),
-			Claimed:      getInt(wp, "claimed"),
 		}
 	}
 
