@@ -81,7 +81,7 @@ function RunningExtra({ task, now }: { task: RunningTask; now: number }) {
 }
 
 export function RunningPage() {
-  const { tasks, loading, error, unavailable } = useRunning()
+  const { tasks, loading, error, unavailable, refresh } = useRunning()
   const { connected } = useWebSocket()
   const now = useNow()
   const [params, setParams] = useSearchParams()
@@ -175,7 +175,7 @@ export function RunningPage() {
         </label>
       </div>
 
-      <ListState loading={loading} error={error} count={rows.length} what="running tasks" icon={Activity}
+      <ListState loading={loading} error={error} onRetry={refresh} count={rows.length} what="running tasks" icon={Activity}
         emptyTitle={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'}>
         <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
           <span id="running-rows-hint" className="sr-only">Press Enter on a row to open its details</span>

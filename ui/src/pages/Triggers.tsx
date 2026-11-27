@@ -22,12 +22,12 @@ function ReadyBadge({ t }: { t: Trigger }) {
 
 function TargetCell({ t }: { t: Trigger }) {
   if (t.targetKind === 'knight') {
-    return <Link to={`/fleet?knight=${encodeURIComponent(t.targetKnight ?? '')}`} className="text-gray-200 hover:underline">knight {t.targetKnight}</Link>
+    return <Link to={`/fleet?knight=${encodeURIComponent(t.targetKnight ?? '')}`} className="text-roundtable-gold hover:underline">knight {t.targetKnight}</Link>
   }
   if (t.targetKind === 'mission') {
-    return <Link to="/missions" className="text-gray-200 hover:underline">mission</Link>
+    return <Link to="/missions" className="text-roundtable-gold hover:underline">mission</Link>
   }
-  return <Link to={chainLink(t.targetChain)} className="text-gray-200 hover:underline">{t.targetChain}</Link>
+  return <Link to={chainLink(t.targetChain)} className="text-roundtable-gold hover:underline">{t.targetChain}</Link>
 }
 
 function RunRef({ run, kind }: { run: string; kind?: Trigger['targetKind'] }) {

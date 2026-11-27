@@ -131,4 +131,18 @@ describe('BriefingsPage', () => {
     expect(apiGet).toHaveBeenCalledTimes(2)
     expect(apiGetText).toHaveBeenCalledTimes(1)
   })
+
+  it('selects the nearest entry when a refresh drops the open one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    apiGet.mockResolvedValueOnce(entries).mockResolvedValue([entries[0], entries[2]])
+    render(<BriefingsPage />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Older briefing' }))
+    expect(await screen.findByRole('heading', { name: /January 2, 2024/ })).toBeInTheDocument()
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+
+    expect(await screen.findByRole('heading', { name: /January 1, 2024/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Newer briefing' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Older briefing' })).toBeDisabled()
+  })
 })

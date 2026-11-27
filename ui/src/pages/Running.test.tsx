@@ -26,6 +26,7 @@ const tasks: RunningTask[] = [
 ]
 
 let state: RunningState
+const refresh = vi.fn()
 vi.mock('../hooks/useRunning', () => ({ useRunning: () => state }))
 const send = vi.fn(() => true)
 vi.mock('../hooks/useWebSocket', () => ({
@@ -41,7 +42,7 @@ function renderPage(url = '/running') {
 }
 
 beforeEach(() => {
-  state = { tasks: new Map(tasks.map((t) => [t.taskId, t])), loading: false, error: null, unavailable: false }
+  state = { tasks: new Map(tasks.map((t) => [t.taskId, t])), loading: false, error: null, unavailable: false, refresh }
 })
 
 describe('RunningPage', () => {
@@ -137,5 +138,12 @@ describe('RunningPage', () => {
     state = { ...state, tasks: new Map(), unavailable: true }
     renderPage()
     expect(screen.getByText(/does not report running tasks/)).toBeInTheDocument()
+  })
+
+  it('offers Retry after a failed load', async () => {
+    state = { ...state, tasks: new Map(), error: 'boom' }
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }))
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 })

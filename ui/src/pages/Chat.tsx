@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { Link, useSearchParams } from 'react-router-dom'
 import { MessageSquare, Send, Activity } from 'lucide-react'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { apiGet, apiPost, ApiError } from '../lib/api'
 import { SubmissionKey } from '../lib/submissionKey'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'

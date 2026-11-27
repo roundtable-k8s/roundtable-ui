@@ -23,6 +23,7 @@ export function ArchitecturePage() {
   const [roundTables, setRoundTables] = useState<RoundTable[]>([])
   const [missions, setMissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadedOnce, setLoadedOnce] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'unreachable'>('checking')
 
@@ -39,6 +40,7 @@ export function ArchitecturePage() {
     const failure = [rt, ms].find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
     setError(failure ? (failure.reason instanceof Error ? failure.reason.message : 'Unknown error') : null)
     setLoading(false)
+    setLoadedOnce(true)
   }, [])
 
   useEffect(() => {
@@ -115,6 +117,9 @@ export function ArchitecturePage() {
   ]
   const isLoading = loading || knightsLoading
   const liveCount = roundTables.length + missions.length
+  // The static cards are always available, so only the first load shows the spinner;
+  // a Refresh keeps them on screen.
+  const cardCount = liveCount > 0 || loadedOnce ? Math.max(liveCount, COMPONENTS.length) : 0
 
   return (
     <div>
@@ -127,38 +132,38 @@ export function ArchitecturePage() {
       </p>
 
       <ListState loading={isLoading} error={error} what="architecture data" onRetry={fetchData}
-        count={liveCount || (isLoading ? 0 : COMPONENTS.length)}
+        count={cardCount}
         emptyTitle="No architecture data.">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-        {COMPONENTS.map(comp => (
-          <div 
-            key={comp.id} 
-            className={`rounded-xl border p-5 ${comp.color} transition-all hover:scale-[1.02] ${comp.link ? 'cursor-pointer' : ''}`}
-            onClick={() => comp.link && navigate(comp.link)}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              {comp.icon}
-              <h3 className="text-lg font-bold">{comp.label}</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+          {COMPONENTS.map(comp => (
+            <div 
+              key={comp.id} 
+              className={`rounded-xl border p-5 ${comp.color} transition-all hover:scale-[1.02] ${comp.link ? 'cursor-pointer' : ''}`}
+              onClick={() => comp.link && navigate(comp.link)}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                {comp.icon}
+                <h3 className="text-lg font-bold">{comp.label}</h3>
+              </div>
+              <p className="text-sm opacity-80 mb-3">{comp.description}</p>
+              {comp.stats && (
+                <div className="mb-3">
+                  <span className="text-xs px-2 py-1 rounded bg-white/10 border border-white/20 font-mono">
+                    {comp.stats}
+                  </span>
+                </div>
+              )}
+              {comp.connections.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {comp.connections.map(c => {
+                    const target = COMPONENTS.find(x => x.id === c)
+                    return <span key={c} className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10">→ {target?.label.split('(')[0].trim() || c}</span>
+                  })}
+                </div>
+              )}
             </div>
-            <p className="text-sm opacity-80 mb-3">{comp.description}</p>
-            {comp.stats && (
-              <div className="mb-3">
-                <span className="text-xs px-2 py-1 rounded bg-white/10 border border-white/20 font-mono">
-                  {comp.stats}
-                </span>
-              </div>
-            )}
-            {comp.connections.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {comp.connections.map(c => {
-                  const target = COMPONENTS.find(x => x.id === c)
-                  return <span key={c} className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10">→ {target?.label.split('(')[0].trim() || c}</span>
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
       </ListState>
       <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-6">
         <h2 className="text-lg font-bold text-white mb-4">Data Flow</h2>
