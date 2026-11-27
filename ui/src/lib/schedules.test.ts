@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describeDeadline, describeSuspension, describePolicy, phaseToOutcome, formatCostUSD, formatSeconds, runResultText, runResultOutcome, describeTurns, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
+import { describeDeadline, describeSuspension, describePolicy, phaseToOutcome, formatCostUSD, formatSeconds, runResultText, runResultOutcome, describeTurns, prLabel, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
 
 describe('schedules helpers', () => {
   it('builds encoded API paths and links', () => {
@@ -42,9 +42,9 @@ describe('knight and mission results', () => {
     expect(runResultText({ ...base, target: 'knight', task: { error: 'e' } })).toBe('e')
     expect(runResultText({ ...base, target: 'knight' })).toBe('')
   })
-  it('reads the mission result, else its message', () => {
-    expect(runResultText({ ...base, target: 'mission', mission: { result: 'res', message: 'm' } })).toBe('res')
-    expect(runResultText({ ...base, target: 'mission', mission: { message: 'm' } })).toBe('m')
+  it('reads the mission result', () => {
+    expect(runResultText({ ...base, target: 'mission', mission: { result: 'res' } })).toBe('res')
+    expect(runResultText({ ...base, target: 'mission', mission: { phase: 'Failed' } })).toBe('')
   })
   it('falls back to task status or mission phase for the outcome', () => {
     expect(runResultOutcome({ ...base, target: 'knight', task: { status: 'Failed' } })).toBe('failed')
@@ -57,6 +57,14 @@ describe('knight and mission results', () => {
     expect(describeTurns({ turns: 1, toolCalls: 0 })).toBe('1 turn · 0 tool calls')
     expect(describeTurns({ turns: 2 })).toBe('2 turns')
     expect(describeTurns({})).toBe('')
+  })
+})
+
+describe('prLabel', () => {
+  it('joins repo and number', () => {
+    expect(prLabel({ repo: 'o/r', number: 4 })).toBe('o/r#4')
+    expect(prLabel({ repo: 'o/r' })).toBe('o/r')
+    expect(prLabel({})).toBe('')
   })
 })
 

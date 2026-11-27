@@ -76,6 +76,14 @@ export interface ScheduleRunStep {
   outputTruncated?: boolean
 }
 
+/** A pull request a task opened or updated (gateway PRRef). */
+export interface ScheduleRunPR {
+  repo?: string
+  number?: number
+  url?: string
+  action?: string
+}
+
 /** The task a knight-target run created. */
 export interface ScheduleRunTask {
   run?: string
@@ -85,7 +93,7 @@ export interface ScheduleRunTask {
   error?: string
   model?: string
   verdict?: string
-  prs?: string[]
+  prs?: ScheduleRunPR[]
   traceId?: string
   createdAt?: string
   completedAt?: string
@@ -94,9 +102,12 @@ export interface ScheduleRunTask {
 /** The mission a mission-target run created. */
 export interface ScheduleRunMission {
   name?: string
+  namespace?: string
   phase?: string
-  message?: string
+  done?: boolean
   result?: string
+  traceId?: string
+  totalCost?: string
 }
 
 /** A run's result (GET …/runs/{run}). */
@@ -228,7 +239,7 @@ export function outcomeClass(outcome: string): string {
 export function runResultText(r: ScheduleRunResult): string {
   if (r.output) return r.output
   if (r.target === 'knight' || (!r.target && r.task)) return r.task?.output || r.task?.error || ''
-  if (r.target === 'mission' || (!r.target && r.mission)) return r.mission?.result || r.mission?.message || ''
+  if (r.target === 'mission' || (!r.target && r.mission)) return r.mission?.result || ''
   const parts = (r.steps ?? [])
     .filter((s) => s.output || s.error)
     .map((s) => `## ${s.name}\n\n${s.output ?? ''}${s.error ? `${s.output ? '\n\n' : ''}Error: ${s.error}` : ''}`)
@@ -236,6 +247,11 @@ export function runResultText(r: ScheduleRunResult): string {
 }
 
 /** Outcome of a run result: the phase, else the knight task status or mission phase. */
+/** "repo#12", or "repo" / "#12" / "" for whatever the PR reference carries. */
+export function prLabel(pr: ScheduleRunPR): string {
+  return `${pr.repo ?? ''}${pr.number != null ? `#${pr.number}` : ''}`
+}
+
 export function runResultOutcome(r: ScheduleRunResult): string {
   return phaseToOutcome(r.phase || r.task?.status || r.mission?.phase || '')
 }

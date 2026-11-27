@@ -42,12 +42,18 @@ const agentRuns: ScheduleRun[] = [
 
 const knightResult: ScheduleRunResult = {
   schedule: 'morning-digest', target: 'knight', run: 'digest-3',
-  task: { run: 'digest-3', knight: 'galahad', status: 'Succeeded', output: 'knight said hi', model: 'sonnet', verdict: 'approved', prs: ['https://github.com/o/r/pull/1', '<b>x</b>'] },
+  task: {
+    run: 'digest-3', knight: 'galahad', status: 'Succeeded', output: 'knight said hi', model: 'sonnet', verdict: 'approved',
+    prs: [
+      { repo: 'o/r', number: 1, url: 'https://github.com/o/r/pull/1', action: 'opened' },
+      { repo: '<b>x</b>', number: 2, url: 'javascript:alert(1)' },
+    ],
+  },
 }
 
 const missionResult: ScheduleRunResult = {
   schedule: 'morning-digest', target: 'mission', run: 'digest-4',
-  mission: { phase: 'Failed', message: 'nope', result: 'mission result text' },
+  mission: { phase: 'Failed', result: 'mission result text' },
 }
 
 const YAML = 'apiVersion: ai.roundtable.io/v1alpha1\nkind: Trigger\nmetadata:\n  name: morning-digest\n'
@@ -169,7 +175,10 @@ describe('ScheduleDetailPage', () => {
     expect(await within(viewer).findByText('knight said hi', {}, { timeout: 10000 })).toBeInTheDocument()
     expect(within(viewer).getByText('sonnet')).toBeInTheDocument()
     expect(within(viewer).getByText('approved')).toBeInTheDocument()
-    expect(within(viewer).getByText('<b>x</b>')).toBeInTheDocument()
+    expect(within(viewer).queryByText(/object Object/)).toBeNull()
+    expect(within(viewer).getByRole('link', { name: 'o/r#1' })).toHaveAttribute('href', 'https://github.com/o/r/pull/1')
+    expect(within(viewer).getByText('<b>x</b>#2')).toBeInTheDocument()
+    expect(within(viewer).queryByRole('link', { name: /#2/ })).toBeNull()
     expect(viewer.querySelector('b')).toBeNull()
   }, 20000)
 

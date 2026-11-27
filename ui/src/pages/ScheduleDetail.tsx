@@ -4,13 +4,13 @@ import { CalendarClock, ArrowLeft, Play, Pause, PlayCircle, Trash2, Copy, Check,
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
 import { formatDateTime, formatRelativeTime, until } from '../lib/format'
-import { sanitizeText } from '../lib/untrusted'
+import { sanitizeText, safeUrl } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { TraceLink } from '../components/TraceLink'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
 import {
   RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
-  runResultText, runResultOutcome, describeTurns, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
+  runResultText, runResultOutcome, prLabel, describeTurns, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
 const POLL_MS = 15000
@@ -311,13 +311,19 @@ export function RunResultViewer({ namespace, name, run, onClose }: {
       {result && text && (raw
         ? <pre data-testid="result-raw" className="max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs text-gray-200">{sanitizeText(text)}</pre>
         : <div data-testid="result-rendered" className="prose prose-invert prose-sm max-w-none max-h-[32rem] overflow-auto"><SafeMarkdown>{text}</SafeMarkdown></div>)}
-      {result?.task && (result.task.model || result.task.verdict || result.task.prs?.length) && (
+      {result?.task && !!(result.task.model || result.task.verdict || result.task.prs?.length) && (
         <dl aria-label="task details" className="mt-3 space-y-1 text-xs text-gray-300">
           {result.task.model && <div><dt className="inline text-gray-500">Model: </dt><dd className="inline">{sanitizeText(result.task.model)}</dd></div>}
           {result.task.verdict && <div><dt className="inline text-gray-500">Verdict: </dt><dd className="inline">{sanitizeText(result.task.verdict)}</dd></div>}
           {!!result.task.prs?.length && (
             <div><dt className="inline text-gray-500">PRs: </dt>
-              <dd className="inline">{result.task.prs.map((pr, i) => <span key={i} className="mr-2 break-all">{sanitizeText(pr)}</span>)}</dd>
+              <dd className="inline">{result.task.prs.map((pr, i) => {
+                const label = sanitizeText(prLabel(pr) || pr.url || 'pull request')
+                const href = safeUrl(pr.url)
+                return href
+                  ? <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="mr-2 break-all text-roundtable-gold hover:underline">{label}</a>
+                  : <span key={i} className="mr-2 break-all">{label}</span>
+              })}</dd>
             </div>
           )}
         </dl>
