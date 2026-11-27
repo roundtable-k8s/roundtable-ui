@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
@@ -211,4 +213,80 @@ func counterValue(t *testing.T, route, method, code string) float64 {
 		t.Fatal(err)
 	}
 	return testutil.ToFloat64(c)
+}
+
+func TestBuildInfoMetricLabels(t *testing.T) {
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(newBuildInfoCollector(versionInfo{Version: "v1", Commit: "abc", GoVersion: "go1.x"}))
+	want := `# HELP roundtable_ui_build_info Build information of the running dashboard API; the value is always 1.
+# TYPE roundtable_ui_build_info gauge
+roundtable_ui_build_info{commit="abc",go_version="go1.x",version="v1"} 1
+`
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(want), "roundtable_ui_build_info"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunningTasksMetric(t *testing.T) {
+	r := newRunningRegistry(10, time.Second)
+	r.tasks["a"] = &RunningTask{TaskID: "a", Status: "running"}
+	r.tasks["b"] = &RunningTask{TaskID: "b", Status: "running"}
+	r.tasks["c"] = &RunningTask{TaskID: "c", Status: "stale"}
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(runningTasksCollector{r})
+	want := `# HELP roundtable_ui_running_tasks Tasks held by the in-flight registry, by status (running, stale, lost).
+# TYPE roundtable_ui_running_tasks gauge
+roundtable_ui_running_tasks{status="lost"} 0
+roundtable_ui_running_tasks{status="running"} 2
+roundtable_ui_running_tasks{status="stale"} 1
+`
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(want), "roundtable_ui_running_tasks"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListCacheMetrics(t *testing.T) {
+	resetListCache() // drop informers leaked by other tests
+	setupTriggerRouter(t,
+		trigObj("a", map[string]interface{}{"nats": map[string]interface{}{"subject": "x"}}, nil),
+		trigObj("b", map[string]interface{}{"nats": map[string]interface{}{"subject": "y"}}, nil))
+	if _, err := cachedList(context.Background(), dynClient, triggerGVR, "roundtable"); err != nil {
+		t.Fatal(err)
+	}
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(listCacheCollector{})
+	want := `# HELP roundtable_ui_list_cache_objects Objects held in a watch-backed list cache, by resource.
+# TYPE roundtable_ui_list_cache_objects gauge
+roundtable_ui_list_cache_objects{resource="triggers"} 2
+# HELP roundtable_ui_list_cache_synced 1 when the watch-backed list cache of a resource has completed its first sync, else 0.
+# TYPE roundtable_ui_list_cache_synced gauge
+roundtable_ui_list_cache_synced{resource="triggers"} 1
+`
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(want)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChainWatchSubscribersMetric(t *testing.T) {
+	c := newChainWatcher(nil, "roundtable", nil)
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(newChainWatchSubscribersGauge(c))
+	count := func() float64 {
+		mfs, err := reg.Gather()
+		if err != nil || len(mfs) != 1 {
+			t.Fatalf("gather: %v %d", err, len(mfs))
+		}
+		return mfs[0].GetMetric()[0].GetGauge().GetValue()
+	}
+	if got := count(); got != 0 {
+		t.Fatalf("got %v want 0", got)
+	}
+	un := c.subscribe(func([]byte) {})
+	if got := count(); got != 1 {
+		t.Fatalf("got %v want 1", got)
+	}
+	un()
+	if got := count(); got != 0 {
+		t.Fatalf("got %v want 0", got)
+	}
 }

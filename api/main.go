@@ -576,6 +576,8 @@ func main() {
 	runningCtx, stopRunning := context.WithCancel(context.Background())
 	defer stopRunning()
 	running := newRunningRegistry(defaultRunningMaxEntries, runningHeartbeatInterval())
+	prometheus.MustRegister(newBuildInfoCollector(currentVersion()),
+		runningTasksCollector{running}, listCacheCollector{})
 	activity := newActivityStore()
 	// Tables come from RoundTable resources; FLEET_PREFIX/FLEET_STREAM
 	// optionally narrow them to one table (#239).
@@ -591,6 +593,7 @@ func main() {
 	var chains *chainWatcher
 	if dynClient != nil {
 		chains = newChainWatcher(dynClient, namespace, running)
+		prometheus.MustRegister(newChainWatchSubscribersGauge(chains))
 		go chains.run(runningCtx)
 	}
 
