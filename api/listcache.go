@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -84,6 +85,13 @@ func cachedList(ctx context.Context, client dynamic.Interface, gvr schema.GroupV
 		_ = inf.SetTransform(listCacheTransform(gvr == chainGVR))
 		e = &listCacheEntry{inf: inf, stop: make(chan struct{})}
 		listCacheInformers[key] = e
+		resource := gvr.Resource
+		if err := e.inf.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
+			informerSyncFailuresTotal.WithLabelValues(resource + "_watch").Inc()
+			cache.DefaultWatchErrorHandler(r, err)
+		}); err != nil {
+			slog.WarnContext(ctx, "cannot set informer watch error handler", "error", err)
+		}
 		go e.inf.Run(e.stop)
 	}
 	inf := e.inf
@@ -108,6 +116,7 @@ func cachedList(ctx context.Context, client dynamic.Interface, gvr schema.GroupV
 			listCacheMu.Lock()
 			e.failedAt = time.Now()
 			listCacheMu.Unlock()
+			informerSyncFailuresTotal.WithLabelValues(gvr.Resource).Inc()
 		}
 		return direct()
 	}

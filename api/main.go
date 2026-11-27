@@ -534,12 +534,16 @@ func main() {
 		nats.ReconnectJitter(500*time.Millisecond, 2*time.Second),
 		nats.RetryOnFailedConnect(true), // don't hard-exit if NATS is briefly down at boot
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			natsDisconnectsTotal.Inc()
+			natsConnected.Set(0)
 			slog.WarnContext(context.Background(), "NATS disconnected, will retry", "error", err)
 		}),
 		nats.ReconnectHandler(func(c *nats.Conn) {
+			natsConnected.Set(1)
 			slog.InfoContext(context.Background(), "NATS reconnected", "url", c.ConnectedUrl())
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
+			natsConnected.Set(0)
 			slog.ErrorContext(context.Background(), "NATS connection permanently closed")
 		}),
 	)
@@ -555,6 +559,7 @@ func main() {
 		os.Exit(1)
 	}
 	queues = jsQueueBackend{js: js}
+	natsConnected.Set(boolToFloat(nc.IsConnected()))
 	slog.InfoContext(context.Background(), "NATS connected", "url", natsURL)
 
 	// Connect to Kubernetes (in-cluster, falling back to kubeconfig for local dev)
@@ -3024,6 +3029,13 @@ func envPositiveInt(key string, def int) int {
 		return n
 	}
 	return def
+}
+
+func boolToFloat(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func envOr(key, def string) string {

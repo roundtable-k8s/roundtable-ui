@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -144,19 +145,24 @@ func (g *gatewayClient) bearer(ctx context.Context, reload bool) string {
 }
 
 // do calls the gateway and returns its status and body.
-func (g *gatewayClient) do(ctx context.Context, method, path string, query url.Values, body []byte) (int, []byte, error) {
-	status, b, _, err := g.doKeyed(ctx, method, path, query, body, "")
+func (g *gatewayClient) do(ctx context.Context, route, method, path string, query url.Values, body []byte) (int, []byte, error) {
+	status, b, _, err := g.doKeyed(ctx, route, method, path, query, body, "")
 	return status, b, err
 }
 
 // doKeyed is do with an optional Idempotency-Key for the gateway; it also
 // returns the gateway's response headers.
-func (g *gatewayClient) doKeyed(ctx context.Context, method, path string, query url.Values, body []byte, idemKey string) (int, []byte, http.Header, error) {
+func (g *gatewayClient) doKeyed(ctx context.Context, route, method, path string, query url.Values, body []byte, idemKey string) (int, []byte, http.Header, error) {
 	status, b, hdr, err := g.doOnce(ctx, method, path, query, body, g.bearer(ctx, false), idemKey)
 	if err == nil && status == http.StatusUnauthorized && g.tokenFile != "" {
 		// The token may have been rotated: re-read the file and retry once.
 		status, b, hdr, err = g.doOnce(ctx, method, path, query, body, g.bearer(ctx, true), idemKey)
 	}
+	code := "error"
+	if err == nil {
+		code = strconv.Itoa(status)
+	}
+	gatewayRequestsTotal.WithLabelValues(route, method, code).Inc()
 	return status, b, hdr, err
 }
 
@@ -232,7 +238,7 @@ func (g *gatewayClient) relayKeyed(w http.ResponseWriter, r *http.Request, metho
 		jsonError(w, "Gateway not configured (set GATEWAY_URL)", http.StatusServiceUnavailable)
 		return
 	}
-	status, b, hdr, err := g.doKeyed(r.Context(), method, path, query, body, idemKey)
+	status, b, hdr, err := g.doKeyed(r.Context(), routeLabel(r), method, path, query, body, idemKey)
 	if errors.Is(err, errGatewayBodyTooLarge) {
 		slog.WarnContext(r.Context(), "gateway response over relay limit", "path", path, "limit_bytes", gatewayMaxBody)
 		jsonError(w, "Gateway response too large", http.StatusBadGateway)

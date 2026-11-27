@@ -265,7 +265,7 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Gateway not configured (set GATEWAY_URL)", http.StatusServiceUnavailable)
 			return
 		}
-		status, b, err := g.do(r.Context(), http.MethodGet, p+"/manifest", nil, nil)
+		status, b, err := g.do(r.Context(), routeLabel(r), http.MethodGet, p+"/manifest", nil, nil)
 		if errors.Is(err, errGatewayBodyTooLarge) {
 			slog.WarnContext(r.Context(), "gateway response over relay limit", "path", p+"/manifest", "limit_bytes", gatewayMaxBody)
 			jsonError(w, "Gateway response too large", http.StatusBadGateway)
