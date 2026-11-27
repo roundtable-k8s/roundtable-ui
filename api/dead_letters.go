@@ -204,7 +204,8 @@ func (g *gatewayClient) doOnce(ctx context.Context, method, path string, query u
 
 // idempotencyKey reads the caller's Idempotency-Key header. ok is false (and a
 // 400 has been written) when the value is empty after trim, longer than 255,
-// not printable ASCII or given more than once (repeated header). An absent header yields "", true.
+// not printable ASCII or given more than once (repeated header). An absent
+// header yields "", true.
 func idempotencyKey(w http.ResponseWriter, r *http.Request) (string, bool) {
 	vals := r.Header.Values("Idempotency-Key")
 	if len(vals) == 0 {

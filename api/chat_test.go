@@ -165,10 +165,13 @@ func TestChatEventsFlushThroughMetricsMiddleware(t *testing.T) {
 		<-release
 	}}
 	srv := f.server(t)
-	defer close(release)
 	r := chatRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
 	front := httptest.NewServer(metricsMiddleware(r))
+	// Deferred calls run last-in first-out: releasing the upstream must run
+	// before front.Close, which waits for the open stream, or a regression
+	// hangs here instead of failing.
 	defer front.Close()
+	defer close(release)
 
 	resp, err := http.Get(front.URL + "/api/chat/tasks/t1/events")
 	if err != nil {

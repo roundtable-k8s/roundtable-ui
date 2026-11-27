@@ -320,15 +320,16 @@ func routeMethods(r *mux.Router) []string {
 	return methods
 }
 
-// addHeadRoutes answers HEAD on every GET-only route with the GET handler,
-// as net/http does (the server drops the body). Streaming routes are skipped:
-// HEAD would open and hold the upstream stream with the body discarded, so it
-// answers 405 like any unlisted method.
+// headSkipped lists streaming routes that addHeadRoutes leaves out. Streaming
+// routes are skipped because HEAD would open and hold the upstream stream with
+// the body discarded, so they answer 405 like any unlisted method.
 var headSkipped = map[string]bool{
 	"/api/chat/tasks/{taskId}/events": true,
 	"/api/fleet/{knight}/logs":        true,
 }
 
+// addHeadRoutes answers HEAD on every GET-only route with the GET handler,
+// as net/http does (the server drops the body).
 func addHeadRoutes(r *mux.Router) {
 	type headRoute struct {
 		tmpl    string
