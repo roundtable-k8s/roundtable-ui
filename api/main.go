@@ -349,12 +349,19 @@ func addHeadRoutes(r *mux.Router) {
 
 func buildRouter(d routerDeps) *mux.Router {
 	r := mux.NewRouter()
+	// Every method any route accepts, walked once on the first 404 so later
+	// 404s do not walk the router again.
+	var (
+		methodsOnce sync.Once
+		methods     []string
+	)
 	// gorilla/mux 1.8 loses its own 405 detection inside subrouters (a later
 	// route's inherited /api prefix match clears the mismatch), so the
 	// not-found handler probes the other methods itself.
 	notFound := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		methodsOnce.Do(func() { methods = routeMethods(r) })
 		var allow []string
-		for _, m := range routeMethods(r) {
+		for _, m := range methods {
 			probe := req.Clone(req.Context())
 			probe.Method = m
 			var match mux.RouteMatch

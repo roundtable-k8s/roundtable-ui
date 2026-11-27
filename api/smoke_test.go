@@ -83,7 +83,6 @@ func TestSmokeUIAndRouter(t *testing.T) {
 		makeTestKnightCR("galahad", ns, "build"),
 		makeTestKnightCR("lancelot", ns, "plan"),
 	} {
-		kn.SetNamespace(ns)
 		if _, err := dynClient.Resource(knightGVR).Namespace(ns).Create(ctx, kn, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("seed Knight %s: %v", kn.GetName(), err)
 		}
