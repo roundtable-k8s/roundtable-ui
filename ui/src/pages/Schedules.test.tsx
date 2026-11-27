@@ -186,7 +186,7 @@ describe('SchedulesPage', () => {
   it('shows the empty filtered state for a knight with no schedules', async () => {
     serve()
     renderPage('/schedules?knight=nobody')
-    expect(await screen.findByText(/match/i)).toBeInTheDocument()
+    expect(await screen.findByTestId('schedules-empty')).toHaveTextContent('No schedules match the filter')
     expect(screen.queryAllByRole('row')).toHaveLength(0)
   })
 
@@ -227,7 +227,7 @@ describe('SchedulesPage', () => {
 })
 
 describe('SchedulesPage policy and suspension', () => {
-  it('shows the concurrency policy under the cadence and who suspended a schedule', async () => {
+  it('shows the concurrency policy under the cadence and what suspends a schedule', async () => {
     serve([
       sched({ name: 'capped', concurrency: { policy: 'Allow', maxActive: 3 } }),
       sched({ name: 'paused', suspended: true, suspendedBy: 'spec,annotation', concurrency: { policy: 'Forbid' } }),

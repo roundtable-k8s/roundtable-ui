@@ -67,7 +67,7 @@ export function OvernightPage() {
   const chainCut = truncationNote(chains.data?.length ?? 0, chains.total)
   const deadCut = (dead.data?.length ?? 0) >= DEAD_LETTER_LIST_CAP
     ? `showing the newest ${DEAD_LETTER_LIST_CAP} (the list is capped, there may be more)` : null
-  const dash = (v: number | string, panel: { error: string | null; data: unknown }) => (panel.data === null ? '—' : v)
+  const dash = (v: number | string, data: unknown) => (data === null ? '—' : v)
 
   return (
     <div>
@@ -95,10 +95,10 @@ export function OvernightPage() {
       {loading && !chains.data && !dead.data && !schedules.data && <Spinner />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Runs finished" value={dash(s.finished, chains)} />
-        <StatCard label="Succeeded" value={dash(s.succeeded, chains)} color="text-green-400" />
-        <StatCard label="Failed" value={dash(s.failed, chains)} color="text-red-400" />
-        <StatCard label="Cost" value={dash(formatCost(s.spendUSD), chains)}
+        <StatCard label="Runs finished" value={dash(s.finished, chains.data)} />
+        <StatCard label="Succeeded" value={dash(s.succeeded, chains.data)} color="text-green-400" />
+        <StatCard label="Failed" value={dash(s.failed, chains.data)} color="text-red-400" />
+        <StatCard label="Cost" value={dash(formatCost(s.spendUSD), chains.data)}
           detail={chains.data && s.notionalCostUSD > 0 ? `+ ${formatCost(s.notionalCostUSD)} notional` : undefined} />
       </div>
       {s.notionalCostUSD > 0 && <p className="mb-4 text-xs text-gray-500">{NOTIONAL_HINT}</p>}

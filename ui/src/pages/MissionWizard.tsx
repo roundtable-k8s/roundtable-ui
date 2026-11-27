@@ -71,7 +71,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   const invalidStep = firstInvalidStep(errors)
   const touch = (key: string) => setTouched(t => (t[key] ? t : { ...t, [key]: true }))
   const shown = (key: string) => (touched[key] ? errors[key] : undefined)
-  const errId = (key: string) => `wiz-err-${key.replace('.', '-')}`
+  const errId = (key: string) => `wiz-err-${key.replace(/\./g, '-')}`
   /** aria props for a field with a validation message. */
   const aria = (key: string) => shown(key) ? { 'aria-invalid': true as const, 'aria-describedby': errId(key) } : {}
   const fieldError = (k: string) => shown(k)

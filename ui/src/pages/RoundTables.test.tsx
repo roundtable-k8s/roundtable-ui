@@ -24,7 +24,8 @@ describe('RoundTablesPage planner and breakdown', () => {
   it('shows the last refresh time next to Refresh', () => {
     fetchState = { data: tables, error: null, updatedAt: new Date(2026, 0, 2, 14, 3, 21).getTime() }
     renderPage()
-    expect(screen.getByText(/^Updated /).textContent).toContain('2:03:21')
+    const expected = new Date(2026, 0, 2, 14, 3, 21).toLocaleTimeString()
+    expect(screen.getByText(/^Updated /).textContent).toContain(expected)
   })
   it('shows no time before the first successful fetch', () => {
     renderPage()
