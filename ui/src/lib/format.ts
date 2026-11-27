@@ -6,6 +6,15 @@ export function formatCost(cost: number): string {
 }
 
 /**
+ * A dollar budget from the API: "" / "0" / "0.00" / non-numeric / negative
+ * mean no limit and give "unlimited"; a positive amount gives formatCost.
+ */
+export function budgetText(v: string | null | undefined): string {
+  const n = v == null ? NaN : parseFloat(v)
+  return Number.isFinite(n) && n > 0 ? formatCost(n) : 'unlimited'
+}
+
+/**
  * The one elapsed-time ladder: "42s" / "3m 5s" / "2h 5m".
  * Seconds are rounded to the nearest whole second; negative or non-finite
  * input gives "—". Callers that want a clamp or a different rounding
