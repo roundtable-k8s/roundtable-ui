@@ -13,6 +13,7 @@ import { countByStatus } from '../lib/running'
 import { getKnightConfig } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
+import { FirstRun } from '../components/FirstRun'
 import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
 
 import type { Chain } from '../lib/types'
@@ -246,6 +247,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
 
   const online = knights.filter(k => k.status === 'online').length
   const fleetTiles = [...knights].sort((x, y) => x.name.localeCompare(y.name)).slice(0, FLEET_PANEL_MAX)
+  // Empty fleet from a successful request: explain how to create the first knight.
+  const fleetFirstRun = !fleetLoading && !fleetError && knights.length === 0
   const runningChains = chains.filter(c => c.phase === 'Running' || c.phase === 'StepRunning')
 
   return (
@@ -297,7 +300,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
             </Link>
           </div>
           {fleetTiles.length === 0 ? (
-            <EmptyState title="No knights found" sub="The fleet API returned no knights." />
+            fleetFirstRun ? <FirstRun /> : <EmptyState title="No knights found" sub="The fleet API returned no knights." />
           ) : (
             <div className="grid grid-cols-2 gap-2">
               {fleetTiles.map(knight => {

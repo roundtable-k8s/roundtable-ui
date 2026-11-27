@@ -14,8 +14,9 @@ const k = (name: string, domain: string): Knight => ({
 
 let knights: Knight[] = []
 let fleetError: string | null = null
+let fleetLoading = false
 vi.mock('../hooks/useFleet', () => ({
-  useFleet: () => ({ knights, loading: false, error: fleetError, refresh: vi.fn() }),
+  useFleet: () => ({ knights, loading: fleetLoading, error: fleetError, refresh: vi.fn() }),
 }))
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
 let cards: CardMap = new Map()
@@ -31,6 +32,7 @@ const names = () => screen.queryAllByRole('heading', { level: 3 }).map((h) => h.
 beforeEach(() => {
   knights = [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')]
   fleetError = null
+  fleetLoading = false
   cards = new Map([
     [cardKey('personal', 'galahad'), galahadCard],
     [cardKey('personal', 'patsy'), patsyCard],
@@ -195,5 +197,34 @@ describe('Fleet error banner', () => {
     render(<MemoryRouter><FleetPage /></MemoryRouter>)
     expect(screen.getByText('⚠️ Failed to fetch')).toBeInTheDocument()
     expect(screen.getByText('Check that the dashboard API is reachable and look at its pod logs.')).toBeInTheDocument()
+  })
+})
+
+describe('Fleet first run', () => {
+  it('shows the first-run panel on an empty successful fleet', () => {
+    knights = []
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.getByRole('heading', { name: 'No knights yet' })).toBeInTheDocument()
+  })
+
+  it('hides the first-run panel when the fleet has a knight', () => {
+    knights = [k('galahad', 'security')]
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
+  })
+
+  it('hides the first-run panel while loading', () => {
+    knights = []
+    fleetLoading = true
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
+  })
+
+  it('hides the first-run panel on a failed request and shows the error', () => {
+    knights = []
+    fleetError = 'Failed to fetch'
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
+    expect(screen.getByText('⚠️ Failed to fetch')).toBeInTheDocument()
   })
 })
