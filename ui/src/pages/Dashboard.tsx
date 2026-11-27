@@ -243,6 +243,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     return { totalCost, costByKnight, dailyCosts, topTasks }
   }, [filteredCostEntries])
 
+  const chainsNote = truncationNote(chains.length, chainTotal)
+
   // Cost by chain: run copies of one template share a row (#515).
   const chainCostRows = useMemo(() => {
     const days = timeRange === 'day' ? 1 : timeRange === 'week' ? 7 : 30
@@ -557,8 +559,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-roundtable-gold" /> Cost by Chain
-                {truncationNote(chains.length, chainTotal) && (
-                  <span className="text-xs text-yellow-400 font-normal" data-testid="cost-chains-truncated">{truncationNote(chains.length, chainTotal)}</span>
+                {chainsNote && (
+                  <span className="text-xs text-yellow-400 font-normal" data-testid="cost-chains-truncated">{chainsNote}</span>
                 )}
               </h3>
               {chainCostRows.length === 0 ? (

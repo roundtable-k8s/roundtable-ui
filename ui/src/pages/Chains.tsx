@@ -253,7 +253,7 @@ export function FanOutProgress({ step }: { step: ChainStep & { fanOut: ChainFanO
         </div>
       </button>
       {open && (
-        <table aria-label="Chain steps" className="w-full text-xs mt-2">
+        <table aria-label={`${step.name} items`} className="w-full text-xs mt-2">
           <thead>
             <tr className="text-gray-500 text-left">
               <th scope="col" className="px-2 py-1 font-normal">#</th>

@@ -130,11 +130,11 @@ export function formatDateTime(ts: string): string {
 }
 
 /** ISO timestamp → local time of day */
-export function formatTimestamp(ts: string): string {
+export function formatTimestamp(ts: string | Date): string {
   try {
     return new Date(ts).toLocaleTimeString()
   } catch {
-    return ts
+    return String(ts)
   }
 }
 

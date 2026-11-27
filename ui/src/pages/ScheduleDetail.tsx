@@ -277,7 +277,7 @@ export function RunHistory({ namespace, name, selected, onSelect }: {
                     View
                   </button>
                 ) : <span className="text-gray-600">—</span>}
-                {r.traceId && <div className="mt-1"><TraceLink traceId={r.traceId} /></div>}
+                <TraceLink traceId={r.traceId} className="mt-1" />
               </td>
             </tr>
           ))}

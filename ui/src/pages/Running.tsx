@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Activity } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
@@ -81,6 +81,7 @@ function RunningExtra({ task, now }: { task: RunningTask; now: number }) {
 }
 
 export function RunningPage() {
+  const rowsHintId = useId()
   const { tasks, loading, error, unavailable, refresh } = useRunning()
   const { connected } = useWebSocket()
   const now = useNow()
@@ -180,8 +181,8 @@ export function RunningPage() {
       <ListState loading={loading} error={error} onRetry={refresh} count={rows.length} what="running tasks" icon={Activity}
         emptyTitle={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'}>
         <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-          <span id="running-rows-hint" className="sr-only">Press Enter on a row to open its details</span>
-          <table aria-label="Running tasks" aria-describedby="running-rows-hint" className="w-full text-sm">
+          <span id={rowsHintId} className="sr-only">Press Enter on a row to open its details</span>
+          <table aria-label="Running tasks" aria-describedby={rowsHintId} className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-roundtable-steel">
                 <th scope="col" className="px-3 py-2 font-medium">Status</th>

@@ -118,6 +118,10 @@ describe('timestamps', () => {
     const iso = '2026-06-10T08:30:00Z'
     expect(formatTimestamp(iso)).toBe(new Date(iso).toLocaleTimeString())
   })
+  it('formatTimestamp takes a Date as well as a string', () => {
+    const d = new Date('2026-06-10T08:30:00Z')
+    expect(formatTimestamp(d)).toBe(d.toLocaleTimeString())
+  })
   it('formatDateTime is local date and time; garbage passes through', () => {
     const iso = '2026-06-10T08:30:00Z'
     expect(formatDateTime(iso)).toBe(new Date(iso).toLocaleString())
