@@ -96,7 +96,7 @@ export function CommandPalette({ onClose, pages, table }: {
         {loading && <p role="status" className="text-xs text-gray-400">Loading…</p>}
         <ul id="palette-results" role="listbox" ref={listRef} className="max-h-80 overflow-y-auto">
           {results.map((r, i) => (
-            <li key={`${r.kind}:${r.to}`} id={`palette-opt-${i}`} role="option" aria-selected={i === sel}
+            <li key={`${r.kind}:${r.to}:${r.sub}`} id={`palette-opt-${i}`} role="option" aria-selected={i === sel}
               onMouseEnter={() => setActive(i)} onClick={() => go(r)}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer ${i === sel ? 'bg-roundtable-gold/10' : ''}`}>
               <span className={`px-2 py-0.5 rounded text-xs ${BADGE[r.kind]}`}>{r.kind}</span>

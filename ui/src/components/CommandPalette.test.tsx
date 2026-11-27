@@ -70,4 +70,18 @@ describe('CommandPalette', () => {
     renderIt()
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(5))
   })
+
+  it('does not warn about duplicate keys for same-named entries in two namespaces', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    data['/api/fleet'] = [{ name: 'twin', namespace: 'a' }, { name: 'twin', namespace: 'b' }]
+    try {
+      renderIt()
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'twin' } })
+      await waitFor(() => expect(screen.getAllByRole('option', { name: /twin/ })).toHaveLength(2))
+      expect(err.mock.calls.some(c => String(c[0]).includes('same key'))).toBe(false)
+    } finally {
+      data['/api/fleet'] = [{ name: 'galahad', namespace: 'rt' }]
+      err.mockRestore()
+    }
+  })
 })

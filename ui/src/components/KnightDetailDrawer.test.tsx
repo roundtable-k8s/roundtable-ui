@@ -62,7 +62,18 @@ describe('KnightDetailDrawer', () => {
     })
     expect(screen.getByText(/Workspace snapshots \(0\)/)).toBeInTheDocument()
     expect(screen.getByText(/WorkspaceSnapshots: False \(SnapshotFailed\)/)).toBeInTheDocument()
-    expect(screen.getByText('volume snapshot class missing')).toBeInTheDocument()
+    expect(screen.getByText('volume snapshot class missing')).toHaveClass('text-amber-300')
+  })
+
+  it('shows a True WorkspaceSnapshots condition message in gray, not amber', async () => {
+    render(<MemoryRouter><KnightDetailDrawer knight={k('kay')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(resolvers['/api/fleet/kay']).toBeDefined())
+    await act(async () => {
+      resolvers['/api/fleet/kay'](json(k('kay', { workspaceSnapshots: [], workspaceSnapshotsCondition: { status: 'True', reason: 'Ready', message: 'all snapshots ready' } })))
+    })
+    const msg = screen.getByText('all snapshots ready')
+    expect(msg).toHaveClass('text-gray-400')
+    expect(msg).not.toHaveClass('text-amber-300')
   })
 
   it('reads Starting for a starting knight', () => {
