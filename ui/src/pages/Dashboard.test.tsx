@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { DashboardPage } from './Dashboard'
@@ -412,5 +412,59 @@ describe('DashboardPage first run', () => {
     } as unknown as ReturnType<typeof useFleet>)
     renderDashboard()
     expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage cost by chain (#515)', () => {
+  function withCostChains(chains: Array<Record<string, unknown>>) {
+    const orig = defaults.apiGet as typeof apiGet
+    vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
+      url === '/api/chains?limit=500'
+        ? Promise.resolve(chains)
+        : orig(url, init)) as typeof apiGet)
+  }
+  const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString()
+
+  it('shows one row per template with the summed cost and run count', async () => {
+    withCostChains([
+      { name: 'digest-1', runTemplate: 'digest', phase: 'Succeeded', startTime: at(30), completionTime: at(20), costUSD: '0.10', steps: [] },
+      { name: 'digest-2', runTemplate: 'digest', phase: 'Succeeded', startTime: at(90), completionTime: at(80), costUSD: '0.20', steps: [] },
+      { name: 'digest-3', runTemplate: 'digest', phase: 'Succeeded', startTime: at(150), completionTime: at(140), costUSD: '0.30', steps: [] },
+    ])
+    renderDashboard({ defaultCostExpanded: true })
+    const table = await screen.findByRole('table', { name: 'Cost by chain' })
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(1)
+    expect(within(rows[0]).getByText('digest')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('3')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$0.60')).toBeInTheDocument()
+  })
+
+  it('shows a dash, not $0, for a chain without cost data', async () => {
+    withCostChains([
+      { name: 'quiet', phase: 'Succeeded', startTime: at(10), completionTime: at(5), steps: [] },
+    ])
+    renderDashboard({ defaultCostExpanded: true })
+    const table = await screen.findByRole('table', { name: 'Cost by chain' })
+    const row = within(table).getAllByRole('row')[1]
+    expect(within(row).getByText('—')).toBeInTheDocument()
+    expect(within(row).queryByText('$0.00')).toBeNull()
+  })
+
+  it('marks the notional part of a chain cost', async () => {
+    withCostChains([
+      { name: 'sub', phase: 'Succeeded', startTime: at(10), completionTime: at(5), costUSD: '0.50', notionalCostUSD: '0.50', steps: [] },
+    ])
+    renderDashboard({ defaultCostExpanded: true })
+    const table = await screen.findByRole('table', { name: 'Cost by chain' })
+    expect(within(table).getByText('notional')).toBeInTheDocument()
+  })
+
+  it('leaves out chains older than the selected range', async () => {
+    withCostChains([
+      { name: 'old', phase: 'Succeeded', startTime: at(60 * 24 * 10), completionTime: at(60 * 24 * 10), costUSD: '4', steps: [] },
+    ])
+    renderDashboard({ defaultCostExpanded: true })
+    expect(await screen.findByText('No chain runs in this range')).toBeInTheDocument()
   })
 })
