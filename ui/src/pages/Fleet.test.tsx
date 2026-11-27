@@ -259,6 +259,13 @@ describe('Fleet load filter (#579)', () => {
     expect(names()).toEqual(['galahad'])
   })
 
+  it('ignores a load in the URL when no knight has counts, so every knight stays listed', () => {
+    loads = new Map()
+    render(<MemoryRouter initialEntries={['/fleet?load=busy']}><FleetPage /></MemoryRouter>)
+    expect(screen.queryByLabelText('Filter by load')).toBeNull()
+    expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+  })
+
   it('hides the load filter and the queue line when no knight has counts', () => {
     loads = new Map()
     render(<MemoryRouter><FleetPage /></MemoryRouter>)

@@ -11,14 +11,19 @@ export interface TaskRow {
   traceId?: string
 }
 
+/** `none` and an empty table both mean no table (#594). */
+const normaliseTable = (t: string | undefined): string | undefined => (t && t !== 'none' ? t : undefined)
+
 /**
  * Schedules that wake a knight: knight-kind targets with the same name. When both
  * the knight (ignoring "none") and the schedule have a table, the tables must match.
  */
 export function schedulesFor(knight: string, table: string | undefined, schedules: Schedule[] | null | undefined): Schedule[] {
-  const kt = table && table !== 'none' ? table : undefined
-  return (schedules ?? []).filter((s) =>
-    s.target?.kind === 'knight' && s.target.knight === knight && !(kt && s.table && s.table !== kt))
+  const kt = normaliseTable(table)
+  return (schedules ?? []).filter((s) => {
+    const st = normaliseTable(s.table)
+    return s.target?.kind === 'knight' && s.target.knight === knight && !(kt && st && st !== kt)
+  })
 }
 
 const num = (v: unknown): number | undefined => {

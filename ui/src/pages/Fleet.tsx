@@ -66,7 +66,8 @@ export function FleetPage() {
   const status = params.get('status') ?? ''
   const loadParam = params.get('load') ?? ''
   // Busy: queued or running work (#579); Idle: none. Knights without counts match neither.
-  const loadFilter = LOAD_OPTIONS.some(([v]) => v === loadParam) ? loadParam : ''
+  // Ignored while no knight has counts: the select is hidden then, so the filter could not be cleared (#594).
+  const loadFilter = hasLoad && LOAD_OPTIONS.some(([v]) => v === loadParam) ? loadParam : ''
   const sortParam = params.get('sort') ?? ''
   const sort: SortKey = SORT_OPTIONS.some(([v]) => v === sortParam) ? (sortParam as SortKey) : 'name'
   const knightParam = params.get('knight') ?? ''
