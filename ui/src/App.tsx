@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare, Zap, CalendarClock } from 'lucide-react'
+import { Swords, Shield, Scroll, GitGraph, BookOpen, Link2, TreePine, Menu, X, LayoutDashboard, Target, DollarSign, Crown, Network, Activity, Inbox, Skull, MessageSquare, Zap, CalendarClock, Search } from 'lucide-react'
 import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
@@ -10,6 +10,7 @@ import { useTables } from './hooks/useTables'
 import { TableSelect, EmptyState } from './components/ui'
 import { useHealth } from './hooks/useHealth'
 import { useVersion } from './hooks/useVersion'
+import { CommandPalette } from './components/CommandPalette'
 import { useOpenDeadLetters, deadLetterBadge } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
@@ -80,6 +81,20 @@ export default function App() {
   const openDeadLetters = useOpenDeadLetters(table)
   const deadBadge = deadLetterBadge(openDeadLetters)
   const health = useHealth()
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Ctrl/Cmd+K opens the command palette (#479), unless typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      e.preventDefault()
+      setPaletteOpen(true)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // Close sidebar on navigation (mobile)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
@@ -121,10 +136,15 @@ export default function App() {
           <Swords className="w-6 h-6 text-roundtable-gold" />
           <span className="text-sm font-bold text-roundtable-gold">Round Table</span>
         </div>
+        <div className="flex items-center gap-2">
+        <button type="button" onClick={() => setPaletteOpen(true)} className="text-gray-400 p-1" aria-label="Search">
+          <Search className="w-6 h-6" aria-hidden="true" />
+        </button>
         <button type="button" onClick={() => setSidebarOpen(o => !o)} className="text-gray-400 p-1"
           aria-label={sidebarOpen ? 'Close menu' : 'Open menu'} aria-expanded={sidebarOpen} aria-controls="main-nav">
           {sidebarOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
         </button>
+        </div>
       </div>
 
       {/* Sidebar backdrop (mobile) */}
@@ -136,6 +156,14 @@ export default function App() {
       <nav id="main-nav" aria-label="Main" className={`fixed md:relative z-40 h-full w-64 bg-roundtable-slate border-r border-roundtable-steel flex flex-col transition-transform duration-200 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
+        <div className="px-4 pt-4 hidden md:block">
+          <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-roundtable-steel bg-roundtable-navy text-sm text-gray-400 hover:text-gray-200">
+            <Search className="w-4 h-4" aria-hidden="true" />
+            <span>Search</span>
+            <kbd className="ml-auto text-xs text-gray-500">Ctrl K</kbd>
+          </button>
+        </div>
         <div className="p-6 border-b border-roundtable-steel hidden md:block">
           <div className="flex items-center gap-3">
             <Swords className="w-8 h-8 text-roundtable-gold" />
@@ -229,6 +257,7 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
       </main>
+    {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} pages={navItems} table={table} />}
     </div>
     </ToastProvider>
     </WebSocketProvider>
