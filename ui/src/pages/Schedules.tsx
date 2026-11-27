@@ -12,7 +12,7 @@ import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
   describePolicy, describeSuspension, filterSchedules, firstLine, scheduleEditPath, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL, SCHEDULE_STATES,
-  type Schedule, type ScheduleList, type ScheduleRunNow, type ScheduleSuspendState,
+  type Schedule, type ScheduleList, type ScheduleRunNow, type ScheduleSuspendState, type TableSchedulesResult,
 } from '../lib/schedules'
 
 const POLL_MS = 10000
@@ -96,6 +96,19 @@ function SchedulesEmpty({ filtered, total }: { filtered: boolean; total: number 
 }
 
 type Pending = { kind: 'run' | 'delete'; schedule: Schedule } | null
+
+/** A pending "Pause all" or "Resume all" for every schedule of one table. */
+type TableAction = { action: 'suspend' | 'resume'; table: string; namespace?: string; count: number } | null
+
+function tableActionSummary(action: 'suspend' | 'resume', r: TableSchedulesResult): { text: string; details: string[] } {
+  const changed = r.changed?.length ?? 0
+  const unchanged = r.unchanged?.length ?? 0
+  const failed = r.failed ?? []
+  const text = action === 'suspend'
+    ? `Paused ${changed}, ${unchanged} already paused, ${failed.length} failed`
+    : `Resumed ${changed}, ${unchanged} already running, ${failed.length} failed`
+  return { text, details: failed.map((f) => `${f.name}: ${f.error}`) }
+}
 
 export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSuspend, onResume, onDelete }: {
   schedules: Schedule[]
@@ -197,6 +210,35 @@ function runNowMessage(name: string, r: ScheduleRunNow): string {
   return `${name} was skipped${r.skipReason ? `: ${r.skipReason}` : ''}`
 }
 
+function TableActionDialog({ action, table, count, working, onCancel, onConfirm }: {
+  action: 'suspend' | 'resume'
+  table: string
+  count: number
+  working: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const pause = action === 'suspend'
+  return (
+    <Modal onClose={onCancel} title={pause ? `Pause all schedules of ${table}?` : `Resume all schedules of ${table}?`}
+      icon={pause ? <Pause className="w-5 h-5 text-roundtable-gold" /> : <PlayCircle className="w-5 h-5 text-roundtable-gold" />}>
+      <div className="p-6 space-y-4 text-sm" data-testid="table-action-dialog">
+        <p className="text-gray-300">
+          {pause
+            ? <>Suspend {count} {count === 1 ? 'schedule' : 'schedules'} of table <span className="font-mono">{table}</span>? Nothing is deleted; Resume all undoes it.</>
+            : <>Resume {count} suspended {count === 1 ? 'schedule' : 'schedules'} of table <span className="font-mono">{table}</span>? A schedule suspended in its Git spec stays suspended.</>}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button className={btnGray} onClick={onCancel} disabled={working}>Cancel</button>
+          <button className={btnGold} onClick={onConfirm} disabled={working}>
+            {working ? 'Working…' : pause ? 'Pause all' : 'Resume all'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function ConfirmDialog({ pending, task, working, onCancel, onConfirm }: {
   pending: NonNullable<Pending>
   task: string
@@ -246,7 +288,8 @@ export function SchedulesPage() {
   const [knight, setKnight] = useUrlParam('knight', '')
   const [pending, setPending] = useState<Pending>(null)
   const [busy, setBusy] = useState('')
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const [tableAction, setTableAction] = useState<TableAction>(null)
+  const [notice, setNotice] = useState<{ ok: boolean; text: string; details?: string[] } | null>(null)
 
   const tasks = useMemo(() => {
     const m: Record<string, string> = {}
@@ -259,6 +302,29 @@ export function SchedulesPage() {
   const [state, setState] = useUrlParam('state', 'all', SCHEDULE_STATES)
   const byKnight = knight ? all.filter((s) => s.target.knight === knight) : all
   const shown = filterSchedules(byKnight, state)
+
+  // The schedules of the selected table, and the namespace they share (if any).
+  const tableNamespaces = [...new Set(all.map((s) => s.namespace))]
+  const tableCount = (action: 'suspend' | 'resume') => all.filter((s) => s.suspended === (action === 'resume')).length
+  const startTableAction = (action: 'suspend' | 'resume') => setTableAction({
+    action, table, namespace: tableNamespaces.length === 1 ? tableNamespaces[0] : undefined, count: tableCount(action),
+  })
+  const confirmTableAction = async () => {
+    if (!tableAction) return
+    const { action, table: t, namespace } = tableAction
+    setBusy(`table:${t}`)
+    try {
+      const r = await apiPost<TableSchedulesResult>(`/api/schedules/${action}`, namespace ? { table: t, namespace } : { table: t })
+      const summary = tableActionSummary(action, r)
+      setNotice({ ok: (r.failed ?? []).length === 0, text: summary.text, details: summary.details })
+      await refresh()
+    } catch (e) {
+      setNotice({ ok: false, text: e instanceof Error ? e.message : 'Request failed' })
+    } finally {
+      setBusy('')
+      setTableAction(null)
+    }
+  }
 
   const act = async (s: Schedule, fn: () => Promise<string>) => {
     setBusy(scheduleKey(s))
@@ -298,6 +364,16 @@ export function SchedulesPage() {
         <Link to="/triggers" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
           <Zap className="w-4 h-4" aria-hidden /> All triggers
         </Link>
+        {table && all.length > 0 && (
+          <>
+            <button className={btnGray} disabled={!!busy || tableCount('suspend') === 0} onClick={() => startTableAction('suspend')}>
+              <Pause className="w-3 h-3" aria-hidden /> Pause all in {table}
+            </button>
+            <button className={btnGray} disabled={!!busy || tableCount('resume') === 0} onClick={() => startTableAction('resume')}>
+              <PlayCircle className="w-3 h-3" aria-hidden /> Resume all in {table}
+            </button>
+          </>
+        )}
         <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />
         <Link to="/schedules/new" className="inline-flex items-center gap-1.5 rounded-lg border border-roundtable-gold/30 bg-roundtable-gold/10 px-3 py-1.5 text-sm font-medium text-roundtable-gold hover:bg-roundtable-gold/20">
           <Plus className="w-4 h-4" aria-hidden /> New schedule
@@ -308,6 +384,11 @@ export function SchedulesPage() {
         <div role="status" data-testid="schedule-notice"
           className={`mb-4 rounded-lg border px-3 py-2 text-sm ${notice.ok ? 'border-green-500/30 bg-green-500/10 text-green-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
           {sanitizeText(notice.text)}
+          {notice.details && notice.details.length > 0 && (
+            <ul data-testid="schedule-notice-failed" className="mt-1 list-disc pl-5">
+              {notice.details.map((d) => <li key={d}>{sanitizeText(d)}</li>)}
+            </ul>
+          )}
         </div>
       )}
       {error && <div className="mb-4"><ErrorBanner>Failed to load schedules: {error}</ErrorBanner></div>}
@@ -342,6 +423,11 @@ export function SchedulesPage() {
           onDelete={(s) => setPending({ kind: 'delete', schedule: s })} />
       )}
 
+      {tableAction && (
+        <TableActionDialog action={tableAction.action} table={tableAction.table} count={tableAction.count}
+          working={busy === `table:${tableAction.table}`}
+          onCancel={() => setTableAction(null)} onConfirm={confirmTableAction} />
+      )}
       {pending && (
         <ConfirmDialog pending={pending} task={sanitizeText(tasks[scheduleKey(pending.schedule)])}
           working={busy === scheduleKey(pending.schedule)}
