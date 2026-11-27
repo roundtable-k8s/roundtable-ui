@@ -96,3 +96,19 @@ describe('MissionWizard step indicator', () => {
     expect(screen.getByRole('button', { name: /basics.*\(has errors\)/i })).toBeInTheDocument()
   })
 })
+
+describe('MissionWizard knights error', () => {
+  it('hides the knights error until touched, then links it via aria-describedby', async () => {
+    const user = userEvent.setup()
+    render(<MissionWizard onClose={() => {}} onCreated={() => {}} />)
+    await user.type(screen.getByLabelText('Mission Name'), 'm1')
+    await user.type(screen.getByLabelText('Objective'), 'do it')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(document.getElementById('wiz-err-knights')).toBeNull()
+    const input = screen.getByLabelText('Knight name')
+    await user.type(input, 'a')
+    await user.clear(input)
+    expect(document.getElementById('wiz-err-knights')).not.toBeNull()
+    expect(input.getAttribute('aria-describedby')).toContain('wiz-err-knights')
+  })
+})

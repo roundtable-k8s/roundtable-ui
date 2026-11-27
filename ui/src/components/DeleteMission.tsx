@@ -46,7 +46,7 @@ export function DeleteMission({ name, onDeleted, compact = false }: {
 
   return (
     // The card this may sit in is clickable; keep clicks here from navigating.
-    <span onClick={(e) => e.stopPropagation()}>
+    <div className="contents" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         className={`${btn} border-red-500/30 text-red-300 hover:bg-red-500/10${compact ? ' px-2 py-0.5 text-xs' : ''}`}
@@ -70,6 +70,6 @@ export function DeleteMission({ name, onDeleted, compact = false }: {
           </div>
         </Modal>
       )}
-    </span>
+    </div>
   )
 }

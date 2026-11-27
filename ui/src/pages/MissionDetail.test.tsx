@@ -116,4 +116,18 @@ describe('MissionDetailPage', () => {
     expect(mockApiDelete).toHaveBeenCalledTimes(1)
     expect(mockApiDelete.mock.calls[0][0]).toBe('/api/missions/m1')
   })
+
+  it('shows the planning result for a meta-mission after planning', async () => {
+    mockApiGet.mockResolvedValue(mission({ metaMission: true, planningResult: { chainsGenerated: 2, knightsGenerated: 1 } as never }))
+    renderPage()
+    const region = await screen.findByRole('region', { name: 'planning result' })
+    expect(within(region).getByText('Planning Complete')).toBeInTheDocument()
+  })
+
+  it('omits the planning result section without one', async () => {
+    mockApiGet.mockResolvedValue(mission())
+    renderPage()
+    await screen.findByText('Ship the thing')
+    expect(screen.queryByRole('region', { name: 'planning result' })).not.toBeInTheDocument()
+  })
 })

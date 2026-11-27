@@ -5,6 +5,7 @@ import type { Mission } from '../hooks/useMissions'
 import { DeleteMission } from '../components/DeleteMission'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
 import { MissionResults, KnightStatusList, ChainStatusList } from '../components/MissionSections'
+import { PlanningResultViewer } from '../components/PlanningResultViewer'
 import { TraceLink } from '../components/TraceLink'
 import { CostTag } from '../components/CostTag'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge } from '../components/ui'
@@ -71,6 +72,12 @@ function MissionBody({ m }: { m: Mission }) {
               </li>
             ))}
           </ul>
+        </Section>
+      )}
+
+      {m.planningResult && m.phase !== 'Planning' && (
+        <Section title="Planning result">
+          <PlanningResultViewer result={m.planningResult} />
         </Section>
       )}
 
@@ -159,7 +166,7 @@ export function MissionDetailPage() {
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <MissionPhaseBadge phase={mission.phase} />
             <TableBadge table={mission.table} />
-            <span className="ml-auto"><DeleteMission name={mission.name} onDeleted={() => navigate('/missions')} /></span>
+            <div className="ml-auto"><DeleteMission name={mission.name} onDeleted={() => navigate('/missions')} /></div>
           </div>
           <MissionBody m={mission} />
         </>
