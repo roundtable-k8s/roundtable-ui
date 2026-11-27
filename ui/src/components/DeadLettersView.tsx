@@ -1,11 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Skull, RotateCcw } from 'lucide-react'
 import { Drawer, Modal, EmptyState, ErrorBanner, Spinner } from './ui'
 import { UntrustedText } from './UntrustedText'
 import { formatTimestampOrDate } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
+import { ApiError } from '../lib/api'
 import { errorExcerpt, deadLetterTime, isChainOwned, type DeadLetter, type RetryResult } from '../lib/deadLetters'
+
+/** How many earlier attempts the drawer follows back from the selected entry. */
+const MAX_EARLIER_ATTEMPTS = 3
 
 interface Props {
   entries: DeadLetter[]
@@ -15,6 +19,8 @@ interface Props {
   onRetry: (entry: DeadLetter, force: boolean) => Promise<RetryResult>
   /** Loads one entry including its original task payload. */
   onLoadDetail: (entry: DeadLetter) => Promise<DeadLetter>
+  /** Loads the dead-letter entry of one task (used for earlier attempts). */
+  onLoadEntry: (taskId: string, table?: string) => Promise<DeadLetter>
 }
 
 const stateStyle: Record<string, string> = {
@@ -25,7 +31,7 @@ const stateStyle: Record<string, string> = {
 
 const entryKey = (d: DeadLetter) => `${d.table ?? ''}/${d.taskId}`
 
-export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail }: Props) {
+export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail, onLoadEntry }: Props) {
   const [knight, setKnight] = useState('')
   const [reason, setReason] = useState('')
   const [selected, setSelected] = useState<DeadLetter | null>(null)
@@ -35,6 +41,45 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
   const [pending, setPending] = useState<string | null>(null)
   const [retried, setRetried] = useState<Record<string, RetryResult>>({})
   const [retryError, setRetryError] = useState<string | null>(null)
+  const [earlier, setEarlier] = useState<DeadLetter[]>([])
+  const [earlierError, setEarlierError] = useState<string | null>(null)
+
+  // Keep the latest loader in a ref so a new callback identity on re-render does not refetch.
+  const loadEntryRef = useRef(onLoadEntry)
+  loadEntryRef.current = onLoadEntry
+
+  // Earlier attempts of the selected entry, following retryOf at most MAX_EARLIER_ATTEMPTS steps.
+  // Runs once per selection; a 404 (entry expired from the store) just ends the walk.
+  const selectedKey = selected ? entryKey(selected) : null
+  const selectedRetryOf = selected?.retryOf
+  const selectedTable = selected?.table
+  useEffect(() => {
+    setEarlier([])
+    setEarlierError(null)
+    if (!selectedRetryOf) return
+    let cancelled = false
+    const walk = async () => {
+      const found: DeadLetter[] = []
+      let next: string | undefined = selectedRetryOf
+      while (next && found.length < MAX_EARLIER_ATTEMPTS) {
+        try {
+          const prev = await loadEntryRef.current(next, selectedTable)
+          if (cancelled) return
+          found.push(prev)
+          next = prev.retryOf
+        } catch (err) {
+          if (cancelled) return
+          if (!(err instanceof ApiError && err.status === 404)) {
+            setEarlierError(err instanceof Error ? err.message : 'failed to load')
+          }
+          break
+        }
+      }
+      if (!cancelled) setEarlier(found.reverse())
+    }
+    void walk()
+    return () => { cancelled = true }
+  }, [selectedKey, selectedRetryOf, selectedTable])
 
   const knights = useMemo(() => [...new Set(entries.map((e) => e.knight))].sort(), [entries])
   const reasons = useMemo(() => [...new Set(entries.map((e) => e.reason))].sort(), [entries])
@@ -158,6 +203,21 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
               {selected.chainName && <><dt className="text-gray-500">Chain</dt><dd>{selected.chainName}{selected.stepName ? ` / ${selected.stepName}` : ''}</dd></>}
               {selected.retriedAs && <><dt className="text-gray-500">Retried as</dt><dd><Link className="text-roundtable-gold hover:underline" to={`/running?task=${encodeURIComponent(selected.retriedAs)}`}>{selected.retriedAs}</Link></dd></>}
             </dl>
+            {earlier.length > 0 && (
+              <div data-testid="earlier-attempts">
+                <h3 className="text-sm text-gray-400 mb-2">Earlier attempts</h3>
+                <ol className="space-y-2 text-sm text-gray-300">
+                  {earlier.map((p) => (
+                    <li key={`${p.table ?? ''}/${p.taskId}`} className="flex flex-wrap gap-x-2">
+                      <span className="text-gray-500">Attempt {p.attempt}:</span>
+                      <span>{p.reason}</span>
+                      {errorExcerpt(p.error) && <UntrustedText as="span" text={errorExcerpt(p.error)} className="text-gray-400 break-all" />}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+            {earlierError && <p className="text-sm text-gray-500">Earlier attempts could not be loaded: {earlierError}</p>}
             {selected.state === 'resolved' && <p className="text-sm text-gray-400">A later success arrived for this task.</p>}
             <div>{retryButton(selected)}</div>
             <h3 className="text-sm text-gray-400">Error</h3>

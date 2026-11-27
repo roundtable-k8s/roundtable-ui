@@ -18,6 +18,7 @@ const meta: Meta<typeof DeadLettersView> = {
     entries: [],
     onRetry: async (e) => ({ taskId: `${e.taskId}-r2`, retryOf: e.taskId, attempt: 2, knight: e.knight }),
     onLoadDetail: async (e) => ({ ...base, ...e }),
+    onLoadEntry: async (taskId) => ({ ...base, taskId, attempt: 1, error: 'timed out after 30m' }),
   },
 }
 export default meta

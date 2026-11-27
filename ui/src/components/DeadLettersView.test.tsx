@@ -3,6 +3,7 @@ import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { DeadLettersView } from './DeadLettersView'
+import { ApiError } from '../lib/api'
 import type { DeadLetter, RetryResult } from '../lib/deadLetters'
 
 const lost: DeadLetter = {
@@ -13,15 +14,22 @@ const chain: DeadLetter = { ...lost, taskId: 't2', knight: 'rt-ui', reason: 'fai
 const resolved: DeadLetter = { ...lost, taskId: 't3', state: 'resolved' }
 const result: RetryResult = { taskId: 't1-r2', retryOf: 't1', attempt: 2, knight: 'galahad' }
 
-function setup(entries: DeadLetter[], onRetry = vi.fn().mockResolvedValue(result)) {
+/** Loader for GET /api/dead-letters/{taskId}: known ids resolve, others 404. */
+function loaderFrom(map: Record<string, DeadLetter>) {
+  return vi.fn((taskId: string) => (map[taskId]
+    ? Promise.resolve(map[taskId])
+    : Promise.reject(new ApiError(404, 'not found'))))
+}
+
+function setup(entries: DeadLetter[], onRetry = vi.fn().mockResolvedValue(result), onLoadEntry = loaderFrom({})) {
   const onLoadDetail = vi.fn((e: DeadLetter) => Promise.resolve(e))
-  render(<MemoryRouter><DeadLettersView entries={entries} onRetry={onRetry} onLoadDetail={onLoadDetail} /></MemoryRouter>)
-  return { onRetry, onLoadDetail }
+  render(<MemoryRouter><DeadLettersView entries={entries} onRetry={onRetry} onLoadDetail={onLoadDetail} onLoadEntry={onLoadEntry} /></MemoryRouter>)
+  return { onRetry, onLoadDetail, onLoadEntry }
 }
 
 describe('DeadLettersView', () => {
   it('keeps the rows visible under an error', () => {
-    render(<MemoryRouter><DeadLettersView entries={[lost]} error="refresh failed" onRetry={vi.fn()} onLoadDetail={vi.fn()} /></MemoryRouter>)
+    render(<MemoryRouter><DeadLettersView entries={[lost]} error="refresh failed" onRetry={vi.fn()} onLoadDetail={vi.fn()} onLoadEntry={vi.fn()} /></MemoryRouter>)
     expect(screen.getByText('refresh failed')).toBeInTheDocument()
     expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(1)
   })
@@ -94,5 +102,56 @@ describe('DeadLettersView', () => {
     setup([lost], vi.fn().mockRejectedValue(new Error('dead letter t1 is retried')))
     await userEvent.click(screen.getByRole('button', { name: /Retry/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('dead letter t1 is retried')
+  })
+
+  describe('earlier attempts', () => {
+    const attempt1: DeadLetter = { ...lost, taskId: 'a1', attempt: 1, reason: 'timeout', error: 'timed out after 30m\nmore detail' }
+    const attempt2: DeadLetter = { ...lost, taskId: 'a2', attempt: 2, reason: 'failed', error: 'usage limit reached', retryOf: 'a1' }
+
+    it('shows the reason and first error line of the earlier attempt', async () => {
+      const onLoadEntry = loaderFrom({ a1: attempt1 })
+      setup([attempt2], undefined, onLoadEntry)
+      await userEvent.click(screen.getByTestId('dead-letter-row'))
+      const section = await screen.findByTestId('earlier-attempts')
+      expect(section).toHaveTextContent('Attempt 1:')
+      expect(section).toHaveTextContent('timeout')
+      expect(section).toHaveTextContent('timed out after 30m')
+      expect(section).not.toHaveTextContent('more detail')
+      expect(onLoadEntry).toHaveBeenCalledTimes(1)
+      expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined)
+    })
+
+    it('makes no extra request for an entry without retryOf', async () => {
+      const onLoadEntry = loaderFrom({})
+      setup([lost], undefined, onLoadEntry)
+      await userEvent.click(screen.getByTestId('dead-letter-row'))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(onLoadEntry).not.toHaveBeenCalled()
+      expect(screen.queryByTestId('earlier-attempts')).toBeNull()
+    })
+
+    it('shows nothing and no error when the earlier entry is gone (404)', async () => {
+      const onLoadEntry = loaderFrom({})
+      setup([attempt2], undefined, onLoadEntry)
+      await userEvent.click(screen.getByTestId('dead-letter-row'))
+      await waitFor(() => expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined))
+      expect(screen.queryByTestId('earlier-attempts')).toBeNull()
+      expect(screen.queryByText(/could not be loaded/)).toBeNull()
+      expect(screen.queryByRole('alert')).toBeNull()
+    })
+
+    it('follows the chain at most three steps back, oldest first', async () => {
+      const b = (n: number, retryOf?: string): DeadLetter => ({ ...lost, taskId: `b${n}`, attempt: n, reason: `r${n}`, error: `e${n}`, retryOf })
+      const top = b(5, 'b4')
+      const onLoadEntry = loaderFrom({ b4: b(4, 'b3'), b3: b(3, 'b2'), b2: b(2, 'b1'), b1: b(1) })
+      setup([top], undefined, onLoadEntry)
+      await userEvent.click(screen.getByTestId('dead-letter-row'))
+      const section = await screen.findByTestId('earlier-attempts')
+      expect(onLoadEntry).toHaveBeenCalledTimes(3)
+      const text = section.textContent ?? ''
+      expect(text).not.toContain('Attempt 1:')
+      expect(text.indexOf('Attempt 2:')).toBeLessThan(text.indexOf('Attempt 3:'))
+      expect(text.indexOf('Attempt 3:')).toBeLessThan(text.indexOf('Attempt 4:'))
+    })
   })
 })
