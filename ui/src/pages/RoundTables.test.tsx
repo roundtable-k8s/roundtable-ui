@@ -99,4 +99,24 @@ describe('RoundTablesPage budgets and toggle', () => {
     expect(screen.getByRole('button', { name: /less/i })).toHaveAttribute('aria-expanded', 'true')
     expect(document.getElementById(id!)).toBeTruthy()
   })
+
+  it('keeps the details element mounted (hidden) so aria-controls resolves', () => {
+    fetchState = { data: [capped], error: null }
+    renderPage()
+    const btn = screen.getByRole('button', { name: /more details/i })
+    const el = document.getElementById(btn.getAttribute('aria-controls')!)
+    expect(el).toBeTruthy()
+    expect(el).toHaveAttribute('hidden')
+    fireEvent.click(btn)
+    expect(el).not.toHaveAttribute('hidden')
+    fetchState = { data: tables, error: null }
+  })
+
+  it('renders a zero total cost as $0.00', () => {
+    fetchState = { data: [{ ...capped, totalCost: '0' }], error: null }
+    renderPage()
+    expect(screen.getByText('$0.00')).toBeInTheDocument()
+    expect(screen.queryByText('$0.0000')).toBeNull()
+    fetchState = { data: tables, error: null }
+  })
 })

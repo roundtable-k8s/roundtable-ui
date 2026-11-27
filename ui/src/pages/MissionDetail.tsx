@@ -5,6 +5,7 @@ import type { Mission } from '../hooks/useMissions'
 import { DeleteMission } from '../components/DeleteMission'
 import { MissionPhaseBadge } from '../components/MissionPhaseBadge'
 import { MissionResults, KnightStatusList, ChainStatusList } from '../components/MissionSections'
+import { PlanningResultViewer } from '../components/PlanningResultViewer'
 import { TraceLink } from '../components/TraceLink'
 import { CostTag } from '../components/CostTag'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge } from '../components/ui'
@@ -71,6 +72,12 @@ function MissionBody({ m }: { m: Mission }) {
               </li>
             ))}
           </ul>
+        </Section>
+      )}
+
+      {m.planningResult && m.phase !== 'Planning' && (
+        <Section title="Planning result">
+          <PlanningResultViewer result={m.planningResult} />
         </Section>
       )}
 

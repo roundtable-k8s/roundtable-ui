@@ -35,6 +35,8 @@ export function RoundTablesPage() {
           {roundTables.map(rt => {
             const expanded = expandedCards.has(rt.name)
             const hasDetail = rt.policies || rt.activeMissions != null || rt.totalTasksCompleted != null || rt.description || rt.suspend
+            const totalCost = parseFloat(rt.totalCost) || 0
+            const budget = budgetText(rt.costBudgetUSD)
             return (
               <div key={rt.name} className="bg-roundtable-slate border border-roundtable-steel rounded-xl hover:border-roundtable-gold/30 transition-colors">
                 <div className="p-5">
@@ -99,9 +101,9 @@ export function RoundTablesPage() {
                         Cost
                       </div>
                       <div>
-                        <span className="text-roundtable-gold">{formatCost(parseFloat(rt.totalCost) || 0)}</span>
-                        {budgetText(rt.costBudgetUSD) !== 'unlimited' && (
-                          <span className="text-gray-500"> / {budgetText(rt.costBudgetUSD)}</span>
+                        <span className="text-roundtable-gold">{totalCost > 0 ? formatCost(totalCost) : '$0.00'}</span>
+                        {budget !== 'unlimited' && (
+                          <span className="text-gray-500"> / {budget}</span>
                         )}
                       </div>
                     </div>
@@ -133,13 +135,14 @@ export function RoundTablesPage() {
                 </div>
 
                 {/* Expanded detail section */}
-                {expanded && hasDetail && (
-                  <div id={`rt-${rt.name}-details`} className="border-t border-roundtable-steel/50 px-5 pb-5 pt-4 space-y-4">
+                {hasDetail && (
+                  <div id={`rt-${rt.name}-details`} hidden={!expanded} className="border-t border-roundtable-steel/50 px-5 pb-5 pt-4 space-y-4">
                     {/* Description */}
                     {rt.description && (
                       <p className="text-sm text-gray-400 leading-relaxed">{rt.description}</p>
                     )}
 
+                    {/* Policies */}
                     {rt.policies && (
                       <div>
                         <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1.5">

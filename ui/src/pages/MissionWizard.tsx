@@ -310,7 +310,9 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                     onChange={e => updateKnight(idx, 'name', e.target.value)}
                     aria-label="Knight name"
                     placeholder="Knight name"
+                    onBlur={() => { touch('knights'); touch(`knights.${idx}`) }}
                     {...aria(`knights.${idx}`)}
+                    {...(shown('knights') ? { 'aria-describedby': [shown(`knights.${idx}`) ? errId(`knights.${idx}`) : '', errId('knights')].filter(Boolean).join(' ') } : {})}
                     className="flex-1 px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                   />
                   <input
@@ -329,7 +331,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   {fieldError(`knights.${idx}`)}
                 </div>
               ))}
-              {errors.knights && <p id="wiz-err-knights" className="text-xs text-red-400">{errors.knights}</p>}
+              {shown('knights') && <p id="wiz-err-knights" className="text-xs text-red-400">{errors.knights}</p>}
               <button
                 onClick={addKnight}
                 className="flex items-center gap-1 text-sm text-roundtable-gold hover:text-yellow-300"
@@ -449,9 +451,10 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                         type="number"
                         value={form.planner.timeout}
                         onChange={e => updatePlanner('timeout', e.target.value)}
+                        onBlur={() => touch('planner.timeout')}
+                        {...aria('planner.timeout')}
                         className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
-                      {...aria('planner.timeout')}
-                        />
+                      />
                       {fieldError('planner.timeout')}
                     </div>
                     <div>
@@ -462,9 +465,10 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                         max="20"
                         value={form.planner.maxChains}
                         onChange={e => updatePlanner('maxChains', e.target.value)}
+                        onBlur={() => touch('planner.maxChains')}
+                        {...aria('planner.maxChains')}
                         className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
-                      {...aria('planner.maxChains')}
-                        />
+                      />
                       {fieldError('planner.maxChains')}
                     </div>
                     <div>
@@ -475,9 +479,10 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                         max="50"
                         value={form.planner.maxKnights}
                         onChange={e => updatePlanner('maxKnights', e.target.value)}
+                        onBlur={() => touch('planner.maxKnights')}
+                        {...aria('planner.maxKnights')}
                         className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
-                      {...aria('planner.maxKnights')}
-                        />
+                      />
                       {fieldError('planner.maxKnights')}
                     </div>
                   </div>
