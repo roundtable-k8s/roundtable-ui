@@ -127,9 +127,7 @@ describe('ScheduleDetailPage', () => {
       if (url === '/api/config') return { traceUrlTemplate: 'https://t.example/trace/{traceId}' }
       if (url === '/api/schedules/roundtable/morning-digest') return sched()
       if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs: withTrace }
-      if (url.endsWith('/runs/digest-3')) return knightResult
-    if (url.endsWith('/runs/digest-4')) return missionResult
-    throw new Error(`unexpected ${url}`)
+      throw new Error(`unexpected ${url}`)
     })
     mockApiGetText.mockResolvedValue(YAML)
     renderPage()
