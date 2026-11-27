@@ -276,6 +276,7 @@ The dashboard API server is configured via environment variables:
 | `DASHBOARD_API_KEY` | Optional API key for authentication. The `?api_key=` query form is accepted on `/api/ws` only; use the `Authorization` header elsewhere | _(none)_ |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
 | `LOG_LEVEL` | Only `debug` is special (debug logging); any other value, or unset, logs at info | _(unset = info)_ |
+| `LOG_REQUESTS` | `true` logs every API request at info (method, route template, status, `duration_ms`). Without it only 4xx and slow (>= 1s) requests log at warn and 5xx at error. `/api/health`, `/metrics` and `/api/ws` are never logged; query strings and headers are never logged | _(unset = off)_ |
 | `TRACE_URL_TEMPLATE` | Trace viewer URL for the "View trace" links: an http(s) URL containing `{traceId}`. Anything else is ignored with a warning. Returned as `traceUrlTemplate` by `GET /api/config`. See [Tracing](#tracing) | _(unset)_ |
 | `ACTIVITY_PREFIXES` | Comma-separated NATS prefixes whose `<prefix>.activity.>` events feed the running-tasks view | the prefix of every discovered table |
 | `ACTIVITY_HEARTBEAT_INTERVAL` | The knights' heartbeat interval as a Go duration (e.g. `10s`); running entries go stale after 3x this. Invalid or <= 0 values fall back to the default | `10s` |
