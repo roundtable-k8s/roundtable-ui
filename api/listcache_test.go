@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -104,6 +105,29 @@ func TestCachedListFailedSyncRemembered(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("second read should skip the wait")
+	}
+}
+
+func TestInformerSyncFailureCounter(t *testing.T) {
+	t.Cleanup(resetListCache)
+	fc := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{triggerGVR: "TriggerList"})
+	// The informer never syncs: its list fails and so does its watch.
+	fc.PrependReactor("list", "triggers", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("list unavailable")
+	})
+	fc.PrependWatchReactor("*", func(k8stesting.Action) (bool, watch.Interface, error) {
+		return true, nil, errors.New("watch forbidden")
+	})
+	oldTimeout := listCacheSyncTimeout
+	listCacheSyncTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { listCacheSyncTimeout = oldTimeout })
+
+	before := testutil.ToFloat64(informerSyncFailuresTotal.WithLabelValues(triggerGVR.Resource))
+	// The direct list fallback fails too (the reactor above); only the counter matters here.
+	_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")
+	if got := testutil.ToFloat64(informerSyncFailuresTotal.WithLabelValues(triggerGVR.Resource)) - before; got != 1 {
+		t.Fatalf("informer_sync_failures_total{resource=triggers} delta = %v, want 1", got)
 	}
 }
 
