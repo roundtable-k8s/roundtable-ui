@@ -43,6 +43,10 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: UI tests
+        working-directory: ui
+        run: npm test
+
       - name: Build UI
         working-directory: ui
         run: npm run build
