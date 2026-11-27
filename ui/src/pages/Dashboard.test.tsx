@@ -468,3 +468,51 @@ describe('DashboardPage cost by chain (#515)', () => {
     expect(await screen.findByText('No chain runs in this range')).toBeInTheDocument()
   })
 })
+
+describe('DashboardPage cost CSV download (#514)', () => {
+  const result = (knight: string, taskId: string, cost: number) => ({
+    type: 'result' as const,
+    subject: `fleet.results.${taskId}`,
+    timestamp: new Date().toISOString(),
+    live: true,
+    data: { knight, cost, success: true, task_id: taskId },
+  })
+
+  it('downloads the panel figures as CSV', async () => {
+    const user = userEvent.setup()
+    const events = [result('galahad', 't-1', 0.5), result('lancelot', 't-2', 0.25), result('=cmd', 't-3', 0.1)]
+    vi.mocked(useWebSocket).mockReturnValue({ events, connected: true } as unknown as ReturnType<typeof useWebSocket>)
+    const createObjectURL = vi.fn(() => 'blob:cost')
+    const revokeObjectURL = vi.fn()
+    const urlApi = URL as unknown as Record<string, unknown>
+    urlApi.createObjectURL = createObjectURL
+    urlApi.revokeObjectURL = revokeObjectURL
+    const clicks: HTMLAnchorElement[] = []
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicks.push(this)
+    })
+
+    renderDashboard({ defaultCostExpanded: true })
+    const button = screen.getByRole('button', { name: 'Download CSV' })
+    expect(screen.getByText('Covers recent results only')).toBeInTheDocument()
+    await user.click(button)
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    const blob = createObjectURL.mock.calls[0][0] as Blob
+    expect(blob.type).toBe('text/csv;charset=utf-8')
+    const text = await blob.text()
+    expect(text).toContain('Knight,Cost (USD),Tasks,Failed\r\n')
+    expect(text).toContain('galahad,0.5,1,0\r\n')
+    expect(text).toContain('lancelot,0.25,1,0\r\n')
+    expect(text).toContain("'=cmd,0.1,1,0")
+    expect(text).toContain('Top tasks\r\n')
+    expect(clicks[0].download).toBe('roundtable-costs-week.csv')
+    expect(clicks[0].href).toBe('blob:cost')
+    expect(clicks[0].isConnected).toBe(false)
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:cost'))
+
+    click.mockRestore()
+    delete urlApi.createObjectURL
+    delete urlApi.revokeObjectURL
+  })
+})
