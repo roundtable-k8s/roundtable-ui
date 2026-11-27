@@ -79,7 +79,14 @@ func otelSkipPath(p string) bool {
 // template (never the raw path). Install it with Router.Use so the route is
 // already matched.
 func tracingMiddleware(next http.Handler) http.Handler {
-	return otelhttp.NewHandler(next, "http.server",
+	// otelhttp records the raw request path as url.path. Overwrite it with the
+	// route template once the span is open (the route is matched by now) so
+	// run, task and mission ids never reach the trace backend.
+	traced := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("url.path", routeLabel(r)))
+		next.ServeHTTP(w, r)
+	})
+	return otelhttp.NewHandler(traced, "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool { return !otelSkipPath(r.URL.Path) }),
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			return r.Method + " " + routeLabel(r)

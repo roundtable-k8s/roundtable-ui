@@ -283,3 +283,41 @@ func TestGatewayClientSpanHidesIDs(t *testing.T) {
 		t.Error("templated url.full not recorded")
 	}
 }
+
+func TestServerSpanURLPathIsRouteTemplate(t *testing.T) {
+	sr := withRecorder(t)
+	r := mux.NewRouter()
+	r.Use(tracingMiddleware)
+	r.HandleFunc("/api/fleet/{knight}", func(http.ResponseWriter, *http.Request) {}).Methods("GET")
+	r.HandleFunc("/api/chains/{name}/steps/{step}/output", func(http.ResponseWriter, *http.Request) {}).Methods("GET")
+	const runID = "nightly-run-abc"
+	for _, p := range []string{"/api/fleet/galahad", "/api/chains/" + runID + "/steps/build/output"} {
+		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", p, nil))
+	}
+	spans := sr.Ended()
+	if len(spans) != 2 {
+		t.Fatalf("want 2 spans, got %d", len(spans))
+	}
+	wantPath := map[string]string{
+		"GET /api/fleet/{knight}":                    "/api/fleet/{knight}",
+		"GET /api/chains/{name}/steps/{step}/output": "/api/chains/{name}/steps/{step}/output",
+	}
+	for _, s := range spans {
+		want, ok := wantPath[s.Name()]
+		if !ok {
+			t.Fatalf("unexpected span name %q", s.Name())
+		}
+		var got string
+		for _, a := range s.Attributes() {
+			if strings.Contains(a.Value.Emit(), "galahad") || strings.Contains(a.Value.Emit(), runID) {
+				t.Errorf("span %q attribute %s leaks a concrete id: %q", s.Name(), a.Key, a.Value.Emit())
+			}
+			if string(a.Key) == "url.path" {
+				got = a.Value.AsString()
+			}
+		}
+		if got != want {
+			t.Errorf("span %q url.path = %q, want %q", s.Name(), got, want)
+		}
+	}
+}

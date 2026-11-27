@@ -228,7 +228,8 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 			}
 			r.Steps = append(r.Steps, bs)
 		}
-		live := map[[2]string]bool{} // round/taskId of live entries
+		live := map[[2]string]bool{}       // round/taskId of live entries
+		liveByStep := map[[2]string]bool{} // round/step of live entries
 		for _, b := range getSlice(ls, "steps") {
 			bm, ok := b.(map[string]interface{})
 			if !ok {
@@ -247,6 +248,7 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 			bs.StartTime = optStr(getStr(bm, "startedAt"))
 			bs.CompletionTime = optStr(getStr(bm, "completedAt"))
 			live[[2]string{strconv.Itoa(bs.Iteration), bs.TaskID}] = true
+			liveByStep[[2]string{strconv.Itoa(bs.Iteration), bs.Name}] = true
 			add(bs)
 		}
 		// History: finished runs of earlier rounds. The live entry wins when
@@ -265,7 +267,13 @@ func applyStepStatusExtras(step *StepSummary, sm, ss map[string]interface{}) {
 				OutputSummary: getStr(hm, "outputSummary"),
 				OutputBytes:   len(getStr(hm, "outputSummary")),
 			}
-			if bs.TaskID != "" && live[[2]string{strconv.Itoa(bs.Iteration), bs.TaskID}] {
+			round := strconv.Itoa(bs.Iteration)
+			if bs.TaskID != "" && live[[2]string{round, bs.TaskID}] {
+				continue
+			}
+			// Without a taskId the run cannot be matched by id; a live entry
+			// of the same step in the same round is the same run.
+			if bs.TaskID == "" && liveByStep[[2]string{round, bs.Name}] {
 				continue
 			}
 			bs.Knight = bodyKnight[bs.Name]
