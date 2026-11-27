@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle } from 'lucide-react'
+import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle, Copy, Check, Camera } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
@@ -496,6 +496,37 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
             </div>
           )}
 
+          {/* Workspace snapshots (#470) */}
+          {knightDetail?.workspaceSnapshots && knightDetail.workspaceSnapshots.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+                <Camera className="w-4 h-4" />
+                Workspace snapshots ({knightDetail.workspaceSnapshots.length})
+                {knightDetail.workspaceSnapshotsCondition && (
+                  <span className="text-xs text-gray-500 font-normal">
+                    WorkspaceSnapshots: {knightDetail.workspaceSnapshotsCondition.status}
+                    {knightDetail.workspaceSnapshotsCondition.reason ? ` (${knightDetail.workspaceSnapshotsCondition.reason})` : ''}
+                  </span>
+                )}
+              </h3>
+              <ul className="bg-roundtable-slate border border-roundtable-steel/50 rounded-lg divide-y divide-roundtable-steel/30">
+                {knightDetail.workspaceSnapshots.map((snap) => (
+                  <li key={snap.name} className="px-3 py-2 flex items-center gap-2 text-xs">
+                    <span className="font-mono text-gray-200 truncate">{sanitizeText(snap.name)}</span>
+                    <SnapshotCopyButton name={snap.name} />
+                    <span className="ml-auto text-gray-500">{formatAge(snap.createdAt)}</span>
+                    <span className={`px-2 py-0.5 rounded-full border ${snap.readyToUse ? 'text-green-400 bg-green-500/10 border-green-500/20' : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'}`}>
+                      {snap.readyToUse ? 'Ready' : 'Pending'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-gray-500 mt-2">
+                Fork from one with <code className="font-mono">spec.workspace.fromSnapshot</code>
+              </p>
+            </div>
+          )}
+
           {/* Generated Skills */}
           {knightDetail?.generatedSkills && knightDetail.generatedSkills.length > 0 && (
             <div>
@@ -678,5 +709,25 @@ function ActivityEntry({ entry }: { entry: any }) {
         </div>
       )}
     </div>
+  )
+}
+
+function SnapshotCopyButton({ name }: { name: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      aria-label={`Copy snapshot name ${name}`}
+      className="text-gray-500 hover:text-roundtable-gold"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(name)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        } catch { /* clipboard denied */ }
+      }}
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+    </button>
   )
 }

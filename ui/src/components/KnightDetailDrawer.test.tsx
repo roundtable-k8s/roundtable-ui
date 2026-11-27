@@ -75,4 +75,26 @@ describe('KnightDetailDrawer', () => {
     render(<MemoryRouter><KnightDetailDrawer knight={k('a/b')} onClose={() => {}} /></MemoryRouter>)
     await waitFor(() => expect(resolvers['/api/fleet/a%2Fb']).toBeDefined())
   })
+
+  it('lists workspace snapshots with ready state and hides the section when empty', async () => {
+    const { unmount } = render(<MemoryRouter><KnightDetailDrawer knight={k('arthur')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(resolvers['/api/fleet/arthur']).toBeDefined())
+    await act(async () => { resolvers['/api/fleet/arthur'](json(k('arthur', { workspaceSnapshots: [] }))) })
+    expect(screen.queryByText(/Workspace snapshots/)).not.toBeInTheDocument()
+    unmount()
+
+    render(<MemoryRouter><KnightDetailDrawer knight={k('bors')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(resolvers['/api/fleet/bors']).toBeDefined())
+    await act(async () => {
+      resolvers['/api/fleet/bors'](json(k('bors', { workspaceSnapshots: [
+        { name: 'snap-a', createdAt: '2026-01-01T00:00:00Z', readyToUse: true },
+        { name: 'snap-b', createdAt: '2026-02-01T00:00:00Z', readyToUse: false },
+      ] })))
+    })
+    expect(screen.getByText(/Workspace snapshots \(2\)/)).toBeInTheDocument()
+    expect(screen.getByText('snap-a')).toBeInTheDocument()
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('spec.workspace.fromSnapshot')).toBeInTheDocument()
+  })
 })
