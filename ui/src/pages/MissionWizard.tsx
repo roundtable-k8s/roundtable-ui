@@ -158,24 +158,36 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   return (
     <Modal onClose={onClose} closeOnEscape={false} title="Create Mission" icon={<Target className="w-5 h-5 text-roundtable-gold" />}>
         {/* Step indicators */}
-        <div className="flex items-center gap-2 px-6 pt-4">
-          {steps.map((s, i) => (
-            <button
-              key={s.title}
-              onClick={() => setStep(i)}
-              disabled={invalidStep >= 0 && i > invalidStep}
-              className={`flex-1 text-center text-xs py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                i === step
-                  ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
-                  : i < step
-                  ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                  : 'bg-roundtable-steel/30 text-gray-500 border border-roundtable-steel'
-              }`}
-            >
-              {s.title}
-            </button>
-          ))}
-        </div>
+        <span id="wiz-blocked-hint" className="sr-only">Fix the earlier step first</span>
+        <ol aria-label="Mission steps" className="flex items-center gap-2 px-6 pt-4">
+          {steps.map((s, i) => {
+            const blocked = invalidStep >= 0 && i > invalidStep
+            return (
+              <li key={s.title} className="flex-1">
+                <button
+                  type="button"
+                  onClick={() => setStep(i)}
+                  disabled={blocked}
+                  aria-current={i === step ? 'step' : undefined}
+                  title={blocked ? 'Fix the earlier step first' : undefined}
+                  aria-describedby={blocked ? 'wiz-blocked-hint' : undefined}
+                  className={`w-full text-center text-xs py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    i === step
+                      ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
+                      : i < step
+                      ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                      : 'bg-roundtable-steel/30 text-gray-500 border border-roundtable-steel'
+                  }`}
+                >
+                  {s.title}
+                  {i < steps.length - 1 && (
+                    <span className="sr-only"> {s.valid ? (i < step ? '(complete)' : '') : '(has errors)'}</span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
 
         {/* Step content */}
         <div className="p-6 space-y-4">

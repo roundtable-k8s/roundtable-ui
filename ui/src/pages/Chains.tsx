@@ -252,17 +252,17 @@ export function FanOutProgress({ step }: { step: ChainStep & { fanOut: ChainFanO
         </div>
       </button>
       {open && (
-        <table className="w-full text-xs mt-2">
+        <table aria-label="Chain steps" className="w-full text-xs mt-2">
           <thead>
             <tr className="text-gray-500 text-left">
-              <th className="px-2 py-1 font-normal">#</th>
-              <th className="px-2 py-1 font-normal">Phase</th>
-              <th className="px-2 py-1 font-normal">Pod</th>
-              <th className="px-2 py-1 font-normal">Elapsed</th>
-              <th className="px-2 py-1 font-normal">Heartbeat</th>
-              <th className="px-2 py-1 font-normal"><span className="sr-only">Activity</span></th>
-              <th className="px-2 py-1 font-normal">Output</th>
-              <th className="px-2 py-1 font-normal">Error</th>
+              <th scope="col" className="px-2 py-1 font-normal">#</th>
+              <th scope="col" className="px-2 py-1 font-normal">Phase</th>
+              <th scope="col" className="px-2 py-1 font-normal">Pod</th>
+              <th scope="col" className="px-2 py-1 font-normal">Elapsed</th>
+              <th scope="col" className="px-2 py-1 font-normal">Heartbeat</th>
+              <th scope="col" className="px-2 py-1 font-normal"><span className="sr-only">Activity</span></th>
+              <th scope="col" className="px-2 py-1 font-normal">Output</th>
+              <th scope="col" className="px-2 py-1 font-normal">Error</th>
             </tr>
           </thead>
           <tbody>
@@ -293,7 +293,7 @@ export function FanOutProgress({ step }: { step: ChainStep & { fanOut: ChainFanO
 
 function LoopBodySteps({ steps }: { steps: ChainLoopStep[] }) {
   return (
-    <table className="w-full text-xs">
+    <table aria-label="Loop body steps" className="w-full text-xs">
       <tbody>
         {steps.map(s => (
           <Fragment key={`${s.name}-${s.taskId ?? ''}`}>

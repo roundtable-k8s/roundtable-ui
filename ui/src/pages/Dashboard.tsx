@@ -523,14 +523,14 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                 <EmptyState title="No task data available" />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table aria-label="Most expensive tasks" className="w-full">
                     <thead>
                       <tr className="border-b border-roundtable-steel">
-                        <th className="text-left text-gray-400 text-xs font-medium pb-2">Knight</th>
-                        <th className="text-left text-gray-400 text-xs font-medium pb-2">Task ID</th>
-                        <th className="text-left text-gray-400 text-xs font-medium pb-2">Time</th>
-                        <th className="text-right text-gray-400 text-xs font-medium pb-2">Cost</th>
-                        <th className="text-center text-gray-400 text-xs font-medium pb-2">Status</th>
+                        <th scope="col" className="text-left text-gray-400 text-xs font-medium pb-2">Knight</th>
+                        <th scope="col" className="text-left text-gray-400 text-xs font-medium pb-2">Task ID</th>
+                        <th scope="col" className="text-left text-gray-400 text-xs font-medium pb-2">Time</th>
+                        <th scope="col" className="text-right text-gray-400 text-xs font-medium pb-2">Cost</th>
+                        <th scope="col" className="text-center text-gray-400 text-xs font-medium pb-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>

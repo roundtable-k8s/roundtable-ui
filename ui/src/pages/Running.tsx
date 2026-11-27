@@ -178,21 +178,22 @@ export function RunningPage() {
       <ListState loading={loading} error={error} count={rows.length} what="running tasks" icon={Activity}
         emptyTitle={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'}>
         <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-          <table className="w-full text-sm">
+          <span id="running-rows-hint" className="sr-only">Press Enter on a row to open its details</span>
+          <table aria-label="Running tasks" aria-describedby="running-rows-hint" className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-roundtable-steel">
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Knight</th>
-                <th className="px-3 py-2 font-medium">Pod</th>
-                <th className="px-3 py-2 font-medium">Slot</th>
-                <th className="px-3 py-2 font-medium">Task</th>
-                <th className="px-3 py-2 font-medium">Run</th>
-                <th className="px-3 py-2 font-medium">Chain / step</th>
-                <th className="px-3 py-2 font-medium">Model</th>
-                <th className="px-3 py-2 font-medium">Elapsed</th>
-                <th className="px-3 py-2 font-medium">Heartbeat</th>
-                <th className="px-3 py-2 font-medium">Last tool</th>
-                <th className="px-3 py-2 font-medium text-right">Cost</th>
+                <th scope="col" className="px-3 py-2 font-medium">Status</th>
+                <th scope="col" className="px-3 py-2 font-medium">Knight</th>
+                <th scope="col" className="px-3 py-2 font-medium">Pod</th>
+                <th scope="col" className="px-3 py-2 font-medium">Slot</th>
+                <th scope="col" className="px-3 py-2 font-medium">Task</th>
+                <th scope="col" className="px-3 py-2 font-medium">Run</th>
+                <th scope="col" className="px-3 py-2 font-medium">Chain / step</th>
+                <th scope="col" className="px-3 py-2 font-medium">Model</th>
+                <th scope="col" className="px-3 py-2 font-medium">Elapsed</th>
+                <th scope="col" className="px-3 py-2 font-medium">Heartbeat</th>
+                <th scope="col" className="px-3 py-2 font-medium">Last tool</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Cost</th>
               </tr>
             </thead>
             <tbody>
