@@ -35,13 +35,30 @@ const result: ScheduleRunResult = {
   output: '# Digest\n\n**All quiet** today.',
 }
 
+const agentRuns: ScheduleRun[] = [
+  { run: 'digest-3', time: '2026-11-26T07:00:00Z', outcome: 'succeeded', turns: 7, toolCalls: 0, resultAvailable: true },
+  { run: 'digest-4', time: '2026-11-27T07:00:00Z', outcome: 'succeeded', turns: 4, resultAvailable: true },
+]
+
+const knightResult: ScheduleRunResult = {
+  schedule: 'morning-digest', target: 'knight', run: 'digest-3',
+  task: { run: 'digest-3', knight: 'galahad', status: 'Succeeded', output: 'knight said hi', model: 'sonnet', verdict: 'approved', prs: ['https://github.com/o/r/pull/1', '<b>x</b>'] },
+}
+
+const missionResult: ScheduleRunResult = {
+  schedule: 'morning-digest', target: 'mission', run: 'digest-4',
+  mission: { phase: 'Failed', message: 'nope', result: 'mission result text' },
+}
+
 const YAML = 'apiVersion: ai.roundtable.io/v1alpha1\nkind: Trigger\nmetadata:\n  name: morning-digest\n'
 
-function mockApi(s: Schedule) {
+function mockApi(s: Schedule, extra: ScheduleRun[] = []) {
   mockApiGet.mockImplementation(async (url: string) => {
     if (url === '/api/schedules/roundtable/morning-digest') return s
-    if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs }
+    if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs: [...runs, ...extra] }
     if (url === '/api/schedules/roundtable/morning-digest/runs/digest-2') return result
+    if (url.endsWith('/runs/digest-3')) return knightResult
+    if (url.endsWith('/runs/digest-4')) return missionResult
     throw new Error(`unexpected ${url}`)
   })
   mockApiGetText.mockResolvedValue(YAML)
@@ -96,7 +113,9 @@ describe('ScheduleDetailPage', () => {
       if (url === '/api/config') return { traceUrlTemplate: 'https://t.example/trace/{traceId}' }
       if (url === '/api/schedules/roundtable/morning-digest') return sched()
       if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs: withTrace }
-      throw new Error(`unexpected ${url}`)
+      if (url.endsWith('/runs/digest-3')) return knightResult
+    if (url.endsWith('/runs/digest-4')) return missionResult
+    throw new Error(`unexpected ${url}`)
     })
     mockApiGetText.mockResolvedValue(YAML)
     renderPage()
@@ -130,6 +149,37 @@ describe('ScheduleDetailPage', () => {
 
     fireEvent.click(within(viewer).getByRole('button', { name: 'Rendered' }))
     expect(within(viewer).getByTestId('result-rendered')).toBeInTheDocument()
+  }, 20000)
+
+  it('shows turns and tool calls only where reported', async () => {
+    mockApi(sched(), agentRuns)
+    renderPage()
+    const table = await screen.findByRole('table', { name: /run history/i })
+    expect(within(table).getByText('7 turns · 0 tool calls')).toBeInTheDocument()
+    expect(within(table).getByText('4 turns')).toBeInTheDocument()
+    expect(within(table).queryByText(/4 turns ·/)).toBeNull()
+  })
+
+  it('shows a knight-target run output, status, model and PRs as text', async () => {
+    mockApi(sched(), agentRuns)
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'View result of digest-3' }))
+    const viewer = await screen.findByRole('region', { name: 'run result' })
+    await within(viewer).findByText('Succeeded')
+    expect(await within(viewer).findByText('knight said hi', {}, { timeout: 10000 })).toBeInTheDocument()
+    expect(within(viewer).getByText('sonnet')).toBeInTheDocument()
+    expect(within(viewer).getByText('approved')).toBeInTheDocument()
+    expect(within(viewer).getByText('<b>x</b>')).toBeInTheDocument()
+    expect(viewer.querySelector('b')).toBeNull()
+  }, 20000)
+
+  it('shows a mission-target run result and its phase', async () => {
+    mockApi(sched(), agentRuns)
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'View result of digest-4' }))
+    const viewer = await screen.findByRole('region', { name: 'run result' })
+    expect(await within(viewer).findByText('mission result text', {}, { timeout: 10000 })).toBeInTheDocument()
+    expect(within(viewer).getByText('Failed')).toBeInTheDocument()
   }, 20000)
 
   it('shows the manifest YAML verbatim and copies it', async () => {

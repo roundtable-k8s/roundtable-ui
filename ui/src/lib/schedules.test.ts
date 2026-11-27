@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describeDeadline, describeSuspension, describePolicy, phaseToOutcome, formatCostUSD, formatSeconds, runResultText, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
+import { describeDeadline, describeSuspension, describePolicy, phaseToOutcome, formatCostUSD, formatSeconds, runResultText, runResultOutcome, describeTurns, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
 
 describe('schedules helpers', () => {
   it('builds encoded API paths and links', () => {
@@ -32,6 +32,31 @@ describe('schedules helpers', () => {
       schedule: 's', target: 'chain', run: 'r', phase: 'Failed',
       steps: [{ name: 'a', output: 'A' }, { name: 'b', error: 'boom' }, { name: 'c' }],
     })).toBe('## a\n\nA\n\n## b\n\nError: boom')
+  })
+})
+
+describe('knight and mission results', () => {
+  const base = { schedule: 's', run: 'r' }
+  it('reads the task output, else its error', () => {
+    expect(runResultText({ ...base, target: 'knight', task: { output: 'out', error: 'e' } })).toBe('out')
+    expect(runResultText({ ...base, target: 'knight', task: { error: 'e' } })).toBe('e')
+    expect(runResultText({ ...base, target: 'knight' })).toBe('')
+  })
+  it('reads the mission result, else its message', () => {
+    expect(runResultText({ ...base, target: 'mission', mission: { result: 'res', message: 'm' } })).toBe('res')
+    expect(runResultText({ ...base, target: 'mission', mission: { message: 'm' } })).toBe('m')
+  })
+  it('falls back to task status or mission phase for the outcome', () => {
+    expect(runResultOutcome({ ...base, target: 'knight', task: { status: 'Failed' } })).toBe('failed')
+    expect(runResultOutcome({ ...base, target: 'mission', mission: { phase: 'Succeeded' } })).toBe('succeeded')
+    expect(runResultOutcome({ ...base, target: 'chain', phase: 'Running', task: { status: 'Failed' } })).toBe('running')
+    expect(runResultOutcome({ ...base, target: 'chain' })).toBe('unknown')
+  })
+  it('describes turns and tool calls, leaving unreported ones out', () => {
+    expect(describeTurns({ turns: 3, toolCalls: 12 })).toBe('3 turns · 12 tool calls')
+    expect(describeTurns({ turns: 1, toolCalls: 0 })).toBe('1 turn · 0 tool calls')
+    expect(describeTurns({ turns: 2 })).toBe('2 turns')
+    expect(describeTurns({})).toBe('')
   })
 })
 
