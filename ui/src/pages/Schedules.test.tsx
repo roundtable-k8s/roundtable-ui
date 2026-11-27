@@ -19,7 +19,8 @@ function sched(over: Partial<Schedule>): Schedule {
   }
 }
 
-const next = new Date(Date.now() + 2 * 3600_000).toISOString()
+// 90 min ahead so until() reads "in 1h" however quickly the page renders (2h would round up to "in 2h" within 500 ms).
+const next = new Date(Date.now() + 90 * 60_000).toISOString()
 const schedules: Schedule[] = [
   sched({
     name: 'morning-digest', managedBy: 'git', nextRunAt: next,
