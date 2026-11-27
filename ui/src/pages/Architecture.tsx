@@ -127,7 +127,7 @@ export function ArchitecturePage() {
       </p>
 
       <ListState loading={isLoading} error={error} what="architecture data" onRetry={fetchData}
-        count={liveCount || (isLoading || error ? 0 : COMPONENTS.length)}
+        count={liveCount || (isLoading ? 0 : COMPONENTS.length)}
         emptyTitle="No architecture data.">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
         {COMPONENTS.map(comp => (
