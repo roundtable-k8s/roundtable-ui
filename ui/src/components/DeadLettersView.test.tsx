@@ -141,9 +141,20 @@ describe('DeadLettersView', () => {
       setup([attempt2], undefined, onLoadEntry)
       await userEvent.click(screen.getByTestId('dead-letter-row'))
       await waitFor(() => expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined))
+      // Wait for the 404 to settle before asserting absence, so the assertion cannot pass early.
+      await expect(onLoadEntry.mock.results[0].value).rejects.toBeInstanceOf(ApiError)
       expect(screen.queryByTestId('earlier-attempts')).toBeNull()
       expect(screen.queryByText(/could not be loaded/)).toBeNull()
       expect(screen.queryByRole('alert')).toBeNull()
+    })
+
+    it('shows a non-404 load failure as sanitised text', async () => {
+      const onLoadEntry = vi.fn(() => Promise.reject(new Error('gateway \u001b[31mdown\u0007‮ now')))
+      setup([attempt2], undefined, onLoadEntry)
+      await userEvent.click(screen.getByTestId('dead-letter-row'))
+      const note = await screen.findByText(/could not be loaded/)
+      expect(note).toHaveTextContent('Earlier attempts could not be loaded: gateway down now')
+      expect(note.textContent).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f‮\u001b]/)
     })
 
     it('follows the chain at most three steps back, oldest first', async () => {
@@ -202,6 +213,24 @@ describe('DeadLettersView', () => {
       expect(screen.getByText('Retried as o1-r2')).toBeInTheDocument()
       expect(screen.getByText('Retried as o3-r2')).toBeInTheDocument()
       expect(screen.getByText(/Retry failed: already retried/)).toBeInTheDocument()
+    })
+
+    it('a successful single-row retry clears that row stale bulk error', async () => {
+      let failO2 = true
+      const onRetry = vi.fn(async (e: DeadLetter) => {
+        if (e.taskId === 'o2' && failO2) { failO2 = false; throw new ApiError(409, 'already retried') }
+        return res(e.taskId)
+      })
+      setup([o(1), o(2)], onRetry)
+      await userEvent.click(screen.getByLabelText('Select all shown'))
+      await userEvent.click(screen.getByRole('button', { name: 'Retry 2 selected' }))
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retry 2' }))
+      await waitFor(() => expect(screen.getByTestId('bulk-summary').textContent).toBe('Retried 1, failed 1'))
+      const row = screen.getByLabelText('Select o2').closest('tr') as HTMLElement
+      expect(within(row).getByRole('alert')).toHaveTextContent('Retry failed: already retried')
+      await userEvent.click(within(row).getByRole('button', { name: 'Retry' }))
+      expect(await screen.findByText('Retried as o2-r2')).toBeInTheDocument()
+      expect(screen.queryByText(/Retry failed: already retried/)).toBeNull()
     })
 
     it('stops adding retries when the view unmounts', async () => {
