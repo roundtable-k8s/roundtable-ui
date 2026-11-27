@@ -268,6 +268,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     runningCounts.lost > 0 ? `${runningCounts.lost} lost` : '',
   ].filter(Boolean).join(' • ') || undefined
 
+  const fleetPending = fleetLoading && knights.length === 0 && !fleetError
   const online = knights.filter(k => k.status === 'online').length
   const fleetTiles = [...knights].sort((x, y) => x.name.localeCompare(y.name)).slice(0, FLEET_PANEL_MAX)
   // Empty fleet from a successful request: explain how to create the first knight.
@@ -288,8 +289,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
           {chainsError && <ErrorBanner>Failed to load chains: {chainsError}</ErrorBanner>}
         </div>
       )}
-      {((fleetLoading && knights.length === 0 && !fleetError) || (chainsLoading && !chainsError)) && (
-        <div className="mb-6 flex items-center gap-2 text-sm text-gray-400">
+      {(fleetPending || (chainsLoading && !chainsError)) && (
+        <div className="mb-6 flex items-center gap-2 text-sm text-gray-400" role="status">
           <Spinner size="sm" /> Loading…
         </div>
       )}
@@ -298,7 +299,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
 
       {/* Top-level metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
-        <StatCard label="Knights Online" value={`${online}/${knights.length}`} color="text-green-400" icon={<Zap className="w-5 h-5" />} />
+        <StatCard label="Knights Online" value={fleetPending ? '…' : `${online}/${knights.length}`} color="text-green-400" icon={<Zap className="w-5 h-5" />} />
         <Link to="/running" aria-label="Running tasks" className="block rounded-xl hover:ring-1 hover:ring-roundtable-gold/40">
           <StatCard
             label="Running Tasks"

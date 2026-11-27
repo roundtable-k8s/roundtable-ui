@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 import type { NatsEvent } from './hooks/useWebSocket'
+import type { OpenDeadLetters } from './hooks/useOpenDeadLetters'
 
 let wsEvents: NatsEvent[] = []
 vi.mock('./hooks/useWebSocket', async (importOriginal) => ({
@@ -12,9 +13,10 @@ vi.mock('./hooks/useWebSocket', async (importOriginal) => ({
   WebSocketProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 vi.mock('./hooks/useTables', () => ({ useTables: () => [] }))
-vi.mock('./hooks/useOpenDeadLetters', () => ({
-  useOpenDeadLetters: () => ({ count: 0, capped: false, total: 0, error: false }),
-  deadLetterBadge: () => ({ text: '', title: '' }),
+const dead = vi.hoisted(() => ({ current: { count: 0, capped: false } as OpenDeadLetters }))
+vi.mock('./hooks/useOpenDeadLetters', async (orig) => ({
+  ...(await orig<typeof import('./hooks/useOpenDeadLetters')>()),
+  useOpenDeadLetters: () => dead.current,
 }))
 let versionResult: { version: string; commit: string } | null = null
 vi.mock('./hooks/useVersion', () => ({ useVersion: () => versionResult }))
@@ -55,6 +57,25 @@ describe('App shell accessibility', { timeout: 15000 }, () => {
     expect(screen.getByRole('link', { name: /Schedules/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: /Fleet/ }).getAttribute('aria-current')).toBeNull()
     expect(screen.getByRole('link', { name: /Command Center/ }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('shows "?" in the nav badge when the dead-letter count failed', () => {
+    dead.current = { count: 0, capped: false, error: true }
+    renderAt('/')
+    expect(screen.getByTitle('dead-letter count unavailable')).toHaveTextContent('?')
+  })
+
+  it('shows the count in the nav badge when there are open dead letters', () => {
+    dead.current = { count: 3, capped: false }
+    renderAt('/')
+    expect(screen.getByTitle('3 open')).toHaveTextContent('3')
+  })
+
+  it('hides the nav badge at zero without an error', () => {
+    dead.current = { count: 0, capped: false }
+    renderAt('/')
+    expect(screen.queryByTitle('0 open')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('dead-letter count unavailable')).not.toBeInTheDocument()
   })
 
   it('has a skip link that focuses main', () => {
