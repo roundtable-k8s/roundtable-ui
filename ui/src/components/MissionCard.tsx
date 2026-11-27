@@ -11,6 +11,7 @@ import { Spinner, TableBadge } from './ui'
 import { TraceLink } from './TraceLink'
 import { CostTag } from './CostTag'
 import { tokensText } from '../lib/cost'
+import { DeleteMission } from './DeleteMission'
 
 interface MissionCardProps {
   /** Show the table badge (when every table is listed together). */
@@ -19,9 +20,11 @@ interface MissionCardProps {
   onClick?: () => void
   /** Detail page URL; makes the name a real link (keyboard reachable, middle-clickable). */
   href?: string
+  /** Called after the mission was deleted from this card. */
+  onDeleted?: () => void
 }
 
-export function MissionCard({ mission, onClick, showTable, href }: MissionCardProps) {
+export function MissionCard({ mission, onClick, showTable, href, onDeleted }: MissionCardProps) {
   // Meta-missions start with no knights/chains — the API serializes those
   // nil slices as null
   const knights = mission.knights ?? []
@@ -253,6 +256,9 @@ export function MissionCard({ mission, onClick, showTable, href }: MissionCardPr
               <FileText className="w-3 h-3" />
               {showResults ? 'hide results' : 'results'}
             </button>
+          )}
+          {(mission.phase === 'Succeeded' || mission.phase === 'Failed' || mission.phase === 'Expired') && (
+            <DeleteMission name={mission.name} compact onDeleted={() => onDeleted?.()} />
           )}
           {onClick && (
             <span className="text-xs text-gray-600 group-hover:text-roundtable-gold/60 transition-colors">

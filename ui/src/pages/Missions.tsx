@@ -139,6 +139,7 @@ export function MissionsPage() {
                 key={mission.name}
                 mission={mission}
                 showTable={!table}
+                onDeleted={refresh}
                 href={`/missions/${encodeURIComponent(mission.name)}`}
                 onClick={() => navigate(`/missions/${encodeURIComponent(mission.name)}`)}
               />

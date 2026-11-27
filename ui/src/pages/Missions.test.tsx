@@ -9,8 +9,8 @@ let state: { missions: Mission[]; loading: boolean; error: string | null }
 const refresh = vi.fn()
 vi.mock('../hooks/useMissions', () => ({ useMissions: () => ({ ...state, refresh }) }))
 vi.mock('../components/MissionCard', () => ({
-  MissionCard: ({ mission, href, onClick }: { mission: Mission; href?: string; onClick?: () => void }) => (
-    <div data-testid="mission-card" onClick={onClick}><a href={href}>{mission.name}</a></div>
+  MissionCard: ({ mission, href, onClick, onDeleted }: { mission: Mission; href?: string; onClick?: () => void; onDeleted?: () => void }) => (
+    <div data-testid="mission-card" onClick={onClick}><a href={href}>{mission.name}</a><button aria-label="del" onClick={onDeleted} /></div>
   ),
 }))
 vi.mock('./MissionWizard', () => ({
@@ -106,6 +106,13 @@ describe('MissionsPage', () => {
     expect(screen.getByTestId('wizard')).toBeInTheDocument()
     await userEvent.click(screen.getByText('created'))
     expect(screen.queryByTestId('wizard')).toBeNull()
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes the list after a card delete', async () => {
+    state = { missions: [mission('a', 'Succeeded')], loading: false, error: null }
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'del' }))
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 })
