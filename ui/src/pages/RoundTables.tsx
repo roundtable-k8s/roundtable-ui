@@ -9,7 +9,7 @@ import type { RoundTable } from '../lib/types'
 import { PageHeader, RefreshButton, ListState, PhaseBadge, ProgressBar } from '../components/ui'
 
 export function RoundTablesPage() {
-  const { data: allTables, loading, error, refresh } = usePolledFetch<RoundTable[]>('/api/roundtables', 15000, [])
+  const { data: allTables, loading, error, updatedAt, refresh } = usePolledFetch<RoundTable[]>('/api/roundtables', 15000, [])
   const { table } = useTableFilter()
   const roundTables = allTables.filter(rt => inTable(table, rt.name))
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
@@ -26,7 +26,7 @@ export function RoundTablesPage() {
   return (
     <div>
       <PageHeader icon={Crown} title="Round Tables">
-        <RefreshButton onClick={refresh} loading={loading} />
+        <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />
       </PageHeader>
 
       <ListState loading={loading} error={error} count={roundTables.length} what="round tables"

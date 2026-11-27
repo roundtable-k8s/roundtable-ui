@@ -42,6 +42,7 @@ function renderPage(url = '/running') {
 }
 
 beforeEach(() => {
+  refresh.mockClear()
   state = { tasks: new Map(tasks.map((t) => [t.taskId, t])), loading: false, error: null, unavailable: false, refresh }
 })
 
@@ -144,6 +145,12 @@ describe('RunningPage', () => {
     state = { ...state, tasks: new Map(), error: 'boom' }
     renderPage()
     await userEvent.click(screen.getByRole('button', { name: /retry/i }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('has a Refresh button that reloads the list', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 })
