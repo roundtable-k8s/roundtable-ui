@@ -34,6 +34,9 @@ func TestSmokeUIAndRouter(t *testing.T) {
 	if err != nil {
 		t.Skip("api/static/index.html not found; run `cd ui && npm run build` first")
 	}
+	// Read the shared fixture before t.Chdir below, while testdata/ is relative
+	// to the package directory.
+	chainFixture := loadChainFixture(t, "fanout.json")
 
 	// buildRouter serves the bundle from the fixed relative path ./static, so
 	// run from a temp directory whose static entry links to the built bundle.
@@ -85,7 +88,7 @@ func TestSmokeUIAndRouter(t *testing.T) {
 			t.Fatalf("seed Knight %s: %v", kn.GetName(), err)
 		}
 	}
-	chain := &unstructured.Unstructured{Object: loadChainFixture(t, "fanout.json")}
+	chain := &unstructured.Unstructured{Object: chainFixture}
 	chain.SetNamespace(ns)
 	if _, err := dynClient.Resource(chainGVR).Namespace(ns).Create(ctx, chain, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("seed Chain %s: %v", chain.GetName(), err)
