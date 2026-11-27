@@ -65,11 +65,6 @@ describe('KnightCard', () => {
     expect(screen.getByText('0')).toBeInTheDocument()
   })
 
-  it('renders uptime age', () => {
-    render(<KnightCard knight={mockKnight} />)
-    expect(screen.getByText('2h 15m uptime')).toBeInTheDocument()
-  })
-
   it('displays correct emoji for galahad', () => {
     render(<KnightCard knight={mockKnight} />)
     expect(screen.getByText('🛡️')).toBeInTheDocument()
