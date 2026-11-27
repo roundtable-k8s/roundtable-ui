@@ -50,15 +50,15 @@ Mission lifecycle management from creation to completion:
 - **Mission deletion** — cleanup of completed or failed missions
 
 ### 👑 Round Tables
-Fleet-level configuration and warm pool management:
+Read-only fleet view for each round table:
 - **Round table list** — all configured fleets with health indicators
-- **NATS prefix configuration** — subject routing setup
-- **Warm pool status** — available/provisioning/claimed knight counts
-- **Policy enforcement** — max concurrent tasks, cost budgets, capacity limits
-- **Cost aggregation** — total spending across all knights in the table
-- **Mission tracking** — active mission counts per round table
-- **Suspension controls** — fleet-wide suspend/resume capabilities
-- **Ephemeral mode** — temporary round table lifecycle management
+- **Suspended badge** — shown when a round table is suspended
+- **Knight breakdown** — ready / asleep / suspended / not ready counts, with a readiness bar
+- **Mission planning** — the planner knight, or "none" when planning is disabled
+- **NATS prefix** — subject routing prefix of the round table
+- **Cost against budget** — total cost, with the cost budget when one is set
+- **Active missions** — active mission count per round table
+- **Policies** — cost budget, max concurrent plan tasks and max missions, as configured (enforced by the operator)
 
 ### 📥 Queues
 Work that is waiting, per knight (`/queues`):
@@ -157,9 +157,9 @@ The dashboard provides full CRUD operations for Round Table Custom Resource Defi
 
 ### RoundTable CRD (`roundtables.ai.roundtable.io/v1alpha1`)
 - List all round tables with health metrics
-- View warm pool status (available/provisioning/claimed)
-- Monitor policies (max tasks, cost budgets, capacity limits)
-- Track aggregate metrics (total cost, active missions)
+- Read-only view of knight breakdown, planner, NATS prefix, cost against budget and active missions
+- Read-only view of policies (cost budget, max concurrent plan tasks, max missions)
+- Suspended badge when a round table is suspended
 
 ## Tech Stack
 
