@@ -171,15 +171,29 @@ func newClusterQueueSampler(namespace string) *queueSampler {
 	}
 	if k8sClient != nil {
 		s.listEvents = func(ctx context.Context) ([]corev1.Event, error) {
-			list, err := k8sClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
+			// Only HPA and KEDA ScaledObject events matter (parseScaleEvent);
+			// list each kind server-side rather than every Event (#411).
+			var all []corev1.Event
+			for _, kind := range scaleEventKinds {
+				list, err := k8sClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+					FieldSelector: "involvedObject.kind=" + kind,
+					Limit:         scaleEventLimit,
+				})
+				if err != nil {
+					return nil, err
+				}
+				all = append(all, list.Items...)
 			}
-			return list.Items, nil
+			return all, nil
 		}
 	}
 	return s
 }
+
+// scaleEventKinds are the involvedObject kinds parseScaleEvent understands.
+var scaleEventKinds = []string{"HorizontalPodAutoscaler", "ScaledObject"}
+
+const scaleEventLimit = 500
 
 func (s *queueSampler) capacity() int {
 	if s.interval <= 0 {
