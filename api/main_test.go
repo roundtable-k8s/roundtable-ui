@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -2323,10 +2324,17 @@ func TestWSShutdownSendsGoingAway(t *testing.T) {
 	t.Cleanup(func() { nc, wsLife = oldNC, oldLife })
 
 	src := &tableSource{ttl: time.Hour, now: time.Now, ok: true}
-	srv := httptest.NewServer(wsHandler(src, nil, nil, nil, nil, nil))
-	defer srv.Close()
+	// A real http.Server (not httptest) so shutdownHTTP calls the same
+	// Shutdown main() does.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hs := &http.Server{Handler: wsHandler(src, nil, nil, nil, nil, nil)}
+	go hs.Serve(ln)
+	defer hs.Close()
 
-	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	c, _, err := websocket.DefaultDialer.Dial("ws://"+ln.Addr().String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2345,12 +2353,10 @@ func TestWSShutdownSendsGoingAway(t *testing.T) {
 			}
 		}
 	}()
-	time.Sleep(100 * time.Millisecond) // let the handler register
-
+	// Dial returns after the upgrade, and enter() runs before it, so the
+	// handler is already registered with wsLife here.
 	gracefulShutdown(func(ctx context.Context) error {
-		wsLife.begin()
-		wsLife.wait(ctx)
-		return nil
+		return shutdownHTTP(ctx, hs, wsLife)
 	}, func(context.Context) error { return nil }, 5*time.Second)
 
 	select {

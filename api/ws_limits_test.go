@@ -43,6 +43,51 @@ func TestWSOversizeMessageClosesConnection(t *testing.T) {
 			if !errors.As(err, &ce) {
 				t.Fatalf("expected the server to close the connection, got %v", err)
 			}
+			if ce.Code != websocket.CloseMessageTooBig {
+				t.Fatalf("close code = %d, want %d (CloseMessageTooBig)", ce.Code, websocket.CloseMessageTooBig)
+			}
+			break
+		}
+	}
+	// The server's wsRelease must have run before the test returns, so the
+	// connection cap test does not depend on test order.
+	waitFor(t, func() bool { return wsOpenConns.Load() == 0 })
+}
+
+// A normal activity subscribe, under the 64 KiB read limit, is still accepted:
+// the server replies with a backlog and keeps the connection open.
+func TestWSActivitySubscribeUnderReadLimit(t *testing.T) {
+	conn, _ := startCardsNATS(t)
+	oldNC := nc
+	nc = conn
+	t.Cleanup(func() { nc = oldNC })
+	h := wsHandler(newTableSource("test", "fleet-a", ""), nil, newActivityStore(), nil, nil, nil)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	// Pad the command to just under the limit with an ignored field.
+	head := `{"subscribe":"activity","taskId":"task-under-limit","pad":"`
+	tail := `"}`
+	pad := strings.Repeat("x", wsMaxClientMessageBytes-1-len(head)-len(tail))
+	msg := head + pad + tail
+	if len(msg) >= wsMaxClientMessageBytes {
+		t.Fatalf("test frame is %d bytes, must be under the %d limit", len(msg), wsMaxClientMessageBytes)
+	}
+	if err := c.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+		t.Fatal(err)
+	}
+	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	for {
+		_, data, err := c.ReadMessage()
+		if err != nil {
+			t.Fatalf("connection closed before the subscribe reply: %v", err)
+		}
+		if strings.Contains(string(data), `"op":"backlog"`) {
 			return
 		}
 	}

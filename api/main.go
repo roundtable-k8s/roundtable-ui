@@ -672,13 +672,7 @@ func main() {
 		slog.InfoContext(context.Background(), "Shutting down")
 		stopSampler()
 		gracefulShutdown(func(ctx context.Context) error {
-			// Tell WebSockets first, then drain HTTP, then wait for the
-			// close frames to be written (hijacked conns are not tracked by
-			// http.Server.Shutdown).
-			wsLife.begin()
-			err := srv.Shutdown(ctx)
-			wsLife.wait(ctx)
-			return err
+			return shutdownHTTP(ctx, srv, wsLife)
 		}, otelShutdown, shutdownBudget)
 	}()
 
@@ -722,6 +716,16 @@ func gracefulShutdown(shutdown, flush func(context.Context) error, budget time.D
 	if err := flush(ctx); err != nil {
 		slog.WarnContext(ctx, "OpenTelemetry shutdown failed", "error", err)
 	}
+}
+
+// shutdownHTTP is the drain step of graceful shutdown. It tells WebSockets to
+// leave first, then drains HTTP, then waits for their 1001 close frames to be
+// written (hijacked conns are not tracked by http.Server.Shutdown).
+func shutdownHTTP(ctx context.Context, srv *http.Server, life *wsLifecycle) error {
+	life.begin()
+	err := srv.Shutdown(ctx)
+	life.wait(ctx)
+	return err
 }
 
 // wsLifecycle tracks live WebSocket handlers. Hijacked connections are not
