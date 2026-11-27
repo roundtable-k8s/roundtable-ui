@@ -3,9 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
+import type { NatsEvent } from './hooks/useWebSocket'
 
-vi.mock('./hooks/useWebSocket', () => ({
-  useWebSocket: () => ({ events: [], connected: true }),
+let wsEvents: NatsEvent[] = []
+vi.mock('./hooks/useWebSocket', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./hooks/useWebSocket')>()),
+  useWebSocket: () => ({ events: wsEvents, connected: true }),
   WebSocketProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 vi.mock('./hooks/useTables', () => ({ useTables: () => [] }))
@@ -64,6 +67,19 @@ describe('App shell accessibility', { timeout: 15000 }, () => {
     await screen.findByText('Fleet stub')
     expect(document.title).toBe('Fleet - Round Table')
     expect(document.activeElement).toBe(document.getElementById('main'))
+  })
+
+  it('prefixes the title with the count of results that finished while the tab was hidden', () => {
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    const { rerender } = renderAt('/')
+    wsEvents = [
+      { type: 'result', subject: 'fleet-a.results.t1', data: { knight: 'galahad', success: true }, timestamp: 't1', live: true },
+      { type: 'result', subject: 'fleet-a.results.t2', data: { knight: 'galahad', success: false, result: 'boom' }, timestamp: 't2', live: true },
+    ]
+    rerender(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>)
+    expect(document.title).toBe('(2, 1 failed) Command Center - Round Table')
+    hidden.mockRestore()
+    wsEvents = []
   })
 
   it('shows a not-found page for unknown paths', () => {

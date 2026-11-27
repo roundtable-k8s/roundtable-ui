@@ -5,6 +5,7 @@ import { ToastProvider, useToast } from './components/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useWebSocket, WebSocketProvider } from './hooks/useWebSocket'
 import { useTaskNotifications } from './hooks/useTaskNotifications'
+import { useTitleBadge, badgedTitle } from './hooks/useTitleBadge'
 import { useTableFilter } from './hooks/useTableFilter'
 import { useTables } from './hooks/useTables'
 import { TableSelect, EmptyState } from './components/ui'
@@ -39,10 +40,21 @@ function PageLoading() {
   return <div className="text-gray-400 p-4" role="status">Loading…</div>
 }
 
+const APP_TITLE = 'Round Table'
+
 function NotificationWatcher() {
   const { events } = useWebSocket()
   const { addToast } = useToast()
   useTaskNotifications(events, addToast)
+  return null
+}
+
+/** Sets the document title, prefixed with the count of background results (#516). */
+function TabTitle({ label }: { label: string }) {
+  const { events } = useWebSocket()
+  const badge = useTitleBadge(events)
+  const base = `${label} - ${APP_TITLE}`
+  useEffect(() => { document.title = badgedTitle(badge, base) }, [badge, base])
   return null
 }
 
@@ -69,8 +81,6 @@ const navItems = [
 function isActivePath(pathname: string, path: string) {
   return path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(path + '/')
 }
-
-const APP_TITLE = 'Round Table'
 
 export default function App() {
   const version = useVersion()
@@ -112,7 +122,6 @@ export default function App() {
   const lastPath = useRef(location.pathname)
   const current = navItems.find(n => isActivePath(location.pathname, n.path))
   const pageLabel = current ? current.label : 'Page not found'
-  useEffect(() => { document.title = `${pageLabel} - ${APP_TITLE}` }, [pageLabel])
   useEffect(() => {
     if (lastPath.current === location.pathname) return
     lastPath.current = location.pathname
@@ -124,6 +133,7 @@ export default function App() {
     <ToastProvider>
     <div className="flex h-screen">
       <NotificationWatcher />
+      <TabTitle label={pageLabel} />
 
       <a href="#main" onClick={e => { e.preventDefault(); mainRef.current?.focus() }}
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:rounded focus:bg-roundtable-gold focus:text-black">
