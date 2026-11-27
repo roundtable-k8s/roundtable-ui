@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { FailedTasksPage } from './FailedTasks'
 import type { DeadLetter } from '../lib/deadLetters'
 
@@ -56,6 +56,23 @@ describe('FailedTasksPage', () => {
     const rows = await screen.findAllByTestId('dead-letter-row')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('rt-ui')
+  })
+
+  it('applies a ?table= switch made while a slow response is in flight', async () => {
+    let resolveSlow!: (v: unknown) => void
+    apiGet.mockImplementationOnce(() => new Promise((r) => { resolveSlow = r }))
+    function Switch() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/failed?table=dev')}>switch-table</button>
+    }
+    render(<MemoryRouter initialEntries={['/failed?table=fleet-a']}><Switch /><FailedTasksPage /></MemoryRouter>)
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(1))
+    await userEvent.click(screen.getByText('switch-table'))
+    await act(async () => { resolveSlow({ deadLetters: letters }) })
+    const rows = await screen.findAllByTestId('dead-letter-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('rt-ui')
+    expect(screen.queryByText('deadline exceeded')).not.toBeInTheDocument()
   })
 
   it('filters by knight', async () => {
