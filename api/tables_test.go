@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -369,4 +370,63 @@ func TestTablesStaleCacheDoesNotWaitForSlowDiscovery(t *testing.T) {
 	}
 	close(release)
 	<-done
+}
+
+func TestTablesColdStartSurvivesLeaderDisconnect(t *testing.T) {
+	withTwoTables(t)
+	src := newTableSource(tablesTestNS, "", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the leader's client is already gone
+	got := src.tables(ctx)
+	if len(got) != 2 {
+		t.Fatalf("got %+v, want the two discovered tables", got)
+	}
+	if !src.hasCache() {
+		t.Fatal("discovery should have succeeded and been cached")
+	}
+}
+
+func TestTablesPanickingDiscoveryReleasesWaiters(t *testing.T) {
+	withTwoTables(t)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	var panicked atomic.Bool
+	dynClient.(*fake.FakeDynamicClient).PrependReactor("list", "roundtables",
+		func(clienttesting.Action) (bool, runtime.Object, error) {
+			if !panicked.CompareAndSwap(false, true) {
+				return false, nil, nil // later discoveries use the fake data
+			}
+			close(started)
+			<-release
+			panic("boom")
+		})
+	src := newTableSource(tablesTestNS, "fallback", "")
+
+	leaderDone := make(chan any, 1)
+	go func() {
+		defer func() { leaderDone <- recover() }()
+		src.tables(context.Background())
+	}()
+	<-started
+
+	waiter := make(chan []TableInfo, 1)
+	go func() { waiter <- src.tables(context.Background()) }()
+	close(release) // the leader panics; the waiter must not stay blocked
+
+	if r := <-leaderDone; r == nil {
+		t.Fatal("expected the leader to panic")
+	}
+	select {
+	case got := <-waiter:
+		if len(got) == 0 {
+			t.Fatal("waiter got no tables")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("waiter still blocked after the discovery panicked")
+	}
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if src.inflight != nil {
+		t.Fatal("inflight not cleared after panic")
+	}
 }

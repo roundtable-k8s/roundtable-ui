@@ -77,19 +77,33 @@ func TestCachedListFailedSyncRemembered(t *testing.T) {
 		return true, nil, errors.New("list unavailable")
 	})
 	oldTimeout := listCacheSyncTimeout
-	listCacheSyncTimeout = 300 * time.Millisecond
+	listCacheSyncTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { listCacheSyncTimeout = oldTimeout })
 
-	start := time.Now()
+	// The first read waits for the sync timeout, then remembers the failure.
 	_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")
-	first := time.Since(start)
-	if first < 250*time.Millisecond {
-		t.Fatalf("first read should wait for the sync timeout, took %v", first)
+	listCacheMu.Lock()
+	remembered := false
+	for _, e := range listCacheInformers {
+		remembered = remembered || !e.failedAt.IsZero()
 	}
-	start = time.Now()
-	_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")
-	if d := time.Since(start); d > 150*time.Millisecond {
-		t.Fatalf("second read should skip the wait, took %v", d)
+	listCacheMu.Unlock()
+	if !remembered {
+		t.Fatal("failed sync not remembered")
+	}
+
+	// The second read must skip the wait: with an hour-long sync timeout it
+	// would hang if it waited.
+	listCacheSyncTimeout = time.Hour
+	done := make(chan struct{})
+	go func() {
+		_, _ = cachedList(context.Background(), fc, triggerGVR, "roundtable")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second read should skip the wait")
 	}
 }
 

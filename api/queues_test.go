@@ -371,7 +371,9 @@ func TestQueuesHandler_SharedCache(t *testing.T) {
 	t0 := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
 	f := newFakeJetStream()
 	withQueueFixture(t, f, t0)
-	setQueuesTTL(t, 200*time.Millisecond)
+	setQueuesTTL(t, time.Minute)
+	now := t0
+	queueNow = func() time.Time { return now }
 
 	router := setupTestRouter()
 	createKnightCR(t, makeQueueKnightCR("gawain", 2, 1))
@@ -421,7 +423,7 @@ func TestQueuesHandler_SharedCache(t *testing.T) {
 	}
 
 	// After the TTL: a new round.
-	time.Sleep(250 * time.Millisecond)
+	now = now.Add(2 * time.Minute)
 	get("/api/queues")
 	if n := lookupCount(f); n != 2*first {
 		t.Errorf("lookups after TTL = %d, want %d", n, 2*first)

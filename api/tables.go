@@ -124,21 +124,35 @@ func (s *tableSource) tables(ctx context.Context) []TableInfo {
 	s.inflight = f
 	s.mu.Unlock()
 
-	discovered, err := s.discover(ctx)
-
-	s.mu.Lock()
-	if err == nil {
-		s.cached = resolveTables(discovered, s.envPrefix, s.envStream)
-		s.fetched = s.now()
-		s.ok = true
-	}
-	s.inflight = nil
-	close(f.done)
-	s.mu.Unlock()
+	err := s.runFlight(ctx, f)
 	if err != nil {
 		slog.WarnContext(ctx, "Tables: RoundTable list failed", "error", err, "cached", s.hasCache())
 	}
 	return s.afterDiscovery()
+}
+
+// runFlight performs the shared discovery for flight f. It runs under its own
+// context, bounded by k8sRequestTimeout, so one caller disconnecting does not
+// fail the flight for every waiter. The flight is always released (even if
+// discover panics) so waiters never block forever.
+func (s *tableSource) runFlight(ctx context.Context, f *tableFlight) error {
+	defer func() {
+		s.mu.Lock()
+		s.inflight = nil
+		close(f.done)
+		s.mu.Unlock()
+	}()
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), k8sRequestTimeout)
+	defer cancel()
+	discovered, err := s.discover(dctx)
+	if err == nil {
+		s.mu.Lock()
+		s.cached = resolveTables(discovered, s.envPrefix, s.envStream)
+		s.fetched = s.now()
+		s.ok = true
+		s.mu.Unlock()
+	}
+	return err
 }
 
 func (s *tableSource) hasCache() bool {
