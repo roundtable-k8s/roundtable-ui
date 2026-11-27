@@ -6,6 +6,7 @@ import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
 import { formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
+import { TraceLink } from '../components/TraceLink'
 import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
 import {
   RUN_HISTORY_LIMIT, scheduleApi, scheduleEditPath, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass, phaseToOutcome,
@@ -234,6 +235,7 @@ export function RunHistory({ namespace, name, selected, onSelect }: {
                     View
                   </button>
                 ) : <span className="text-gray-600">—</span>}
+                {r.traceId && <div className="mt-1"><TraceLink traceId={r.traceId} /></div>}
               </td>
             </tr>
           ))}

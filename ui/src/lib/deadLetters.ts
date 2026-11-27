@@ -17,6 +17,8 @@ export interface DeadLetter {
   deadLetteredAt?: string
   updatedAt: string
   retriedAs?: string
+  /** 32-hex trace ID of the failed attempt, when the gateway knows it. */
+  traceId?: string
   task?: { task?: string }
 }
 

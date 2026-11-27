@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ScheduleDetailPage } from './ScheduleDetail'
 import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
 import type { Schedule, ScheduleRun, ScheduleRunResult } from '../lib/schedules'
+import { resetConfigCache } from '../hooks/useConfig'
 
 vi.mock('../lib/api', () => ({ apiGet: vi.fn(), apiGetText: vi.fn(), apiPost: vi.fn(), apiDelete: vi.fn() }))
 const mockApiGet = vi.mocked(apiGet)
@@ -58,6 +59,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  resetConfigCache()
   mockApiGet.mockReset()
   mockApiGetText.mockReset()
   mockApiPost.mockReset()
@@ -85,6 +87,23 @@ describe('ScheduleDetailPage', () => {
     expect(rows[2]).toHaveTextContent('Failed')
     expect(rows[2]).toHaveTextContent('31s')
     expect(rows[2]).toHaveTextContent('—')
+  })
+
+  it('links the trace of a run that has one when a trace viewer is configured', async () => {
+    const traceId = '0af7651916cd43dd8448eb211c80319c'
+    const withTrace = runs.map((r) => (r.run === 'digest-2' ? { ...r, traceId } : r))
+    mockApiGet.mockImplementation(async (url: string) => {
+      if (url === '/api/config') return { traceUrlTemplate: 'https://t.example/trace/{traceId}' }
+      if (url === '/api/schedules/roundtable/morning-digest') return sched()
+      if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs: withTrace }
+      throw new Error(`unexpected ${url}`)
+    })
+    mockApiGetText.mockResolvedValue(YAML)
+    renderPage()
+    const history = await screen.findByRole('region', { name: 'run history' })
+    const link = await within(history).findByRole('link', { name: /View trace/ })
+    expect(link).toHaveAttribute('href', `https://t.example/trace/${traceId}`)
+    expect(within(history).getAllByRole('link', { name: /View trace/ })).toHaveLength(1)
   })
 
   it('names the run history table and scopes its headers', async () => {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Skull, RotateCcw } from 'lucide-react'
 import { Drawer, Modal, EmptyState, ErrorBanner, Spinner } from './ui'
 import { UntrustedText } from './UntrustedText'
+import { TraceLink } from './TraceLink'
 import { formatTimestampOrDate } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { ApiError } from '../lib/api'
@@ -307,6 +308,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
             {earlierError && <p className="text-sm text-gray-500">Earlier attempts could not be loaded: {earlierError}</p>}
             {selected.state === 'resolved' && <p className="text-sm text-gray-400">A later success arrived for this task.</p>}
             <div>{retryButton(selected)}</div>
+            <TraceLink traceId={selected.traceId} />
             <h3 className="text-sm text-gray-400">Error</h3>
             <UntrustedText text={detail?.error ?? selected.error ?? '(none)'} className="bg-roundtable-navy rounded-lg p-3 text-xs text-red-300 whitespace-pre-wrap break-words" />
             <h3 className="text-sm text-gray-400">Original task</h3>
