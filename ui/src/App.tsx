@@ -8,6 +8,7 @@ import { useTaskNotifications } from './hooks/useTaskNotifications'
 import { useTableFilter } from './hooks/useTableFilter'
 import { useTables } from './hooks/useTables'
 import { TableSelect, EmptyState } from './components/ui'
+import { useHealth } from './hooks/useHealth'
 import { useOpenDeadLetters, deadLetterBadge } from './hooks/useOpenDeadLetters'
 
 const FleetPage = lazy(() => import('./pages/Fleet').then(m => ({ default: m.FleetPage })))
@@ -75,6 +76,7 @@ export default function App() {
   const tables = useTables()
   const openDeadLetters = useOpenDeadLetters(table)
   const deadBadge = deadLetterBadge(openDeadLetters)
+  const health = useHealth()
 
   // Close sidebar on navigation (mobile)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
@@ -176,6 +178,11 @@ export default function App() {
       {/* Main content */}
       <main id="main" ref={mainRef} tabIndex={-1} className="focus:outline-none flex-1 overflow-auto p-4 md:p-8 mt-14 md:mt-0">
         <ErrorBoundary>
+          {health?.kubernetes === 'unavailable' && (
+            <div role="alert" className="mb-4 px-4 py-2 rounded border border-yellow-500/30 bg-yellow-500/10 text-sm text-yellow-300">
+              Kubernetes unavailable: the dashboard API cannot read cluster state
+            </div>
+          )}
           <div className="flex justify-end mb-4 empty:hidden">
             <TableSelect tables={tables} value={table} onChange={setTable} />
           </div>
