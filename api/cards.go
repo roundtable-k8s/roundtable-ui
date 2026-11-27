@@ -310,18 +310,21 @@ func cardWSEvent(op, table, knight string, payload interface{}) []byte {
 }
 
 // applySnapshot records one card change in the snapshot.
-func (c *cardStore) applySnapshot(table, knight string, value []byte, deleted bool) {
+// It reports whether the card was in the snapshot before the change.
+func (c *cardStore) applySnapshot(table, knight string, value []byte, deleted bool) bool {
 	c.snapMu.Lock()
 	defer c.snapMu.Unlock()
 	if c.snap == nil {
-		return
+		return false
 	}
 	key := cardKey(table, knight)
+	_, was := c.snap[key]
 	if deleted {
 		delete(c.snap, key)
-		return
+		return was
 	}
 	c.snap[key] = CardEntry{Table: table, Knight: knight, Card: json.RawMessage(append([]byte(nil), value...))}
+	return was
 }
 
 func cardKey(table, knight string) string { return table + "\x00" + knight }
@@ -380,7 +383,7 @@ func (c *cardStore) handleUpdate(ctx context.Context, e jetstream.KeyValueEntry,
 	valid := !deleted && json.Valid(e.Value())
 	// An invalid value is treated like a delete: never keep serving the
 	// previous card once its latest KV value is unusable.
-	c.applySnapshot(table, knight, e.Value(), deleted || !valid)
+	was := c.applySnapshot(table, knight, e.Value(), deleted || !valid)
 	if !c.hasSubscribers() {
 		return
 	}
@@ -389,6 +392,11 @@ func (c *cardStore) handleUpdate(ctx context.Context, e jetstream.KeyValueEntry,
 		c.broadcast(cardWSEvent(chainOpDelete, table, knight, cardDeleted{Table: table, Knight: knight, Deleted: true}))
 	default:
 		if !valid {
+			// The card turned invalid: tell live dashboards to drop it, but
+			// only if they could have been shown it.
+			if was {
+				c.broadcast(cardWSEvent(chainOpDelete, table, knight, cardDeleted{Table: table, Knight: knight, Deleted: true}))
+			}
 			return
 		}
 		entry := CardEntry{Table: table, Knight: knight, Card: json.RawMessage(e.Value())}

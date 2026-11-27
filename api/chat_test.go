@@ -208,3 +208,17 @@ func TestChatIdempotencyKey(t *testing.T) {
 		t.Fatalf("invalid key: got %d, calls %d", w.Code, len(f.calls))
 	}
 }
+
+func TestIdempotencyKeyRejectsRepeatedHeader(t *testing.T) {
+	f := &fakeGateway{}
+	srv := f.server(t)
+	r := chatRouter(&gatewayClient{baseURL: srv.URL, token: "tok", http: srv.Client()})
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/galahad", strings.NewReader(`{"message":"hi"}`))
+	req.Header.Add("Idempotency-Key", "a")
+	req.Header.Add("Idempotency-Key", "b")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || len(f.calls) != 0 {
+		t.Fatalf("got %d, gateway calls %d", w.Code, len(f.calls))
+	}
+}
