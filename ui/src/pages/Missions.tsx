@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Target, Filter, Plus } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useMissions } from '../hooks/useMissions'
@@ -25,6 +26,7 @@ const PHASE_FILTERS = [
 export function MissionsPage() {
   const { missions, loading, error, refresh } = useMissions()
   const { table } = useTableFilter()
+  const navigate = useNavigate()
   const [phaseFilter, setPhaseFilter] = useState('All')
   const [showWizard, setShowWizard] = useState(false)
 
@@ -133,7 +135,13 @@ export function MissionsPage() {
         {filteredMissions.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredMissions.map((mission) => (
-              <MissionCard key={mission.name} mission={mission} showTable={!table} />
+              <MissionCard
+                key={mission.name}
+                mission={mission}
+                showTable={!table}
+                href={`/missions/${encodeURIComponent(mission.name)}`}
+                onClick={() => navigate(`/missions/${encodeURIComponent(mission.name)}`)}
+              />
             ))}
           </div>
         )}

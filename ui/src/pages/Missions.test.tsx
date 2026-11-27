@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { MissionsPage } from './Missions'
 import type { Mission } from '../hooks/useMissions'
 
@@ -9,7 +9,9 @@ let state: { missions: Mission[]; loading: boolean; error: string | null }
 const refresh = vi.fn()
 vi.mock('../hooks/useMissions', () => ({ useMissions: () => ({ ...state, refresh }) }))
 vi.mock('../components/MissionCard', () => ({
-  MissionCard: ({ mission }: { mission: Mission }) => <div data-testid="mission-card">{mission.name}</div>,
+  MissionCard: ({ mission, href, onClick }: { mission: Mission; href?: string; onClick?: () => void }) => (
+    <div data-testid="mission-card" onClick={onClick}><a href={href}>{mission.name}</a></div>
+  ),
 }))
 vi.mock('./MissionWizard', () => ({
   MissionWizard: ({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) => (
@@ -24,7 +26,14 @@ function mission(name: string, phase: string, totalCost = '0'): Mission {
   }
 }
 
-const renderPage = () => render(<MemoryRouter><MissionsPage /></MemoryRouter>)
+const renderPage = () => render(
+  <MemoryRouter initialEntries={['/missions']}>
+    <Routes>
+      <Route path="/missions" element={<MissionsPage />} />
+      <Route path="/missions/:name" element={<div>detail page</div>} />
+    </Routes>
+  </MemoryRouter>,
+)
 
 beforeEach(() => {
   refresh.mockReset()
@@ -32,6 +41,14 @@ beforeEach(() => {
 })
 
 describe('MissionsPage', () => {
+  it('links each card to its detail page and navigates on click', async () => {
+    state = { missions: [mission('a b', 'Active')], loading: false, error: null }
+    renderPage()
+    expect(screen.getByRole('link', { name: 'a b' })).toHaveAttribute('href', '/missions/a%20b')
+    await userEvent.click(screen.getByTestId('mission-card'))
+    expect(await screen.findByText('detail page')).toBeInTheDocument()
+  })
+
   it('shows a spinner message while loading', () => {
     state = { missions: [], loading: true, error: null }
     renderPage()

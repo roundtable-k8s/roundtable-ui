@@ -2,7 +2,13 @@ import { useState, useCallback, useRef } from 'react'
 import { apiGet } from '../lib/api'
 import { useVisibleInterval } from './useVisibleInterval'
 
-interface PolledState<T> { url: string; data: T; error: string | null; loading: boolean }
+/** HTTP status of an ApiError (duck-typed so mocked api modules work). */
+function statusOf(e: unknown): number | undefined {
+  const s = (e as { status?: unknown } | null)?.status
+  return typeof s === 'number' ? s : undefined
+}
+
+interface PolledState<T> { url: string; data: T; error: string | null; errorStatus?: number; loading: boolean }
 
 /**
  * Poll a JSON endpoint on an interval, pausing while the tab is hidden (#22).
@@ -32,16 +38,16 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
     try {
       const next = await apiGet<T>(url, { signal })
       if (current.current !== url || signal?.aborted) return
-      update({ data: next, error: null, loading: false })
+      update({ data: next, error: null, errorStatus: undefined, loading: false })
     } catch (e) {
       if (current.current !== url || signal?.aborted) return
-      update({ error: e instanceof Error ? e.message : 'Unknown error', loading: false })
+      update({ error: e instanceof Error ? e.message : 'Unknown error', errorStatus: statusOf(e), loading: false })
     }
   }, [url, update])
   const refresh = useCallback(() => refreshWith(), [refreshWith])
 
   useVisibleInterval(refreshWith, intervalMs, true, { immediate: true, key: url })
 
-  if (state.url !== url) return { data: initialRef.current, loading: true, error: null, refresh }
-  return { data: state.data, loading: state.loading, error: state.error, refresh }
+  if (state.url !== url) return { data: initialRef.current, loading: true, error: null, errorStatus: undefined, refresh }
+  return { data: state.data, loading: state.loading, error: state.error, errorStatus: state.errorStatus, refresh }
 }

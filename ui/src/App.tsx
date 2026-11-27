@@ -18,6 +18,7 @@ const TriggersPage = lazy(() => import('./pages/Triggers').then(m => ({ default:
 const SchedulesPage = lazy(() => import('./pages/Schedules').then(m => ({ default: m.SchedulesPage })))
 const ScheduleFormPage = lazy(() => import('./pages/ScheduleForm').then(m => ({ default: m.ScheduleFormPage })))
 const TriggerDetailPage = lazy(() => import('./pages/Triggers').then(m => ({ default: m.TriggerDetailPage })))
+const MissionDetailPage = lazy(() => import('./pages/MissionDetail').then(m => ({ default: m.MissionDetailPage })))
 const ScheduleDetailPage = lazy(() => import('./pages/ScheduleDetail').then(m => ({ default: m.ScheduleDetailPage })))
 const ChainsPage = lazy(() => import('./pages/Chains').then(m => ({ default: m.ChainsPage })))
 const SessionsPage = lazy(() => import('./pages/Sessions').then(m => ({ default: m.SessionsPage })))
@@ -195,6 +196,7 @@ export default function App() {
             <Route path="/chains" element={<ChainsPage />} />
             <Route path="/triggers" element={<TriggersPage />} />
             <Route path="/triggers/:namespace/:name" element={<TriggerDetailPage />} />
+            <Route path="/missions/:name" element={<MissionDetailPage />} />
             <Route path="/schedules/:namespace/:name" element={<ScheduleDetailPage />} />
             <Route path="/schedules" element={<SchedulesPage />} />
             <Route path="/schedules/new" element={<ScheduleFormPage />} />
