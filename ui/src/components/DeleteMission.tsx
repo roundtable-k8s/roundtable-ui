@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { ApiError, apiDelete } from '../lib/api'
-import { Modal } from './ui'
-
-const btn = 'inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50'
+import { Button, ConfirmDialog } from './ui'
 
 /**
  * Delete button plus a confirmation dialog for one mission. A 404 counts as
@@ -47,28 +45,23 @@ export function DeleteMission({ name, onDeleted, compact = false }: {
   return (
     // The card this may sit in is clickable; keep clicks here from navigating.
     <div className="contents" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        className={`${btn} border-red-500/30 text-red-300 hover:bg-red-500/10${compact ? ' px-2 py-0.5 text-xs' : ''}`}
+      <Button
+        tone="red"
+        size={compact ? 'sm' : 'md'}
         aria-label={compact ? `Delete mission ${name}` : undefined}
         onClick={() => setOpen(true)}
       >
         <Trash2 className="w-4 h-4" aria-hidden /> Delete
-      </button>
+      </Button>
       {open && (
-        <Modal title={`Delete ${name}?`} icon={<Trash2 className="w-5 h-5 text-red-400" />} onClose={close}>
-          <div className="p-6 space-y-4">
-            <p className="text-sm text-gray-400">
-              The mission <span className="font-mono text-white">{name}</span> is removed. Its chains and ephemeral
-              knights are cleaned up according to its cleanup policy.
-            </p>
-            {error && <p role="alert" className="text-sm text-red-400 break-words">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button type="button" className={`${btn} border-roundtable-steel text-gray-300`} disabled={busy} onClick={close}>Cancel</button>
-              <button type="button" className={`${btn} border-red-500/30 bg-red-500/10 text-red-300`} disabled={busy} onClick={confirm}>Delete</button>
-            </div>
-          </div>
-        </Modal>
+        <ConfirmDialog title={`Delete ${name}?`} icon={<Trash2 className="w-5 h-5 text-red-400" />}
+          confirmLabel="Delete" workingLabel="Delete" tone="red" working={busy} error={error}
+          onCancel={close} onConfirm={confirm}>
+          <p className="text-sm text-gray-400">
+            The mission <span className="font-mono text-white">{name}</span> is removed. Its chains and ephemeral
+            knights are cleaned up according to its cleanup policy.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   )

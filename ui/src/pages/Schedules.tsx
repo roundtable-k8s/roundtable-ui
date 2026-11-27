@@ -6,7 +6,7 @@ import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { apiDelete, apiPost } from '../lib/api'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Modal } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Button, LinkButton, ConfirmDialog as ConfirmModal } from '../components/ui'
 import { countLabel, formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
@@ -20,12 +20,6 @@ const POLL_MS = 10000
 const STATE_LABELS: Record<(typeof SCHEDULE_STATES)[number], string> = {
   all: 'All states', active: 'Active', suspended: 'Suspended', failing: 'Failing',
 }
-
-const btn = 'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50'
-const btnGold = `${btn} border-roundtable-gold/30 bg-roundtable-gold/10 text-roundtable-gold hover:bg-roundtable-gold/20`
-const btnGray = `${btn} border-roundtable-steel bg-roundtable-navy text-gray-300 hover:text-white`
-const btnLink = `${btnGray} no-underline`
-const btnRed = `${btn} border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20`
 
 function KindIcon({ kind }: { kind: string }) {
   const Icon = kind === 'knight' ? Shield : kind === 'mission' ? Target : Link2
@@ -173,25 +167,25 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap justify-end gap-1">
-                    <button className={btnGold} disabled={busy === key} onClick={() => onRun(s)} aria-label={`Run ${s.name} now`}>
+                    <Button tone="gold" size="sm" disabled={busy === key} onClick={() => onRun(s)} aria-label={`Run ${s.name} now`}>
                       <Play className="w-3 h-3" aria-hidden /> Run now
-                    </button>
+                    </Button>
                     {s.suspended
-                      ? <button className={btnGray} disabled={busy === key} onClick={() => onResume(s)} aria-label={`Resume ${s.name}`}>
+                      ? <Button size="sm" disabled={busy === key} onClick={() => onResume(s)} aria-label={`Resume ${s.name}`}>
                           <PlayCircle className="w-3 h-3" aria-hidden /> Resume
-                        </button>
-                      : <button className={btnGray} disabled={busy === key} onClick={() => onSuspend(s)} aria-label={`Suspend ${s.name}`}>
+                        </Button>
+                      : <Button size="sm" disabled={busy === key} onClick={() => onSuspend(s)} aria-label={`Suspend ${s.name}`}>
                           <Pause className="w-3 h-3" aria-hidden /> Suspend
-                        </button>}
+                        </Button>}
                     {s.managedBy !== 'git' && (
-                      <Link to={scheduleEditPath(s)} className={btnLink} aria-label={`Edit ${s.name}`}>
+                      <LinkButton to={scheduleEditPath(s)} size="sm" aria-label={`Edit ${s.name}`}>
                         <Pencil className="w-3 h-3" aria-hidden /> Edit
-                      </Link>
+                      </LinkButton>
                     )}
                     {s.managedBy !== 'git' && (
-                      <button className={btnRed} disabled={busy === key} onClick={() => onDelete(s)} aria-label={`Delete ${s.name}`}>
+                      <Button tone="red" size="sm" disabled={busy === key} onClick={() => onDelete(s)} aria-label={`Delete ${s.name}`}>
                         <Trash2 className="w-3 h-3" aria-hidden /> Delete
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </td>
@@ -220,22 +214,15 @@ function TableActionDialog({ action, table, count, working, onCancel, onConfirm 
 }) {
   const pause = action === 'suspend'
   return (
-    <Modal onClose={onCancel} title={pause ? `Pause all schedules of ${table}?` : `Resume all schedules of ${table}?`}
-      icon={pause ? <Pause className="w-5 h-5 text-roundtable-gold" /> : <PlayCircle className="w-5 h-5 text-roundtable-gold" />}>
-      <div className="p-6 space-y-4 text-sm" data-testid="table-action-dialog">
-        <p className="text-gray-300">
-          {pause
-            ? <>Suspend {count} {count === 1 ? 'schedule' : 'schedules'} of table <span className="font-mono">{table}</span>? Nothing is deleted; Resume all undoes it.</>
-            : <>Resume {count} suspended {count === 1 ? 'schedule' : 'schedules'} of table <span className="font-mono">{table}</span>? A schedule suspended in its Git spec stays suspended.</>}
-        </p>
-        <div className="flex justify-end gap-2">
-          <button className={btnGray} onClick={onCancel} disabled={working}>Cancel</button>
-          <button className={btnGold} onClick={onConfirm} disabled={working}>
-            {working ? 'Working…' : pause ? 'Pause all' : 'Resume all'}
-          </button>
-        </div>
-      </div>
-    </Modal>
+    <ConfirmModal title={pause ? `Pause all schedules of ${table}?` : `Resume all schedules of ${table}?`}
+      icon={pause ? <Pause className="w-5 h-5 text-roundtable-gold" /> : <PlayCircle className="w-5 h-5 text-roundtable-gold" />}
+      confirmLabel={pause ? 'Pause all' : 'Resume all'} working={working} onCancel={onCancel} onConfirm={onConfirm} testId="table-action-dialog">
+      <p className="text-gray-300">
+        {pause
+          ? <>Suspend {count} {count === 1 ? 'schedule' : 'schedules'} of table <span className="font-mono">{table}</span>? Nothing is deleted; Resume all undoes it.</>
+          : <>Resume {count} suspended {count === 1 ? 'schedule' : 'schedules'} of table <span className="font-mono">{table}</span>? A schedule suspended in its Git spec stays suspended.</>}
+      </p>
+    </ConfirmModal>
   )
 }
 
@@ -249,34 +236,28 @@ function ConfirmDialog({ pending, task, working, onCancel, onConfirm }: {
   const s = pending.schedule
   const run = pending.kind === 'run'
   return (
-    <Modal onClose={onCancel} title={run ? `Run ${s.name} now?` : `Delete ${s.name}?`}
-      icon={run ? <Play className="w-5 h-5 text-roundtable-gold" /> : <Trash2 className="w-5 h-5 text-red-400" />}>
-      <div className="p-6 space-y-4 text-sm" data-testid={run ? 'run-now-dialog' : 'delete-dialog'}>
-        {run ? (
-          <>
-            <p className="text-gray-300">
-              This fires the schedule once now, through its normal path (input, concurrency policy), even while it is suspended.
-            </p>
-            <div>
-              <div className="flex items-center gap-1.5 text-gray-400 mb-1"><KindIcon kind={s.target.kind} /> {s.target.summary || targetName(s.target)}</div>
-              {task
-                ? <pre data-testid="run-now-task" className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-roundtable-steel bg-roundtable-navy p-3 text-xs text-gray-200">{task}</pre>
-                : <p className="text-gray-500">No task text.</p>}
-            </div>
-          </>
-        ) : (
+    <ConfirmModal title={run ? `Run ${s.name} now?` : `Delete ${s.name}?`}
+      icon={run ? <Play className="w-5 h-5 text-roundtable-gold" /> : <Trash2 className="w-5 h-5 text-red-400" />}
+      confirmLabel={run ? 'Run now' : 'Delete'} tone={run ? 'gold' : 'red'} working={working}
+      onCancel={onCancel} onConfirm={onConfirm} testId={run ? 'run-now-dialog' : 'delete-dialog'}>
+      {run ? (
+        <>
           <p className="text-gray-300">
-            This deletes the schedule <span className="font-mono">{scheduleKey(s)}</span>. Runs it already started are left to finish.
+            This fires the schedule once now, through its normal path (input, concurrency policy), even while it is suspended.
           </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button className={btnGray} onClick={onCancel} disabled={working}>Cancel</button>
-          <button className={run ? btnGold : btnRed} onClick={onConfirm} disabled={working}>
-            {working ? 'Working…' : run ? 'Run now' : 'Delete'}
-          </button>
-        </div>
-      </div>
-    </Modal>
+          <div>
+            <div className="flex items-center gap-1.5 text-gray-400 mb-1"><KindIcon kind={s.target.kind} /> {s.target.summary || targetName(s.target)}</div>
+            {task
+              ? <pre data-testid="run-now-task" className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-roundtable-steel bg-roundtable-navy p-3 text-xs text-gray-200">{task}</pre>
+              : <p className="text-gray-500">No task text.</p>}
+          </div>
+        </>
+      ) : (
+        <p className="text-gray-300">
+          This deletes the schedule <span className="font-mono">{scheduleKey(s)}</span>. Runs it already started are left to finish.
+        </p>
+      )}
+    </ConfirmModal>
   )
 }
 
@@ -366,12 +347,12 @@ export function SchedulesPage() {
         </Link>
         {table && table !== 'none' && all.length > 0 && (
           <>
-            <button className={btnGray} disabled={!!busy || tableCount('suspend') === 0} onClick={() => startTableAction('suspend')}>
+            <Button size="sm" disabled={!!busy || tableCount('suspend') === 0} onClick={() => startTableAction('suspend')}>
               <Pause className="w-3 h-3" aria-hidden /> Pause all in {table}
-            </button>
-            <button className={btnGray} disabled={!!busy || tableCount('resume') === 0} onClick={() => startTableAction('resume')}>
+            </Button>
+            <Button size="sm" disabled={!!busy || tableCount('resume') === 0} onClick={() => startTableAction('resume')}>
               <PlayCircle className="w-3 h-3" aria-hidden /> Resume all in {table}
-            </button>
+            </Button>
           </>
         )}
         <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />

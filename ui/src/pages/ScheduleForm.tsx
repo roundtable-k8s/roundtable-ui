@@ -5,7 +5,7 @@ import { apiGet, apiPost, apiPut, ApiError } from '../lib/api'
 import { useCards } from '../hooks/useCards'
 import { useTables } from '../hooks/useTables'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { PageHeader, ErrorBanner, Spinner } from '../components/ui'
+import { PageHeader, ErrorBanner, Spinner, Button, LinkButton } from '../components/ui'
 import { sanitizeText } from '../lib/untrusted'
 import { scheduleApi, schedulePreviewUrl, type Schedule, type ScheduleNextRuns } from '../lib/schedules'
 import { CRON_PRESETS, CronError, formatInZone, nextRuns } from '../lib/cron'
@@ -19,9 +19,6 @@ import type { Chain } from '../lib/types'
 const CHAINS_URL = '/api/chains?copies=exclude&limit=500'
 
 const input = 'w-full bg-roundtable-navy border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold'
-const btn = 'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50'
-const btnGold = `${btn} border-roundtable-gold/30 bg-roundtable-gold/10 text-roundtable-gold hover:bg-roundtable-gold/20`
-const btnGray = `${btn} border-roundtable-steel bg-roundtable-navy text-gray-300 hover:text-white`
 
 function timeZones(): string[] {
   const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] }
@@ -128,10 +125,9 @@ function KindButton({ kind, current, onSelect, icon, children }: {
 }) {
   const active = kind === current
   return (
-    <button type="button" role="radio" aria-checked={active} onClick={() => onSelect(kind)}
-      className={`${btn} ${active ? 'border-roundtable-gold/60 bg-roundtable-gold/15 text-roundtable-gold' : 'border-roundtable-steel bg-roundtable-navy text-gray-300 hover:text-white'}`}>
+    <Button role="radio" aria-checked={active} tone={active ? 'gold' : 'gray'} onClick={() => onSelect(kind)}>
       {icon} {children}
-    </button>
+    </Button>
   )
 }
 
@@ -408,19 +404,19 @@ export function ScheduleFormPage() {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Link to="/schedules" className={btnGray}>Cancel</Link>
-            <button type="submit" className={btnGold} disabled={saving}>
+            <LinkButton to="/schedules">Cancel</LinkButton>
+            <Button type="submit" tone="gold" disabled={saving}>
               <Save className="w-4 h-4" aria-hidden /> {saving ? 'Saving…' : editing ? 'Save changes' : 'Create schedule'}
-            </button>
+            </Button>
           </div>
         </form>
 
         <section aria-label="YAML preview" className="lg:sticky lg:top-4 self-start bg-roundtable-slate border border-roundtable-steel rounded-xl">
           <div className="flex items-center justify-between border-b border-roundtable-steel px-4 py-2">
             <h2 className="text-sm font-medium text-white">YAML</h2>
-            <button type="button" className={btnGray} onClick={() => void copy()} disabled={!yaml}>
+            <Button onClick={() => void copy()} disabled={!yaml}>
               {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} {copied ? 'Copied' : 'Copy YAML'}
-            </button>
+            </Button>
           </div>
           <pre data-testid="schedule-yaml" className="max-h-[70vh] overflow-auto p-4 text-xs text-gray-200 font-mono whitespace-pre">{yaml}</pre>
           <p className="border-t border-roundtable-steel px-4 py-2 text-xs text-gray-500">
