@@ -16,11 +16,13 @@ export interface OpenDeadLetters {
   total?: number
   /** The last poll failed: the count is unknown, not zero. */
   error?: boolean
+  /** No poll has answered yet: the count is unknown, not zero. */
+  loading?: boolean
 }
 
 /** Open dead letters, polled for the nav badge. `error` is set when the last poll failed (the count is then unknown). */
 export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLetters {
-  const [state, setState] = useState<OpenDeadLetters>({ count: 0, capped: false })
+  const [state, setState] = useState<OpenDeadLetters>({ count: 0, capped: false, loading: true })
   useVisibleInterval(
     (signal) =>
       apiGet<{ deadLetters?: DeadLetter[]; total?: number }>(`${DEAD_LETTERS_URL}?state=open`, { signal })
@@ -28,7 +30,7 @@ export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLett
           const all = d.deadLetters ?? []
           const count = all.filter((x) => inTable(table, x.table)).length
           const capped = all.length >= DEAD_LETTER_CAP || (typeof d.total === 'number' && d.total > all.length)
-          setState({ count, capped, total: !table && typeof d.total === 'number' ? d.total : undefined })
+          setState({ count, capped, total: !table && typeof d.total === 'number' ? d.total : undefined, loading: false })
         })
         .catch(() => { if (!signal.aborted) setState((prev) => ({ ...prev, error: true })) }),
     intervalMs,

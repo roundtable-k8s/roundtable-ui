@@ -30,6 +30,15 @@ describe('useOpenDeadLetters', () => {
     expect(deadLetterBadge({ count: 100, capped: true }).title).toMatch(/100 or more open/)
   })
 
+  it('is loading, not zero, until the first answer', async () => {
+    apiGet.mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useOpenDeadLetters(''))
+    expect(result.current.loading).toBe(true)
+    apiGet.mockResolvedValue({ deadLetters: [] })
+    const done = renderHook(() => useOpenDeadLetters(''))
+    await waitFor(() => expect(done.result.current.loading).toBe(false))
+  })
+
   it('flags an error instead of silently reporting zero', async () => {
     apiGet.mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useOpenDeadLetters(''))
