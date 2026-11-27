@@ -506,6 +506,26 @@ func buildRouter(d routerDeps) *mux.Router {
 	return r
 }
 
+// natsDisconnectHandler records a dropped NATS connection; nats.go keeps
+// retrying (see the MaxReconnects comment in main).
+func natsDisconnectHandler(_ *nats.Conn, err error) {
+	natsDisconnectsTotal.Inc()
+	natsConnected.Set(0)
+	slog.WarnContext(context.Background(), "NATS disconnected, will retry", "error", err)
+}
+
+// natsReconnectHandler marks NATS connected again after a reconnect.
+func natsReconnectHandler(c *nats.Conn) {
+	natsConnected.Set(1)
+	slog.InfoContext(context.Background(), "NATS reconnected", "url", c.ConnectedUrl())
+}
+
+// natsClosedHandler runs once nats.go gives up on the connection for good.
+func natsClosedHandler(_ *nats.Conn) {
+	natsConnected.Set(0)
+	slog.ErrorContext(context.Background(), "NATS connection permanently closed")
+}
+
 func main() {
 	// Structured JSON logs so log pipelines (Victoria Logs) can filter on level
 	level := slog.LevelInfo
@@ -540,19 +560,9 @@ func main() {
 		nats.ReconnectWait(2*time.Second),
 		nats.ReconnectJitter(500*time.Millisecond, 2*time.Second),
 		nats.RetryOnFailedConnect(true), // don't hard-exit if NATS is briefly down at boot
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			natsDisconnectsTotal.Inc()
-			natsConnected.Set(0)
-			slog.WarnContext(context.Background(), "NATS disconnected, will retry", "error", err)
-		}),
-		nats.ReconnectHandler(func(c *nats.Conn) {
-			natsConnected.Set(1)
-			slog.InfoContext(context.Background(), "NATS reconnected", "url", c.ConnectedUrl())
-		}),
-		nats.ClosedHandler(func(_ *nats.Conn) {
-			natsConnected.Set(0)
-			slog.ErrorContext(context.Background(), "NATS connection permanently closed")
-		}),
+		nats.DisconnectErrHandler(natsDisconnectHandler),
+		nats.ReconnectHandler(natsReconnectHandler),
+		nats.ClosedHandler(natsClosedHandler),
 	)
 	if err != nil {
 		slog.ErrorContext(context.Background(), "NATS connect failed", "error", err, "url", natsURL)

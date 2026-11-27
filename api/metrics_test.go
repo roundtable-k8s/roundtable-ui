@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -322,14 +324,29 @@ func TestGatewayRequestsMetric(t *testing.T) {
 	}
 }
 
-func TestNATSMetricsRegistered(t *testing.T) {
-	natsConnected.Set(1)
+func TestNATSConnectionHandlersUpdateMetrics(t *testing.T) {
+	disconnects := testutil.ToFloat64(natsDisconnectsTotal)
+
+	// The handlers are the ones main passes to nats.Connect.
+	natsReconnectHandler(&nats.Conn{})
 	if got := testutil.ToFloat64(natsConnected); got != 1 {
-		t.Errorf("natsConnected = %v, want 1", got)
+		t.Fatalf("after reconnect natsConnected = %v, want 1", got)
 	}
-	before := testutil.ToFloat64(natsDisconnectsTotal)
-	natsDisconnectsTotal.Inc()
-	if got := testutil.ToFloat64(natsDisconnectsTotal) - before; got != 1 {
+
+	natsDisconnectHandler(&nats.Conn{}, errors.New("io timeout"))
+	if got := testutil.ToFloat64(natsDisconnectsTotal) - disconnects; got != 1 {
 		t.Errorf("disconnects delta = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(natsConnected); got != 0 {
+		t.Errorf("after disconnect natsConnected = %v, want 0", got)
+	}
+
+	natsReconnectHandler(&nats.Conn{})
+	natsClosedHandler(&nats.Conn{})
+	if got := testutil.ToFloat64(natsConnected); got != 0 {
+		t.Errorf("after closed natsConnected = %v, want 0", got)
+	}
+	if got := testutil.ToFloat64(natsDisconnectsTotal) - disconnects; got != 1 {
+		t.Errorf("closed handler must not count a disconnect: delta = %v, want 1", got)
 	}
 }
