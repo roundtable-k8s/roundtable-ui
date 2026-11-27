@@ -95,14 +95,16 @@ describe('TasksPage', () => {
   it('stops polling a task after 5 consecutive failed polls and marks it unavailable', async () => {
     apiGet.mockImplementation((url: string) =>
       url === '/api/tables' ? Promise.resolve({ tables }) : Promise.reject(new Error('404')))
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     await userEvent.type(await screen.findByRole('textbox'), 'fix it{Enter}')
-    await waitFor(() => expect(screen.getByTestId('dispatch-status').textContent).toBe('status unavailable'), { timeout: 15000 })
     const polls = () => apiGet.mock.calls.filter((c) => String(c[0]).startsWith('/api/tasks/dispatch/')).length
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_500) })
+    expect(screen.getByTestId('dispatch-status').textContent).toBe('status unavailable')
     expect(polls()).toBe(5)
-    await new Promise((r) => setTimeout(r, 2500))
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
     expect(polls()).toBe(5)
-  }, 20000)
+  })
 
   it('polls the task and shows its status and output', async () => {
     apiGet.mockImplementation((url: string) => {

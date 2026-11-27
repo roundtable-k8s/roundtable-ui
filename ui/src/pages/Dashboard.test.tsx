@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { DashboardPage } from './Dashboard'
 import { useFleet } from '../hooks/useFleet'
-import { apiGet } from '../lib/api'
+import { apiGet, apiFetch } from '../lib/api'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 // Mock the hooks
 vi.mock('../hooks/useFleet', () => ({
@@ -90,21 +91,17 @@ function renderDashboard(props = {}) {
 
 // Tests override these mocks; put the defaults back after every test, pass or fail.
 let defaults: { apiGet: unknown; apiFetch: unknown; useFleet: unknown; useWebSocket: unknown }
-beforeEach(async () => {
-  const api = await import('../lib/api')
-  const { useWebSocket } = await import('../hooks/useWebSocket')
+beforeEach(() => {
   defaults = {
-    apiGet: vi.mocked(api.apiGet).getMockImplementation(),
-    apiFetch: vi.mocked(api.apiFetch).getMockImplementation(),
+    apiGet: vi.mocked(apiGet).getMockImplementation(),
+    apiFetch: vi.mocked(apiFetch).getMockImplementation(),
     useFleet: vi.mocked(useFleet).getMockImplementation(),
     useWebSocket: vi.mocked(useWebSocket).getMockImplementation(),
   }
 })
-afterEach(async () => {
-  const api = await import('../lib/api')
-  const { useWebSocket } = await import('../hooks/useWebSocket')
-  vi.mocked(api.apiGet).mockReset().mockImplementation(defaults.apiGet as typeof api.apiGet)
-  vi.mocked(api.apiFetch).mockReset().mockImplementation(defaults.apiFetch as typeof api.apiFetch)
+afterEach(() => {
+  vi.mocked(apiGet).mockReset().mockImplementation(defaults.apiGet as typeof apiGet)
+  vi.mocked(apiFetch).mockReset().mockImplementation(defaults.apiFetch as typeof apiFetch)
   vi.mocked(useFleet).mockReset().mockImplementation(defaults.useFleet as typeof useFleet)
   vi.mocked(useWebSocket).mockReset().mockImplementation(defaults.useWebSocket as typeof useWebSocket)
 })
@@ -282,8 +279,6 @@ describe('DashboardPage session cost refresh (#152)', () => {
   })
 
   async function setup(events: unknown[], sessionCost: () => number) {
-    const { useWebSocket } = await import('../hooks/useWebSocket')
-    const { apiFetch } = await import('../lib/api')
     vi.mocked(apiFetch).mockImplementation(((url: string) => {
       const m = /fleet\/(\w+)\/session/.exec(url)
       // Only galahad has session stats
@@ -316,7 +311,6 @@ describe('DashboardPage session cost refresh (#152)', () => {
   it('backfills live cost for a knight without session stats and does not fetch', async () => {
     const { view, apiFetch } = await setup([], () => 1)
     const before = vi.mocked(apiFetch).mock.calls.length
-    const { useWebSocket } = await import('../hooks/useWebSocket')
     vi.mocked(useWebSocket).mockReturnValue({
       events: [result('lancelot', '2026-01-01T00:00:03Z', 0.25)], connected: true,
     } as unknown as ReturnType<typeof useWebSocket>)
@@ -329,7 +323,6 @@ describe('DashboardPage session cost refresh (#152)', () => {
 
 describe('DashboardPage truncated chain list', () => {
   async function withChains(n: number, total: string) {
-    const { apiGet, apiFetch } = await import('../lib/api')
     const orig = defaults.apiGet as typeof apiGet
     vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>
       url === '/api/chains?limit=500'
@@ -372,7 +365,6 @@ describe('DashboardPage truncated chain list', () => {
 
 describe('DashboardPage scheduled chains', () => {
   it('shows "next in" for a scheduled chain that is not suspended', async () => {
-    const { apiGet } = await import('../lib/api')
     const orig = vi.mocked(apiGet).getMockImplementation()!
     const next = new Date(Date.now() + 3 * 3600_000).toISOString()
     vi.mocked(apiGet).mockImplementation(((url: string, init?: RequestInit) =>

@@ -1,5 +1,5 @@
 import React from 'react'
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
@@ -113,6 +113,8 @@ describe('Kubernetes health banner', () => {
 })
 
 describe('build version footer', () => {
+  beforeEach(() => { versionResult = null })
+
   it('shows the version and short commit', () => {
     versionResult = { version: '1.2.3', commit: 'abcdef0123456789' }
     renderAt('/')
@@ -120,7 +122,6 @@ describe('build version footer', () => {
   })
 
   it('is absent while loading or when the fetch failed', () => {
-    versionResult = null
     renderAt('/')
     expect(screen.queryByTestId('build-version')).toBeNull()
   })

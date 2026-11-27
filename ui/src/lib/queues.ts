@@ -1,4 +1,3 @@
-import { formatSecondsLadder } from './format'
 /**
  * Types and pure helpers for the Queues page (#185 / #206).
  *
@@ -6,6 +5,7 @@ import { formatSecondsLadder } from './format'
  *   GET /api/queues          live JetStream consumer info per knight (#204)
  *   GET /api/queues/history  15 s samples (6 h ring buffer) + scale events (#205)
  */
+import { formatSecondsLadder } from './format'
 
 export interface SequencePair {
   consumerSeq: number

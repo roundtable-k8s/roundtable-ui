@@ -35,7 +35,7 @@ beforeEach(() => {
 })
 
 describe('ArchitecturePage', () => {
-  it('shows the spinner while loading', async () => {
+  it('shows the spinner while loading', () => {
     mockApiGet.mockImplementation(() => new Promise(() => {}))
     renderPage()
     expect(screen.getByRole('status')).toBeInTheDocument()
@@ -92,7 +92,6 @@ describe('ArchitecturePage', () => {
   })
 
   it('uses a generic message for a non-Error rejection', async () => {
-    mockApi('x', undefined)
     mockApiGet.mockImplementation((url: string) =>
       url === '/api/roundtables' ? Promise.reject('nope') : Promise.resolve([] as never))
     renderPage()
