@@ -183,6 +183,41 @@ describe('SchedulesPage', () => {
     expect(screen.getByTestId('url-search').textContent).toBe('')
   })
 
+  it('filters by state and keeps it in the URL', async () => {
+    serve()
+    renderPage()
+    await rowFor('morning-digest')
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'suspended' } })
+    expect(screen.getByTestId('url-search')).toHaveTextContent('?state=suspended')
+    const rows = screen.getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('cluster-scan')
+    expect(screen.getByText(/^1 of 3 schedules/)).toBeInTheDocument()
+  })
+
+  it('starts filtered from the URL, and an unknown state behaves as all', async () => {
+    serve()
+    renderPage('/schedules?state=failing')
+    await rowFor('cluster-scan')
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(1)
+    expect(screen.getByLabelText('State')).toHaveValue('failing')
+  })
+
+  it('treats an unknown state in the URL as all', async () => {
+    serve()
+    renderPage('/schedules?state=bogus')
+    await rowFor('morning-digest')
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(3)
+    expect(screen.getByLabelText('State')).toHaveValue('all')
+  })
+
+  it('shows the empty state with counts when no schedule matches the state', async () => {
+    serve([sched({ name: 'quiet', suspended: false })])
+    renderPage('/schedules?state=failing')
+    expect(await screen.findByText('No schedules match the filter')).toBeInTheDocument()
+    expect(screen.getByText('0 of 1 schedule shown. Clear the state or knight filter to see them.')).toBeInTheDocument()
+  })
+
   it('shows the empty filtered state for a knight with no schedules', async () => {
     serve()
     renderPage('/schedules?knight=nobody')

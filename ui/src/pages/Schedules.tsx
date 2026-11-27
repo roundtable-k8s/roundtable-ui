@@ -11,11 +11,15 @@ import { countLabel, formatDateTime, formatRelativeTime, until } from '../lib/fo
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
-  describePolicy, describeSuspension, firstLine, scheduleEditPath, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL,
+  describePolicy, describeSuspension, filterSchedules, firstLine, scheduleEditPath, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL, SCHEDULE_STATES,
   type Schedule, type ScheduleList, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
 const POLL_MS = 10000
+
+const STATE_LABELS: Record<(typeof SCHEDULE_STATES)[number], string> = {
+  all: 'All states', active: 'Active', suspended: 'Suspended', failing: 'Failing',
+}
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50'
 const btnGold = `${btn} border-roundtable-gold/30 bg-roundtable-gold/10 text-roundtable-gold hover:bg-roundtable-gold/20`
@@ -73,13 +77,13 @@ function NextRun({ iso }: { iso?: string }) {
   )
 }
 
-function SchedulesEmpty({ filtered }: { filtered: boolean }) {
+function SchedulesEmpty({ filtered, total }: { filtered: boolean; total: number }) {
   return (
     <div data-testid="schedules-empty">
       <EmptyState
         icon={CalendarClock}
         title={filtered ? 'No schedules match the filter' : 'No schedules yet'}
-        sub="A schedule runs a task on a knight, a Chain or a Mission on a cron cadence. It is a Trigger with a schedule source: write it as YAML in Git (applied by Flux) or create it through the gateway."
+        sub={filtered ? `0 of ${total} ${total === 1 ? 'schedule' : 'schedules'} shown. Clear the state or knight filter to see them.` : "A schedule runs a task on a knight, a Chain or a Mission on a cron cadence. It is a Trigger with a schedule source: write it as YAML in Git (applied by Flux) or create it through the gateway."}
       />
       <p className="text-center text-sm">
         <a href={SCHEDULE_DOCS_URL} target="_blank" rel="noopener noreferrer"
@@ -252,7 +256,9 @@ export function SchedulesPage() {
 
   const all = useMemo(() => (data?.schedules ?? []).filter((s) => inTable(table, s.table)), [data, table])
   const knights = useMemo(() => [...new Set(all.map((s) => s.target.knight).filter((k): k is string => !!k))].sort(), [all])
-  const shown = knight ? all.filter((s) => s.target.knight === knight) : all
+  const [state, setState] = useUrlParam('state', 'all', SCHEDULE_STATES)
+  const byKnight = knight ? all.filter((s) => s.target.knight === knight) : all
+  const shown = filterSchedules(byKnight, state)
 
   const act = async (s: Schedule, fn: () => Promise<string>) => {
     setBusy(scheduleKey(s))
@@ -306,20 +312,29 @@ export function SchedulesPage() {
       )}
       {error && <div className="mb-4"><ErrorBanner>Failed to load schedules: {error}</ErrorBanner></div>}
 
-      {knights.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          <label htmlFor="schedule-knight" className="text-xs text-gray-400">Knight</label>
-          <select id="schedule-knight" value={knight} onChange={(e) => setKnight(e.target.value)}
+      <div className="mb-4 flex flex-wrap items-center gap-4">
+        {knights.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label htmlFor="schedule-knight" className="text-xs text-gray-400">Knight</label>
+            <select id="schedule-knight" value={knight} onChange={(e) => setKnight(e.target.value)}
+              className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1 text-sm text-white">
+              <option value="">All knights</option>
+              {knight && !knights.includes(knight) && <option value={knight}>{knight}</option>}
+              {knights.map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <label htmlFor="schedule-state" className="text-xs text-gray-400">State</label>
+          <select id="schedule-state" value={state} onChange={(e) => setState(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1 text-sm text-white">
-            <option value="">All knights</option>
-            {knight && !knights.includes(knight) && <option value={knight}>{knight}</option>}
-            {knights.map((k) => <option key={k} value={k}>{k}</option>)}
+            {SCHEDULE_STATES.map((st) => <option key={st} value={st}>{STATE_LABELS[st]}</option>)}
           </select>
         </div>
-      )}
+      </div>
 
       {loading && schedules.length === 0 && !error && <div className="flex justify-center py-12"><Spinner /></div>}
-      {!loading && !error && shown.length === 0 && <SchedulesEmpty filtered={schedules.length > 0} />}
+      {!loading && !error && shown.length === 0 && <SchedulesEmpty filtered={schedules.length > 0} total={all.length} />}
       {shown.length > 0 && (
         <SchedulesTable schedules={shown} tasks={tasks} showTable={!table} busy={busy}
           onRun={(s) => setPending({ kind: 'run', schedule: s })}

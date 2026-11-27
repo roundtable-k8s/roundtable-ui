@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describeDeadline, describeSuspension, describePolicy, phaseToOutcome, formatCostUSD, formatSeconds, runResultText, runResultOutcome, describeTurns, prLabel, scheduleApi, scheduleLink, sortRunsNewestFirst } from './schedules'
+import { describeDeadline, describeSuspension, describePolicy, phaseToOutcome, filterSchedules, formatCostUSD, formatSeconds, isFailing, runResultText, runResultOutcome, describeTurns, prLabel, scheduleApi, scheduleLink, sortRunsNewestFirst, type Schedule } from './schedules'
 
 describe('schedules helpers', () => {
   it('builds encoded API paths and links', () => {
@@ -98,5 +98,36 @@ describe('schedule policy helpers', () => {
     expect(describeDeadline({})).toBe('none')
     expect(describeDeadline({ startingDeadlineSeconds: 0 })).toBe('0s')
     expect(describeDeadline({ startingDeadlineSeconds: 300 })).toBe('5m 0s')
+  })
+})
+
+describe('filterSchedules', () => {
+  const base = { name: 's', namespace: 'roundtable', cron: '0 7 * * *', timeZone: 'UTC', target: { kind: 'chain', summary: 'c' }, managedBy: 'api' } as const
+  const list: Schedule[] = [
+    { ...base, name: 'live', suspended: false, lastResult: { time: 't', outcome: 'succeeded' } },
+    { ...base, name: 'paused', suspended: true },
+    { ...base, name: 'broken', suspended: false, lastResult: { time: 't', outcome: 'failed' } },
+    { ...base, name: 'lost', suspended: true, lastResult: { time: 't', outcome: 'lost' } },
+    { ...base, name: 'fresh', suspended: false, lastResult: { time: 't', outcome: 'skipped' } },
+    { ...base, name: 'new', suspended: false },
+  ]
+  const names = (l: Schedule[]) => l.map((s) => s.name)
+
+  it('returns everything for all and for an unknown state', () => {
+    expect(names(filterSchedules(list, 'all'))).toHaveLength(6)
+    expect(names(filterSchedules(list, 'bogus'))).toHaveLength(6)
+  })
+
+  it('active is the schedules that are not suspended', () => {
+    expect(names(filterSchedules(list, 'active'))).toEqual(['live', 'broken', 'fresh', 'new'])
+  })
+
+  it('suspended is the suspended schedules', () => {
+    expect(names(filterSchedules(list, 'suspended'))).toEqual(['paused', 'lost'])
+  })
+
+  it('failing is a last firing that failed or was lost, and skips schedules with no last result', () => {
+    expect(names(filterSchedules(list, 'failing'))).toEqual(['broken', 'lost'])
+    expect(isFailing({ ...base, suspended: false })).toBe(false)
   })
 })
