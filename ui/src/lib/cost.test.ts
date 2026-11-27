@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { costText, notionalShare, parseUSD, tokenCount, tokensText } from './cost'
+import { costPanelCsv, costText, notionalShare, parseUSD, tokenCount, tokensText } from './cost'
 
 describe('cost helpers', () => {
   it('formats costs and falls back to — without data', () => {
@@ -30,5 +30,28 @@ describe('cost helpers', () => {
     expect(notionalShare('0.7500', '0.750012')).toBe('all')
     expect(notionalShare('0.750000', undefined)).toBe('none')
     expect(notionalShare(undefined, '0.25')).toBe('none')
+  })
+})
+
+describe('costPanelCsv', () => {
+  it('writes three labelled sections with the panel figures', () => {
+    const rows = costPanelCsv({
+      costByKnight: [{ knight: '=cmd', cost: 1.5, tasks: 2, failures: 1 }],
+      dailyCosts: [{ date: 'Jan 1', cost: 1.5 }],
+      topTasks: [{ knight: 'galahad', cost: 0.0000012, taskId: 't-1', timestamp: '2026-01-01T00:00:00Z', success: false }],
+    })
+    expect(rows).toEqual([
+      ['By knight'],
+      ['Knight', 'Cost (USD)', 'Tasks', 'Failed'],
+      ['=cmd', 1.5, 2, 1],
+      [],
+      ['By day'],
+      ['Day', 'Cost (USD)'],
+      ['Jan 1', 1.5],
+      [],
+      ['Top tasks'],
+      ['Task', 'Knight', 'Cost (USD)', 'Time', 'Status'],
+      ['t-1', 'galahad', 0.000001, '2026-01-01T00:00:00Z', 'failed'],
+    ])
   })
 })

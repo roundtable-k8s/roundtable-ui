@@ -44,3 +44,34 @@ export function notionalShare(costUSD: string | null | undefined, notionalUSD: s
   // Status costs are rounded to 6 (chains) or 4 (missions) decimals.
   return notional >= total - 1e-4 ? 'all' : 'partial'
 }
+
+/** The cost panel's data, as Dashboard computes it for the selected range. */
+export interface CostPanelCsvInput {
+  costByKnight: { knight: string; cost: number; tasks: number; failures: number }[]
+  dailyCosts: { date: string; cost: number }[]
+  topTasks: { knight: string; cost: number; taskId: string; timestamp: string; success: boolean }[]
+}
+
+/** Costs as plain decimals with up to 6 places (the precision of status costs). */
+const csvMoney = (n: number): number => Number(n.toFixed(6))
+
+/**
+ * Rows for the cost panel CSV: three labelled sections (by knight, by day,
+ * top tasks) separated by blank rows. The figures are the panel's own data.
+ */
+export function costPanelCsv(data: CostPanelCsvInput): (string | number)[][] {
+  const rows: (string | number)[][] = [
+    ['By knight'],
+    ['Knight', 'Cost (USD)', 'Tasks', 'Failed'],
+    ...data.costByKnight.map(k => [k.knight, csvMoney(k.cost), k.tasks, k.failures]),
+    [],
+    ['By day'],
+    ['Day', 'Cost (USD)'],
+    ...data.dailyCosts.map(d => [d.date, csvMoney(d.cost)]),
+    [],
+    ['Top tasks'],
+    ['Task', 'Knight', 'Cost (USD)', 'Time', 'Status'],
+    ...data.topTasks.map(t => [t.taskId, t.knight, csvMoney(t.cost), t.timestamp, t.success ? 'ok' : 'failed']),
+  ]
+  return rows
+}

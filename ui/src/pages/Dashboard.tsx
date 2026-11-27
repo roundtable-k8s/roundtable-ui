@@ -2,7 +2,7 @@ import { apiGet } from '../lib/api'
 import { GlanceStrip } from '../components/GlanceStrip'
 import { CHAIN_LIST_LIMIT, fetchChainTotal, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader } from 'lucide-react'
+import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader, Download } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
@@ -18,6 +18,8 @@ import { FirstRun } from '../components/FirstRun'
 import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
 import { costByChain } from '../lib/chainCost'
 import { CostTag } from '../components/CostTag'
+import { costPanelCsv } from '../lib/cost'
+import { toCsv } from '../lib/csv'
 
 import type { Chain } from '../lib/types'
 
@@ -246,6 +248,18 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     const days = timeRange === 'day' ? 1 : timeRange === 'week' ? 7 : 30
     return costByChain(chains, Date.now() - days * 24 * 60 * 60 * 1000)
   }, [chains, timeRange])
+  // The panel's figures as a CSV file. Built from the same data the panel shows.
+  function downloadCostCsv() {
+    const csv = toCsv(costPanelCsv(costPanelData))
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `roundtable-costs-${timeRange}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
 
   const runningCounts = useMemo(() => countByStatus(running.tasks.values()), [running.tasks])
   const runningTotal = runningCounts.running + runningCounts.stale + runningCounts.lost
@@ -465,6 +479,17 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                 <span><span className="text-white font-medium">{filteredCostEntries.length}</span> tasks</span>
                 <span><span className="text-white font-medium">{costPanelData.costByKnight.length}</span> active knights</span>
                 <span>avg <span className="text-roundtable-gold font-medium">{filteredCostEntries.length > 0 ? formatCost(costPanelData.totalCost / filteredCostEntries.length) : '$0.00'}</span>/task</span>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={downloadCostCsv}
+                  aria-label="Download CSV"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-roundtable-steel/50 text-gray-300 hover:text-white transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download CSV
+                </button>
+                <span className="text-xs text-gray-500">Covers recent results only</span>
               </div>
             </div>
 
