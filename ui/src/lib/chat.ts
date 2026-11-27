@@ -43,7 +43,8 @@ export interface ChatKnight {
   namespace?: string
   domain?: string
   model?: string
-  agent?: string
+  runtime?: string
+  roundTable?: string
   phase?: string
   ready?: boolean
   suspended?: boolean
