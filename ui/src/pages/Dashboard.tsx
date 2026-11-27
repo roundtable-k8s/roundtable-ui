@@ -382,8 +382,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
         <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">⛓️ Chains</h2>
-            {truncationNote(chains.length, chainTotal) && (
-              <span className="text-xs text-yellow-400" data-testid="chains-truncated">{truncationNote(chains.length, chainTotal)}</span>
+            {chainsNote && (
+              <span className="text-xs text-yellow-400" data-testid="chains-truncated">{chainsNote}</span>
             )}
             <Link to="/chains" className="text-xs text-roundtable-gold hover:underline flex items-center gap-1">
               View all <ArrowRight className="w-3 h-3" />

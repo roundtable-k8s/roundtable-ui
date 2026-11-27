@@ -272,12 +272,14 @@ export function RunHistory({ namespace, name, selected, onSelect }: {
               <td className="px-3 py-2 text-gray-300">{formatCostUSD(r.costUSD)}</td>
               <td className="px-3 py-2 text-gray-300">{describeTurns(r) || <span className="text-gray-600">—</span>}</td>
               <td className="px-3 py-2">
-                {r.run && r.resultAvailable ? (
-                  <button className="text-roundtable-gold hover:underline" onClick={() => onSelect(r.run!)} aria-label={`View result of ${r.run}`}>
-                    View
-                  </button>
-                ) : <span className="text-gray-600">—</span>}
-                <TraceLink traceId={r.traceId} className="mt-1" />
+                <div className="flex flex-col items-start gap-1">
+                  {r.run && r.resultAvailable ? (
+                    <button className="text-roundtable-gold hover:underline" onClick={() => onSelect(r.run!)} aria-label={`View result of ${r.run}`}>
+                      View
+                    </button>
+                  ) : <span className="text-gray-600">—</span>}
+                  <TraceLink traceId={r.traceId} />
+                </div>
               </td>
             </tr>
           ))}
