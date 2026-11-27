@@ -10,18 +10,26 @@ import (
 // validStateWord guards the status and phase filters forwarded to the gateway.
 var validStateWord = regexp.MustCompile(`^[A-Za-z]+$`)
 
+// gatewayListMax is the largest limit the gateway honours for /v1/tasks.
+const gatewayListMax = 200
+
 // listLimit reads the optional limit query value. It must be a positive integer;
-// an absent value is left to the gateway's default.
+// values above gatewayListMax are clamped to it. An absent value is left to the
+// gateway's default.
 func listLimit(w http.ResponseWriter, r *http.Request, q url.Values) bool {
 	l := r.URL.Query().Get("limit")
 	if l == "" {
 		return true
 	}
-	if n, err := strconv.Atoi(l); err != nil || n < 1 {
+	n, err := strconv.Atoi(l)
+	if err != nil || n < 1 {
 		jsonError(w, "limit must be a positive integer", http.StatusBadRequest)
 		return false
 	}
-	q.Set("limit", l)
+	if n > gatewayListMax {
+		n = gatewayListMax
+	}
+	q.Set("limit", strconv.Itoa(n))
 	return true
 }
 
