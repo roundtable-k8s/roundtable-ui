@@ -36,7 +36,7 @@ function MissionBody({ m }: { m: Mission }) {
   const chainStatuses = m.chainStatuses ?? []
   const chains = m.chains ?? []
   const knightStatuses = m.knightStatuses ?? []
-  const knightCosts = m.knightCosts ?? []
+  const knightCosts = m.costBreakdown ?? []
   // Why: only conditions that are not True explain a stuck or failed mission
   const why = (m.conditions ?? []).filter(c => c.status !== 'True')
   const budget = parseFloat(m.costBudgetUSD) || 0
@@ -101,7 +101,7 @@ function MissionBody({ m }: { m: Mission }) {
             {knightCosts.map(k => (
               <li key={k.name} className="flex items-center justify-between gap-3 rounded bg-roundtable-navy/50 px-2 py-1">
                 <span className="text-white">{k.name}</span>
-                <span className="text-right text-gray-300"><CostTag costUSD={k.costUSD} notionalUSD={k.notionalCostUSD} /> · {tokensText(k.tokens)}</span>
+                <span className="text-right text-gray-300"><CostTag costUSD={k.costUSD} /></span>
               </li>
             ))}
           </ul>

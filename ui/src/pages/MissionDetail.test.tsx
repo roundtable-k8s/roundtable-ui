@@ -86,4 +86,20 @@ describe('MissionDetailPage', () => {
     expect(why).toHaveTextContent('spent more than allowed')
     expect(why).not.toHaveTextContent('AllGood')
   })
+
+  it('lists the cost per knight from costBreakdown', async () => {
+    mockApiGet.mockResolvedValue(mission({
+      costBreakdown: [
+        { name: 'galahad', costUSD: '0.9', ephemeral: false },
+        { name: 'tmp-1', costUSD: '0.6', ephemeral: true },
+      ],
+    }))
+    renderPage()
+    const list = await screen.findByRole('list', { name: 'cost per knight' })
+    const items = within(list).getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent('galahad')
+    expect(items[0]).toHaveTextContent('0.9')
+    expect(items[1]).toHaveTextContent('tmp-1')
+  })
 })
