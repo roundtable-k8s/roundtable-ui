@@ -305,7 +305,7 @@ type queuesCache struct {
 func (c *queuesCache) fresh() ([]KnightQueue, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.items != nil && time.Since(c.at) < queuesCacheTTL {
+	if c.items != nil && queueNow().Sub(c.at) < queuesCacheTTL {
 		return c.items, true
 	}
 	return nil, false
@@ -332,7 +332,7 @@ func (c *queuesCache) get(ctx context.Context, build func(context.Context) ([]Kn
 			items = []KnightQueue{}
 		}
 		c.mu.Lock()
-		c.items, c.at = items, time.Now()
+		c.items, c.at = items, queueNow()
 		c.mu.Unlock()
 		return items, nil
 	})

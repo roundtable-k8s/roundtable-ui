@@ -8,32 +8,36 @@ import (
 
 func TestTableCacheGetNotBlockedBySlowLookup(t *testing.T) {
 	release := make(chan struct{})
+	started := make(chan struct{})
 	calls := 0
 	c := newTableCache(func(ctx context.Context) map[string]string {
 		calls++
 		if calls == 1 {
 			return map[string]string{"a": "personal"}
 		}
+		close(started)
 		select {
 		case <-release:
 		case <-ctx.Done():
 		}
 		return map[string]string{"a": "work"}
-	}, time.Hour, 50*time.Millisecond)
+	}, time.Hour, time.Minute)
 	c.refresh()
-	done := make(chan struct{})
 	finished := make(chan struct{})
 	go func() { c.refresh(); close(finished) }()
-	start := time.Now()
-	if got := c.get()["a"]; got != "personal" {
-		t.Fatalf("got %q", got)
-	}
-	if time.Since(start) > 20*time.Millisecond {
+	<-started // the slow lookup is now in flight
+	got := make(chan string, 1)
+	go func() { got <- c.get()["a"] }()
+	select {
+	case v := <-got:
+		if v != "personal" {
+			t.Fatalf("got %q", v)
+		}
+	case <-time.After(5 * time.Second):
 		t.Fatal("get blocked by slow lookup")
 	}
-	<-finished // lookup bounded by timeout
-	close(done)
 	close(release)
+	<-finished
 	if got := c.get()["a"]; got != "work" {
 		t.Fatalf("got %q after refresh", got)
 	}
