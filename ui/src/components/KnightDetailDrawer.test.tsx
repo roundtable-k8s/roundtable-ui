@@ -45,6 +45,26 @@ describe('KnightDetailDrawer', () => {
     expect(screen.getByText('2h 15m age')).toBeInTheDocument()
   })
 
+  it('uses startedAt for the uptime of a ready knight and createdAt for age', () => {
+    const now = Date.now()
+    const over = { age: '9h', createdAt: new Date(now - 9 * 3600_000).toISOString(), startedAt: new Date(now - 2 * 3600_000).toISOString() }
+    const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', over)} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText(/^2h.* uptime$/)).toBeInTheDocument()
+    rerender(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { ...over, ready: false, status: 'offline' })} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText(/^9h.* age$/)).toBeInTheDocument()
+  })
+
+  it('shows a False WorkspaceSnapshots condition and its message with zero snapshots', async () => {
+    render(<MemoryRouter><KnightDetailDrawer knight={k('kay')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(resolvers['/api/fleet/kay']).toBeDefined())
+    await act(async () => {
+      resolvers['/api/fleet/kay'](json(k('kay', { workspaceSnapshots: [], workspaceSnapshotsCondition: { status: 'False', reason: 'SnapshotFailed', message: 'volume snapshot class missing' } })))
+    })
+    expect(screen.getByText(/Workspace snapshots \(0\)/)).toBeInTheDocument()
+    expect(screen.getByText(/WorkspaceSnapshots: False \(SnapshotFailed\)/)).toBeInTheDocument()
+    expect(screen.getByText('volume snapshot class missing')).toBeInTheDocument()
+  })
+
   it('reads Starting for a starting knight', () => {
     render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { status: 'starting', ready: false })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText('Starting')).toBeInTheDocument()

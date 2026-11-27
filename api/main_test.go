@@ -1262,6 +1262,18 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 		t.Errorf("expected startedAt %q, got %q", want, status.StartedAt)
 	}
 
+	// Without a running container state, startedAt falls back to the pod start time.
+	podStart := metav1.NewTime(now.Add(-30 * time.Minute))
+	pod.Status.StartTime = &podStart
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{}
+	fallback := buildKnightStatus(cr, pod, nil)
+	if want := podStart.UTC().Format(time.RFC3339); fallback.StartedAt != want {
+		t.Errorf("expected startedAt fallback %q, got %q", want, fallback.StartedAt)
+	}
+	if kp := buildKnightPod(pod, nil); kp.StartedAt != podStart.UTC().Format(time.RFC3339) {
+		t.Errorf("expected pod startedAt fallback %q, got %q", podStart.UTC().Format(time.RFC3339), kp.StartedAt)
+	}
+
 	// Test basic fields
 	if status.Name != "galahad" {
 		t.Errorf("expected name 'galahad', got '%s'", status.Name)

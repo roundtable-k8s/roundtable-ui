@@ -307,7 +307,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
             <span className={`w-2.5 h-2.5 rounded-full ${knight.status === 'scaled-to-zero' ? 'bg-gray-500' : knight.status === 'starting' ? 'bg-amber-500' : knight.ready ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
             <span className="text-sm text-gray-300">{statusLabel(knight)}</span>
             <span className="text-xs text-gray-500">•</span>
-            <span className="text-xs text-gray-500">{formatAge(knight.createdAt, knight.age)} {knight.ready ? 'uptime' : 'age'}</span>
+            <span className="text-xs text-gray-500">{formatAge(knight.ready ? (knight.startedAt ?? knight.createdAt) : knight.createdAt, knight.age)} {knight.ready ? 'uptime' : 'age'}</span>
             <span className="text-xs text-gray-500">•</span>
             <span className="text-xs text-gray-500">{knight.restarts} restarts</span>
             <span className="text-xs text-gray-500">•</span>
@@ -518,15 +518,18 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
                 <Camera className="w-4 h-4" />
                 Workspace snapshots ({knightDetail.workspaceSnapshots?.length ?? 0})
                 {knightDetail.workspaceSnapshotsCondition && (
-                  <span className="text-xs text-gray-500 font-normal">
-                    WorkspaceSnapshots: {knightDetail.workspaceSnapshotsCondition.status}
-                    {knightDetail.workspaceSnapshotsCondition.reason ? ` (${knightDetail.workspaceSnapshotsCondition.reason})` : ''}
+                  <span className={`text-xs font-normal ${knightDetail.workspaceSnapshotsCondition.status === 'False' ? 'text-amber-400' : 'text-gray-500'}`}>
+                    WorkspaceSnapshots: {sanitizeText(knightDetail.workspaceSnapshotsCondition.status)}
+                    {knightDetail.workspaceSnapshotsCondition.reason ? ` (${sanitizeText(knightDetail.workspaceSnapshotsCondition.reason)})` : ''}
                   </span>
                 )}
                 <span className="ml-auto">
                   <SnapshotButton name={knight.name} namespace={knight.namespace} knight={knightDetail} onDetail={(d) => { detailAbort.current?.abort(); setDetailLoading(false); setKnightDetail(d) }} />
                 </span>
               </h3>
+              {knightDetail.workspaceSnapshotsCondition?.message && (
+                <p className="text-xs text-amber-300 mb-2 break-words">{sanitizeText(knightDetail.workspaceSnapshotsCondition.message)}</p>
+              )}
               {(knightDetail.workspaceSnapshots?.length ?? 0) === 0 ? (
                 <p className="text-xs text-gray-500 bg-roundtable-slate border border-roundtable-steel/50 rounded-lg px-3 py-2">No snapshots yet</p>
               ) : (<>
