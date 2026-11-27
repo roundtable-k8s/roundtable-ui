@@ -286,6 +286,15 @@ describe('SchedulesPage policy and suspension', () => {
     expect(screen.queryByRole('button', { name: /Resume all/ })).toBeNull()
   })
 
+  it('hides Pause all and Resume all for the none table and sends no table none', async () => {
+    serve([sched({ name: 'loose-digest', table: undefined })])
+    renderPage('/schedules?table=none')
+    await rowFor('loose-digest')
+    expect(screen.queryByRole('button', { name: /Pause all/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Resume all/ })).toBeNull()
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
+
   it('pauses every schedule of the table after a confirmation and shows the summary with failures', async () => {
     serve()
     mockApiPost.mockResolvedValue({

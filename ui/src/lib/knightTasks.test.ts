@@ -24,6 +24,11 @@ describe('schedulesFor', () => {
     expect(schedulesFor('galahad', 'none', list).map((s) => s.name)).toEqual(['alpha', 'beta', 'none'])
     expect(schedulesFor('galahad', undefined, list)).toHaveLength(3)
   })
+  it('treats a schedule whose table is "none" as having no table', () => {
+    const k = { kind: 'knight', summary: '', knight: 'galahad' } as Schedule['target']
+    const list = [sched('none', k, { table: 'none' }), sched('alpha', k, { table: 'alpha' })]
+    expect(schedulesFor('galahad', 'alpha', list).map((s) => s.name)).toEqual(['none', 'alpha'])
+  })
   it('tolerates a missing list', () => {
     expect(schedulesFor('x', undefined, undefined)).toEqual([])
   })

@@ -364,7 +364,7 @@ export function SchedulesPage() {
         <Link to="/triggers" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
           <Zap className="w-4 h-4" aria-hidden /> All triggers
         </Link>
-        {table && all.length > 0 && (
+        {table && table !== 'none' && all.length > 0 && (
           <>
             <button className={btnGray} disabled={!!busy || tableCount('suspend') === 0} onClick={() => startTableAction('suspend')}>
               <Pause className="w-3 h-3" aria-hidden /> Pause all in {table}
