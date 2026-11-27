@@ -170,3 +170,55 @@ describe('TasksPage', () => {
     expect(polls()).toBeGreaterThan(before)
   })
 })
+
+describe('TasksPage gateway record', () => {
+  const dispatchWith = async (record: Record<string, unknown>) => {
+    apiGet.mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/tables' ? { tables } : { taskId: 'invoke-rt-ui-1', ...record }))
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    await userEvent.type(screen.getByLabelText('Quest'), 'fix it{Enter}')
+    await waitFor(() => expect(apiPost).toHaveBeenCalled())
+  }
+
+  it('shows usage, pull requests and verdict of a full record', async () => {
+    await dispatchWith({
+      status: 'succeeded', output: 'done', model: 'opus', requestedModel: 'sonnet', cost: 0.75, billing: 'subscription',
+      tokens: { input: 10000, output: 1500 }, turns: 3, toolCalls: 7, durationMs: 65000, verdict: 'approve',
+      prs: [
+        { repo: 'a/b', number: 5, url: 'https://github.com/a/b/pull/5', action: 'opened' },
+        { number: 6, url: 'https://github.com/a/c/pull/6', action: 'merged' },
+      ],
+    })
+    const usage = await screen.findByTestId('dispatch-usage', {}, { timeout: 8000 })
+    expect(usage).toHaveTextContent('opus (requested sonnet)')
+    expect(usage).toHaveTextContent('$0.75')
+    expect(usage).toHaveTextContent('10k in / 1.5k out')
+    expect(usage).toHaveTextContent('3 turns')
+    expect(usage).toHaveTextContent('7 tool calls')
+    expect(usage).toHaveTextContent('1m 5s')
+    expect(screen.getByRole('link', { name: 'a/b#5 (opened)' })).toHaveAttribute('href', 'https://github.com/a/b/pull/5')
+    expect(screen.getByRole('link', { name: '#6 (merged)' })).toBeInTheDocument()
+    expect(screen.getByTestId('dispatch-verdict')).toHaveTextContent('approve')
+  }, 15000)
+
+  it('renders a record without usage as before', async () => {
+    await dispatchWith({ status: 'succeeded', output: 'done' })
+    await screen.findByTestId('dispatch-output', {}, { timeout: 8000 })
+    expect(screen.queryByTestId('dispatch-usage')).toBeNull()
+    expect(screen.queryByTestId('dispatch-prs')).toBeNull()
+    expect(screen.queryByTestId('dispatch-verdict')).toBeNull()
+  }, 15000)
+
+  it('shows a usage-limit refusal instead of the bare failure', async () => {
+    await dispatchWith({ status: 'failed', error: 'quota exceeded', usageLimited: true })
+    await screen.findByText('Usage limit reached: retry later', {}, { timeout: 8000 })
+    expect(screen.queryByText('quota exceeded')).toBeNull()
+  }, 15000)
+
+  it('does not link a javascript: pull request URL', async () => {
+    await dispatchWith({ status: 'succeeded', output: 'done', prs: [{ number: 9, url: 'javascript:alert(1)', action: 'opened' }] })
+    await screen.findByText('#9 (opened)', {}, { timeout: 8000 })
+    expect(screen.queryByRole('link', { name: /#9/ })).toBeNull()
+  }, 15000)
+})
