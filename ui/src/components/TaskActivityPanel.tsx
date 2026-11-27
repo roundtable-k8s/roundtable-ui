@@ -8,7 +8,7 @@ import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { apiGet } from '../lib/api'
 import { parseEvent } from '../lib/events'
-import { formatCost, formatTimestamp } from '../lib/format'
+import { formatCost, formatTimestamp, formatNumber } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { sessionsLink } from '../lib/sessions'
 import {
@@ -130,7 +130,7 @@ function TimelineRow({ item, taskFinished }: { item: TimelineItem; taskFinished:
       return (
         <li data-kind="truncated" className="flex items-center gap-2 text-xs text-yellow-400/90 border border-dashed border-yellow-500/30 rounded-lg px-3 py-1.5">
           <Scissors className="w-3.5 h-3.5" aria-hidden />
-          {item.count.toLocaleString()} earlier {item.count === 1 ? 'event' : 'events'} no longer buffered
+          {formatNumber(item.count)} earlier {item.count === 1 ? 'event' : 'events'} no longer buffered
         </li>
       )
     case 'gap': {

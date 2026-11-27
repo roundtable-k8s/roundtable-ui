@@ -4,7 +4,7 @@ import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRigh
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
-import { formatAge, formatCost, formatUptime, formatTimestamp } from '../lib/format'
+import { formatAge, formatCost, formatUptime, formatTimestamp, formatNumber } from '../lib/format'
 import { PodsPanel } from './PodsPanel'
 import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
 import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet'
@@ -573,8 +573,8 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
                 <StatCard
                   icon={<Cpu className="w-4 h-4" />}
                   label="Tokens"
-                  value={stats.session.tokens.total.toLocaleString()}
-                  detail={`${stats.session.tokens.input.toLocaleString()} in / ${stats.session.tokens.output.toLocaleString()} out`}
+                  value={formatNumber(stats.session.tokens.total)}
+                  detail={`${formatNumber(stats.session.tokens.input)} in / ${formatNumber(stats.session.tokens.output)} out`}
                 />
                 <StatCard
                   icon={<DollarSign className="w-4 h-4" />}

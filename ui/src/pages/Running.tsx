@@ -8,7 +8,7 @@ import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { PageHeader, StatCard, ErrorBanner, ListState } from '../components/ui'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
-import { formatCost } from '../lib/format'
+import { formatCost, formatNumber } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import {
   countByStatus,
@@ -64,7 +64,7 @@ function RunningExtra({ task, now }: { task: RunningTask; now: number }) {
     ['Heartbeat age', formatAge(task.lastHeartbeat, now)],
     ['Turns', task.turns ?? '—'],
     ['Tokens', task.inputTokens != null || task.outputTokens != null
-      ? `${(task.inputTokens ?? 0).toLocaleString()} in / ${(task.outputTokens ?? 0).toLocaleString()} out`
+      ? `${formatNumber(task.inputTokens ?? 0)} in / ${formatNumber(task.outputTokens ?? 0)} out`
       : '—'],
   ]
   if (task.reason) rows.splice(1, 0, ['Reason', sanitizeText(task.reason)])

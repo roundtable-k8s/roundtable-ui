@@ -1,8 +1,52 @@
 /** Shared formatting helpers — the single source for money/time rendering. */
 
+const numberFormats = new Map<string, Intl.NumberFormat>()
+const dayFormats = new Map<string, Intl.DateTimeFormat>()
+
+function cached<T>(cache: Map<string, T>, locale: string | undefined, opts: object | undefined, make: () => T): T {
+  const key = `${locale ?? ''}|${opts ? JSON.stringify(opts) : ''}`
+  let f = cache.get(key)
+  if (!f) {
+    f = make()
+    cache.set(key, f)
+  }
+  return f
+}
+
+/** Number with the reader's locale grouping ("1,234" / "1.234"). `locale` defaults to the browser's. */
+export function formatNumber(n: number, opts?: Intl.NumberFormatOptions, locale?: string): string {
+  return cached(numberFormats, locale, opts, () => new Intl.NumberFormat(locale, opts)).format(n)
+}
+
+/**
+ * A calendar day in the reader's locale: "Nov 27" (short) or "Friday, November 27, 2026" (long).
+ * Accepts a Date or an ISO string; a bare "YYYY-MM-DD" is read as a local calendar day.
+ * Unparsable input is returned as-is.
+ */
+export function formatDay(input: string | Date, style: 'short' | 'long' = 'short', locale?: string): string {
+  let d: Date
+  if (typeof input === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
+    d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(input)
+  } else {
+    d = input
+  }
+  if (Number.isNaN(d.getTime())) return typeof input === 'string' ? input : ''
+  const opts: Intl.DateTimeFormatOptions =
+    style === 'long'
+      ? { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
+      : { month: 'short', day: 'numeric' }
+  return cached(dayFormats, locale, { style, ...opts }, () => new Intl.DateTimeFormat(locale, opts)).format(d)
+}
+
 /** Dollar amounts: 4 decimals under a cent so small LLM costs stay visible. */
-export function formatCost(cost: number): string {
-  return cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`
+export function formatCost(cost: number, locale?: string): string {
+  const digits = cost < 0.01 ? 4 : 2
+  return formatNumber(
+    cost,
+    { style: 'currency', currency: 'USD', minimumFractionDigits: digits, maximumFractionDigits: digits },
+    locale,
+  )
 }
 
 /**
