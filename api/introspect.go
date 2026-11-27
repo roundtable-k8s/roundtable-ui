@@ -35,8 +35,9 @@ import (
 // the knight's pods cannot be listed at all.
 
 // introspectScopeHeader tells the client where the data came from:
-// "pod" (one named pod), "aggregate" (fan-out over all ready pods) or
-// "knight" (legacy knight-level subject).
+// "pod" (one named pod, or the knight's only pod answering on the legacy
+// knight-level subject), "aggregate" (fan-out over all ready pods) or
+// "knight" (legacy knight-level subject when the pods cannot be listed).
 const introspectScopeHeader = "X-Introspect-Scope"
 
 // validRunID guards the runId forwarded to the knight (it ends up in a JSON
@@ -45,12 +46,16 @@ var validRunID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 // sessionRequester returns the NATS requester used by the session handler,
 // or nil when NATS is unavailable. Tests replace it.
-var sessionRequester = func() introspectRequester {
+// Every request is bound to ctx (the HTTP request context) on top of the
+// per-request timeout, so a disconnected client stops the NATS requests.
+var sessionRequester = func(ctx context.Context) introspectRequester {
 	if nc == nil {
 		return nil
 	}
 	return func(subject string, data []byte, timeout time.Duration) ([]byte, error) {
-		msg, err := nc.Request(subject, data, timeout)
+		rctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		msg, err := nc.RequestWithContext(rctx, subject, data)
 		if err != nil {
 			return nil, err
 		}
@@ -151,11 +156,8 @@ func replyFound(data []byte) bool {
 	if e, ok := m["error"]; ok && e != nil && e != "" && e != false {
 		return false
 	}
-	if f, ok := m["found"].(bool); ok && !f {
-		return false
-	}
-	if f, ok := m["found"].(bool); ok && f {
-		return true
+	if f, ok := m["found"].(bool); ok {
+		return f
 	}
 	for k := range m {
 		if k != "error" && k != "found" {
@@ -257,10 +259,7 @@ func aggregateStats(knight string, replies []podReply) (map[string]interface{}, 
 			if k == "pod" || k == "node" || k == "pods" {
 				continue
 			}
-			if list, ok := v.([]interface{}); ok {
-				v = tagListWithPod(list, r.Pod)
-			}
-			agg[k] = mergeStatValue(agg[k], cloneJSON(v), k)
+			agg[k] = mergeStatValue(agg[k], tagWithPod(v, r.Pod), k)
 		}
 	}
 	if answered == 0 {
@@ -316,25 +315,38 @@ func mergeStatValue(a, b interface{}, key string) interface{} {
 	return a
 }
 
-// tagListWithPod returns a copy of list where every object item without a
-// "pod" field gets the pod it came from.
-func tagListWithPod(list []interface{}, pod string) []interface{} {
-	out := make([]interface{}, len(list))
-	for i, item := range list {
-		if m, ok := item.(map[string]interface{}); ok {
-			c := make(map[string]interface{}, len(m)+1)
-			for k, v := range m {
-				c[k] = v
-			}
-			if _, has := c["pod"]; !has {
-				c["pod"] = pod
-			}
-			out[i] = c
-			continue
+// tagWithPod returns a deep copy of v in which every object that is an
+// item of a list, at any depth, and lacks a "pod" field gets the pod it came
+// from. Objects that are not list items are copied, not tagged.
+func tagWithPod(v interface{}, pod string) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		c := make(map[string]interface{}, len(t))
+		for k, x := range t {
+			c[k] = tagWithPod(x, pod)
 		}
-		out[i] = item
+		return c
+	case []interface{}:
+		c := make([]interface{}, len(t))
+		for i, x := range t {
+			x = tagWithPod(x, pod)
+			if m, ok := x.(map[string]interface{}); ok {
+				if _, has := m["pod"]; !has {
+					m["pod"] = pod
+				}
+			}
+			c[i] = x
+		}
+		return c
+	default:
+		return v
 	}
-	return out
+}
+
+// tagListWithPod returns a copy of list with its object items (and any
+// lists nested inside them) tagged with pod; see tagWithPod.
+func tagListWithPod(list []interface{}, pod string) []interface{} {
+	return tagWithPod(list, pod).([]interface{})
 }
 
 // cloneJSON deep-copies a decoded JSON value so merging never mutates the

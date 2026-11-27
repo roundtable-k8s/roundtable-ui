@@ -1133,7 +1133,7 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 			}
 		}
 
-		req := sessionRequester()
+		req := sessionRequester(ctx)
 		if req == nil {
 			jsonError(w, "NATS not available", http.StatusServiceUnavailable)
 			return
@@ -1246,7 +1246,13 @@ func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectR
 
 	replies := fanOutIntrospect(req, prefix, name, pods, payload, timeout)
 	if allNoResponders(replies) {
-		knightLevel("knight") // older runtime without per-pod subjects
+		// Older runtime without per-pod subjects. The knight subject can only
+		// reach a random pod, so it is a known pod only when there is one.
+		scope := "knight"
+		if len(pods) == 1 {
+			scope = "pod"
+		}
+		knightLevel(scope)
 		return
 	}
 

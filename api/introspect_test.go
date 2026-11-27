@@ -83,7 +83,7 @@ func setupIntrospectTest(t *testing.T, f *fakeIntrospect, pods ...*corev1.Pod) h
 		}
 	}
 	orig := sessionRequester
-	sessionRequester = func() introspectRequester { return f.requester() }
+	sessionRequester = func(context.Context) introspectRequester { return f.requester() }
 	t.Cleanup(func() { sessionRequester = orig })
 	return router
 }
@@ -223,8 +223,77 @@ func TestIntrospectFallsBackToKnightSubjectForOlderRuntime(t *testing.T) {
 	if w.Code != http.StatusOK || body["knight"] != "Galahad" {
 		t.Fatalf("status %d body %v", w.Code, body)
 	}
-	if got := w.Header().Get(introspectScopeHeader); got != "knight" {
-		t.Errorf("scope = %q, want knight", got)
+	if got := w.Header().Get(introspectScopeHeader); got != "pod" {
+		t.Errorf("scope = %q, want pod for a one-pod knight", got)
+	}
+}
+
+func TestIntrospectFallbackScopeKnightForSeveralPods(t *testing.T) {
+	f := &fakeIntrospect{answer: func(s string) ([]byte, error) {
+		if s == "fleet-a.introspect.Galahad" {
+			return []byte(`{"knight":"Galahad","session":null}`), nil
+		}
+		return nil, nats.ErrNoResponders
+	}}
+	h := setupIntrospectTest(t, f, makeKnightPod("galahad-a", "galahad", true), makeKnightPod("galahad-b", "galahad", true))
+	w, _ := doSession(t, h, "type=stats")
+	if got := w.Header().Get(introspectScopeHeader); w.Code != http.StatusOK || got != "knight" {
+		t.Errorf("status %d scope = %q, want 200 knight", w.Code, got)
+	}
+}
+
+func TestIntrospectCancelledContextReturnsPromptly(t *testing.T) {
+	h := setupIntrospectTest(t, &fakeIntrospect{}, makeKnightPod("galahad-a", "galahad", true))
+	sessionRequester = func(ctx context.Context) introspectRequester {
+		return func(string, []byte, time.Duration) ([]byte, error) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(30 * time.Second):
+				return nil, nats.ErrTimeout
+			}
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/api/fleet/galahad/session?type=stats", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { h.ServeHTTP(w, req); close(done) }()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler still waiting after the request context was cancelled")
+	}
+	if w.Code == http.StatusOK {
+		t.Errorf("status = %d, want an error for a cancelled request", w.Code)
+	}
+}
+
+func TestTagListWithPodNested(t *testing.T) {
+	in := []interface{}{
+		map[string]interface{}{
+			"id":    "a",
+			"items": []interface{}{map[string]interface{}{"n": 1.0}, map[string]interface{}{"n": 2.0, "pod": "keep"}},
+			"meta":  map[string]interface{}{"runs": []interface{}{map[string]interface{}{"r": "x"}}},
+		},
+	}
+	out := tagListWithPod(in, "p1")
+	top := out[0].(map[string]interface{})
+	if top["pod"] != "p1" {
+		t.Errorf("top item pod = %v", top["pod"])
+	}
+	items := top["items"].([]interface{})
+	if items[0].(map[string]interface{})["pod"] != "p1" || items[1].(map[string]interface{})["pod"] != "keep" {
+		t.Errorf("nested items = %v", items)
+	}
+	runs := top["meta"].(map[string]interface{})["runs"].([]interface{})
+	if runs[0].(map[string]interface{})["pod"] != "p1" {
+		t.Errorf("nested-in-object list = %v", runs)
+	}
+	if _, has := in[0].(map[string]interface{})["pod"]; has {
+		t.Error("input was mutated")
 	}
 }
 
@@ -397,7 +466,7 @@ func TestIntrospectPodGoneScaledToZero(t *testing.T) {
 		t.Fatalf("create CR: %v", err)
 	}
 	orig := sessionRequester
-	sessionRequester = func() introspectRequester { return f.requester() }
+	sessionRequester = func(context.Context) introspectRequester { return f.requester() }
 	t.Cleanup(func() { sessionRequester = orig })
 
 	if w, _ := doSession(t, router, "type=session&id=abc&pod=galahad-7d9f5c6b8-x1y2z"); w.Code != http.StatusGone {
