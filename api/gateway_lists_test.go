@@ -54,6 +54,40 @@ func TestGatewayRunsList(t *testing.T) {
 	}
 }
 
+func TestGatewayRunsListSourceActiveIssue(t *testing.T) {
+	r, calls := gatewayListRouter(t, 200, `{"runs":[]}`)
+	if w := doReq(r, "GET", "/api/gateway/runs?source=all&active=true&issue=acme%2Fapp%2312&bogus=1", ""); w.Code != 200 {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	c := (*calls)[0]
+	if c.path != "/v1/runs" || c.query != "active=true&issue=acme%2Fapp%2312&source=all" {
+		t.Errorf("gateway call %+v", c)
+	}
+}
+
+func TestGatewayRunsListRejectsBadFilters(t *testing.T) {
+	cases := map[string]string{
+		"/api/gateway/runs?source=nope":                   "Invalid source",
+		"/api/gateway/runs?source=ALL":                    "Invalid source",
+		"/api/gateway/runs?active=1":                      "active must be true",
+		"/api/gateway/runs?active=false":                  "active must be true",
+		"/api/gateway/runs?issue=x":                       "Invalid issue",
+		"/api/gateway/runs?issue=acme%2Fapp":              "Invalid issue",
+		"/api/gateway/runs?issue=acme%2Fapp%23abc":        "Invalid issue",
+		"/api/gateway/runs?issue=acme%2Fapp%231234567890": "Invalid issue",
+	}
+	for target, msg := range cases {
+		r, calls := gatewayListRouter(t, 200, `{}`)
+		w := doReq(r, "GET", target, "")
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), msg) {
+			t.Errorf("%s: got %d %s", target, w.Code, w.Body)
+		}
+		if len(*calls) != 0 {
+			t.Errorf("%s reached the gateway", target)
+		}
+	}
+}
+
 func TestGatewayListsRejectBadInput(t *testing.T) {
 	cases := map[string]string{
 		"/api/gateway/tasks?knight=-bad":       "Invalid knight name",
