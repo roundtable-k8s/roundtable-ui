@@ -10,7 +10,7 @@ import (
 // validStateWord guards the status and phase filters forwarded to the gateway.
 var validStateWord = regexp.MustCompile(`^[A-Za-z]+$`)
 
-// gatewayListMax is the largest limit the gateway honours for /v1/tasks.
+// gatewayListMax is the largest limit the gateway honours for /v1/tasks and /v1/runs.
 const gatewayListMax = 200
 
 // listLimit reads the optional limit query value. It must be a positive integer;

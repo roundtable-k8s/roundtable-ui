@@ -187,7 +187,8 @@ var scaleEventKinds = []string{"HorizontalPodAutoscaler", "ScaledObject"}
 const (
 	scaleEventLimit = 500 // page size of each Events list call
 	// scaleEventMaxPages bounds the pages read per kind so a huge namespace
-	// cannot stall the sampler; the newest events are read first.
+	// cannot stall the sampler. The API server returns Events in key order, not
+	// by age, so truncation drops whatever comes last, not the oldest events.
 	scaleEventMaxPages = 5
 )
 
