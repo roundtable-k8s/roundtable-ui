@@ -126,3 +126,16 @@ describe('build version footer', () => {
     expect(screen.queryByTestId('build-version')).toBeNull()
   })
 })
+
+describe('command palette shortcut', () => {
+  it('does not fetch before first open, opens on Ctrl+K, ignores it while typing', async () => {
+    const f = vi.fn(() => Promise.resolve(new Response('[]')))
+    vi.stubGlobal('fetch', f)
+    renderAt('/')
+    const before = f.mock.calls.length
+    fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true })
+    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeTruthy()
+    expect(f.mock.calls.length).toBeGreaterThan(before)
+    vi.unstubAllGlobals()
+  })
+})
