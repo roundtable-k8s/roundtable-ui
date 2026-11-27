@@ -1228,6 +1228,7 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 	cr.SetCreationTimestamp(now)
 
 	// Create matching pod
+	started := metav1.NewTime(now.Add(-time.Hour))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "galahad-abc123",
@@ -1248,12 +1249,18 @@ func TestBuildKnightStatusWithCRD(t *testing.T) {
 				{
 					Ready:        true,
 					RestartCount: 2,
+					State: corev1.ContainerState{
+						Running: &corev1.ContainerStateRunning{StartedAt: started},
+					},
 				},
 			},
 		},
 	}
 
 	status := buildKnightStatus(cr, pod, nil)
+	if want := started.UTC().Format(time.RFC3339); status.StartedAt != want {
+		t.Errorf("expected startedAt %q, got %q", want, status.StartedAt)
+	}
 
 	// Test basic fields
 	if status.Name != "galahad" {

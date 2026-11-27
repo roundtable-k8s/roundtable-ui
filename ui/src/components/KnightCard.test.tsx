@@ -378,6 +378,12 @@ describe('KnightCard age', () => {
     render(<KnightCard knight={{ ...mockKnight, ready: false, status: 'offline', createdAt }} />)
     expect(screen.getByText('3h 1m age')).toBeInTheDocument()
   })
+  it('uses the container start time for uptime when startedAt is set', () => {
+    const createdAt = new Date(Date.now() - 44 * 86400 * 1000).toISOString()
+    const startedAt = new Date(Date.now() - 3 * 3600 * 1000 - 60000).toISOString()
+    render(<KnightCard knight={{ ...mockKnight, createdAt, startedAt }} />)
+    expect(screen.getByText('3h 1m uptime')).toBeInTheDocument()
+  })
   it('falls back to the age string without createdAt', () => {
     render(<KnightCard knight={mockKnight} />)
     expect(screen.getByText('2h 15m uptime')).toBeInTheDocument()
