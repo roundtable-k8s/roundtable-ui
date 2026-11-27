@@ -10,6 +10,8 @@ export interface ChatTask {
   model?: string
   costUsd?: number
   toolCalls?: number
+  /** Trace ID of the gateway's server span; the UI links it when a trace URL is configured. */
+  traceId?: string
 }
 
 export interface ChatTurn {
@@ -22,6 +24,7 @@ export interface ChatTurn {
   model?: string
   costUsd?: number
   toolCalls?: number
+  traceId?: string
 }
 
 export const isFinalStatus = (status: string | undefined) =>
@@ -60,5 +63,6 @@ export function mergeTurn(turn: ChatTurn, t: ChatTask): ChatTurn {
     model: t.model ?? turn.model,
     costUsd: typeof t.costUsd === 'number' ? t.costUsd : turn.costUsd,
     toolCalls: typeof t.toolCalls === 'number' ? t.toolCalls : turn.toolCalls,
+    traceId: t.traceId || turn.traceId,
   }
 }

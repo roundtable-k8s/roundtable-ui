@@ -7,6 +7,7 @@ import { SubmissionKey } from '../lib/submissionKey'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
 import { UntrustedText } from '../components/UntrustedText'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
+import { TraceLink } from '../components/TraceLink'
 import { formatCost } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { isFinalStatus, mergeTurn, knightKey, parseKnights, type ChatKnight, type ChatTask, type ChatTurn } from '../lib/chat'
@@ -226,6 +227,7 @@ export function ChatPage() {
                         <Activity className="w-3 h-3" /> Activity
                       </button>
                     )}
+                    <TraceLink traceId={t.traceId} />
                   </div>
                 </div>
               </li>

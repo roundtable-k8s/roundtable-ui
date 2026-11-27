@@ -9,6 +9,7 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { taskRows, type TableInfo } from '../lib/tables'
 import { useToast } from '../components/Toast'
+import { TraceLink } from '../components/TraceLink'
 import { PageHeader, EmptyState, ErrorBanner, TableBadge } from '../components/ui'
 import { formatTimestampOrDate } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
@@ -23,6 +24,7 @@ interface GatewayTask {
   status?: string
   output?: string
   error?: string
+  traceId?: string
 }
 
 interface DispatchedTask {
@@ -33,6 +35,7 @@ interface DispatchedTask {
   status: string
   output?: string
   error?: string
+  traceId?: string
   timestamp: string
   /** Set after repeated failed status polls; the task is no longer polled. */
   unavailable?: boolean
@@ -56,6 +59,7 @@ function mergeTask(r: DispatchedTask, t: GatewayTask): DispatchedTask {
     status: t.status ?? r.status,
     output: t.output ?? r.output,
     error: t.error ?? r.error,
+    traceId: t.traceId || r.traceId,
   }
 }
 
@@ -230,6 +234,7 @@ export function TasksPage() {
               </div>
               <p className="text-gray-300 text-sm">{r.task}</p>
               <p className="text-gray-500 text-xs mt-1 font-mono">{r.taskId}</p>
+              <TraceLink traceId={r.traceId} />
               {r.output && (
                 <pre data-testid="dispatch-output" className="mt-2 text-sm text-gray-200 bg-roundtable-navy rounded p-3 whitespace-pre-wrap break-words max-h-64 overflow-auto">{sanitizeText(r.output)}</pre>
               )}
