@@ -59,30 +59,37 @@ const PREVIEW_DEBOUNCE_MS = 400
 /** The cron's next runs: the gateway's answer (local and UTC), or the local parser when the gateway is unreachable. */
 export function NextRunsPreview({ cron, timeZone, now }: { cron: string; timeZone: string; now: Date }) {
   const zone = timeZone || 'UTC'
-  const [remote, setRemote] = useState<ScheduleNextRuns | null>(null)
-  const [hint, setHint] = useState('')
-  const [fallback, setFallback] = useState(false)
+  const empty = cron.trim() === ''
+  // The gateway answer is tagged with the input it answers, so an answer for
+  // the previous cron or zone is never shown under the new heading.
+  const key = `${cron}\u0000${zone}`
+  const [answer, setAnswer] = useState<{ key: string; remote: ScheduleNextRuns | null; hint: string; fallback: boolean } | null>(null)
+  const current = answer?.key === key ? answer : null
+  const remote = current?.remote ?? null
+  const hint = current?.hint ?? ''
+  const fallback = current?.fallback ?? false
 
   useEffect(() => {
+    if (cron.trim() === '') return
     let live = true
     const timer = setTimeout(() => {
       apiGet<ScheduleNextRuns>(schedulePreviewUrl(cron, zone, 5))
-        .then((r) => { if (live) { setRemote(r); setHint(''); setFallback(false) } })
+        .then((r) => { if (live) setAnswer({ key, remote: r, hint: '', fallback: false }) })
         .catch((e) => {
           if (!live) return
           if (e instanceof ApiError && e.status >= 400 && e.status < 500) {
-            setRemote(null); setHint(e.message); setFallback(false)
+            setAnswer({ key, remote: null, hint: e.message, fallback: false })
           } else {
-            setRemote(null); setHint(''); setFallback(true)
+            setAnswer({ key, remote: null, hint: '', fallback: true })
           }
         })
     }, PREVIEW_DEBOUNCE_MS)
     return () => { live = false; clearTimeout(timer) }
-  }, [cron, zone])
+  }, [cron, zone, key])
 
   let local: Date[] = []
   let localError = ''
-  if (fallback || (!remote && !hint)) {
+  if (!empty && (fallback || (!remote && !hint))) {
     try {
       local = nextRuns(cron, zone, now, 3)
     } catch (e) {
@@ -93,7 +100,9 @@ export function NextRunsPreview({ cron, timeZone, now }: { cron: string; timeZon
   return (
     <div data-testid="next-runs" className="rounded-lg border border-roundtable-steel bg-roundtable-navy/60 px-3 py-2 text-xs">
       <div className="text-gray-400 mb-1">Next runs ({zone})</div>
-      {hint
+      {empty
+        ? <p className="text-gray-500">Enter a cron expression.</p>
+        : hint
         ? <p role="alert" className="text-amber-300">{sanitizeText(hint)}</p>
         : remote
           ? times.length === 0
