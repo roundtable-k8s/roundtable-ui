@@ -71,7 +71,7 @@ function ScheduleSummary({ s }: { s: Schedule }) {
       </dl>
       {(s.concurrency || s.startingDeadlineSeconds !== undefined || s.suspendedBy) && (
         <section aria-label="policy" className="mt-4 border-t border-roundtable-steel pt-3">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-gray-500">Policy</dt>
               <dd className="text-white">{describePolicy(s) || '—'}</dd>
