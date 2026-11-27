@@ -218,10 +218,10 @@ func authMiddleware(next http.Handler) http.Handler {
 		if auth == "" {
 			// Query param is accepted for the WebSocket upgrade only: keys in
 			// URLs end up in proxy logs and browser history.
-			if r.URL.Path != "/api/ws" {
-				// fall through to 401
-			} else if qKey := r.URL.Query().Get("api_key"); qKey != "" {
-				auth = "Bearer " + qKey
+			if r.URL.Path == "/api/ws" {
+				if qKey := r.URL.Query().Get("api_key"); qKey != "" {
+					auth = "Bearer " + qKey
+				}
 			}
 		}
 
@@ -295,20 +295,65 @@ type routerDeps struct {
 	dispatchLimit                     *dispatchLimiter
 	// Connectivity checks for /api/health; nil reports the worst state.
 	k8sStatus, natsStatus func() string
+	// Middleware stack, outermost first. buildRouter installs it on the
+	// router and around the 404/405 answers, which mux does not wrap.
+	middleware []mux.MiddlewareFunc
 }
 
 // buildRouter registers every route and the JSON 404/405 answers for /api.
 // Middleware is installed by the caller. The SPA fallback serves every path
 // outside /api, so unknown /api paths reach mux's NotFound and
 // MethodNotAllowed handlers instead of index.html.
+// routeMethods returns the sorted set of methods any registered route accepts.
+func routeMethods(r *mux.Router) []string {
+	set := map[string]bool{}
+	_ = r.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+		if ms, err := route.GetMethods(); err == nil {
+			for _, m := range ms {
+				set[m] = true
+			}
+		}
+		return nil
+	})
+	methods := make([]string, 0, len(set))
+	for m := range set {
+		methods = append(methods, m)
+	}
+	sort.Strings(methods)
+	return methods
+}
+
+// addHeadRoutes answers HEAD on every GET-only route with the GET handler,
+// as net/http does (the server drops the body).
+func addHeadRoutes(r *mux.Router) {
+	type headRoute struct {
+		tmpl    string
+		handler http.Handler
+	}
+	var heads []headRoute
+	_ = r.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+		ms, err := route.GetMethods()
+		if err != nil || len(ms) != 1 || ms[0] != http.MethodGet {
+			return nil
+		}
+		if tmpl, err := route.GetPathTemplate(); err == nil && route.GetHandler() != nil {
+			heads = append(heads, headRoute{tmpl, route.GetHandler()})
+		}
+		return nil
+	})
+	for _, h := range heads {
+		r.Handle(h.tmpl, h.handler).Methods(http.MethodHead)
+	}
+}
+
 func buildRouter(d routerDeps) *mux.Router {
 	r := mux.NewRouter()
 	// gorilla/mux 1.8 loses its own 405 detection inside subrouters (a later
 	// route's inherited /api prefix match clears the mismatch), so the
 	// not-found handler probes the other methods itself.
-	notFound := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	notFound := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var allow []string
-		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
+		for _, m := range routeMethods(r) {
 			probe := req.Clone(req.Context())
 			probe.Method = m
 			var match mux.RouteMatch
@@ -322,7 +367,19 @@ func buildRouter(d routerDeps) *mux.Router {
 			return
 		}
 		jsonError(w, "Not found", http.StatusNotFound)
+	}))
+	// mux skips r.Use middleware for these handlers, so wrap them by hand to
+	// get auth, tracing, metrics and the access log, under a fixed route label.
+	for i := len(d.middleware) - 1; i >= 0; i-- {
+		notFound = d.middleware[i](notFound)
+	}
+	inner := notFound
+	notFound = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		inner.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), routeLabelKey{}, notFoundRouteLabel)))
 	})
+	for _, mw := range d.middleware {
+		r.Use(mw)
+	}
 	r.NotFoundHandler = notFound
 	r.MethodNotAllowedHandler = notFound
 
@@ -415,6 +472,8 @@ func buildRouter(d routerDeps) *mux.Router {
 
 	// Health
 	api.HandleFunc("/health", healthHandler(d.k8sStatus, d.natsStatus)).Methods("GET")
+
+	addHeadRoutes(r)
 
 	// Serve static UI files with SPA fallback for everything outside /api
 	r.MatcherFunc(func(req *http.Request, _ *mux.RouteMatch) bool {
@@ -561,12 +620,8 @@ func main() {
 		k8sStatus:     func() string { return k8sHealth(dynClient != nil && k8sClient != nil) },
 		natsStatus:    func() string { return natsHealth(nc) },
 	}
+	d.middleware = []mux.MiddlewareFunc{tracingMiddleware, securityHeaders, metricsMiddleware, authMiddleware, rateLimiter.middleware}
 	r := buildRouter(d)
-	r.Use(tracingMiddleware)
-	r.Use(securityHeaders)
-	r.Use(metricsMiddleware)
-	r.Use(authMiddleware)
-	r.Use(rateLimiter.middleware)
 
 	// CORS — defaults to same-origin (no origins = same-origin only) (#57)
 	corsOpts := cors.Options{

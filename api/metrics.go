@@ -55,9 +55,18 @@ func (sr *statusRecorder) Flush() {
 // Unwrap exposes the underlying writer to http.ResponseController.
 func (sr *statusRecorder) Unwrap() http.ResponseWriter { return sr.ResponseWriter }
 
+// routeLabelKey carries a fixed route label for requests mux answers without
+// a matched route (router-level 404/405).
+type routeLabelKey struct{}
+
+const notFoundRouteLabel = "not_found"
+
 // routeLabel returns the mux route template (e.g. /api/fleet/{knight}) so
 // metric cardinality stays bounded; non-API paths collapse to "static".
 func routeLabel(r *http.Request) string {
+	if l, ok := r.Context().Value(routeLabelKey{}).(string); ok {
+		return l
+	}
 	if route := mux.CurrentRoute(r); route != nil {
 		if tmpl, err := route.GetPathTemplate(); err == nil && tmpl != "/" {
 			return tmpl
