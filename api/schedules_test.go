@@ -40,6 +40,10 @@ func TestSchedulesProxyEveryRoute(t *testing.T) {
 		{"POST", "/api/schedules/roundtable/morning-digest/run", "", "POST", "/v1/schedules/roundtable/morning-digest/run", "", ""},
 		{"GET", "/api/schedules/roundtable/morning-digest/runs?limit=50", "", "GET", "/v1/schedules/roundtable/morning-digest/runs", "limit=50", ""},
 		{"GET", "/api/schedules/roundtable/morning-digest/runs/digest-1795600000", "", "GET", "/v1/schedules/roundtable/morning-digest/runs/digest-1795600000", "", ""},
+		{"GET", "/api/schedules/roundtable/morning-digest/next?count=3", "", "GET", "/v1/schedules/roundtable/morning-digest/next", "count=3", ""},
+		{"GET", "/api/schedules/roundtable/morning-digest/next", "", "GET", "/v1/schedules/roundtable/morning-digest/next", "", ""},
+		{"GET", "/api/schedules/preview?cron=0+7+*+*+1-5&timeZone=Europe/Berlin&count=2", "", "GET", "/v1/schedules/preview", "count=2&cron=0+7+%2A+%2A+1-5&timeZone=Europe%2FBerlin", ""},
+		{"GET", "/api/schedules/preview?cron=@hourly", "", "GET", "/v1/schedules/preview", "cron=%40hourly", ""},
 	}
 	for i, c := range cases {
 		w := doReq(r, c.method, c.target, c.body)
@@ -99,6 +103,23 @@ func TestSchedulesPassGatewayErrorsThrough(t *testing.T) {
 	}
 }
 
+func TestSchedulePreviewRelaysGatewayErrors(t *testing.T) {
+	msg := `{"error":"invalid cron expression \"0 7 * *\": expected 5 fields"}`
+	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		io.WriteString(w, msg)
+	}}
+	srv := f.server(t)
+	r := scheduleRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	w := doReq(r, "GET", "/api/schedules/preview?cron=0+7+*+*", "")
+	if w.Code != http.StatusUnprocessableEntity || w.Body.String() != msg {
+		t.Errorf("got %d %s", w.Code, w.Body)
+	}
+	if len(f.calls) != 1 {
+		t.Errorf("gateway calls: %d", len(f.calls))
+	}
+}
+
 func TestScheduleManifestIsYAML(t *testing.T) {
 	yaml := "apiVersion: ai.roundtable.io/v1alpha1\nkind: Trigger\nmetadata:\n  name: morning-digest\n"
 	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
@@ -133,6 +154,15 @@ func TestSchedulesValidation(t *testing.T) {
 		{"GET", "/api/schedules/roundtable/x/runs?limit=201", ""},
 		{"GET", "/api/schedules/roundtable/x/runs?limit=abc", ""},
 		{"GET", "/api/schedules/roundtable/x/runs/-bad", ""},
+		{"GET", "/api/schedules/roundtable/bad_name/next?count=3", ""},
+		{"GET", "/api/schedules/roundtable/x/next?count=x", ""},
+		{"GET", "/api/schedules/roundtable/x/next?count=0", ""},
+		{"GET", "/api/schedules/roundtable/x/next?count=-2", ""},
+		{"GET", "/api/schedules/preview", ""},
+		{"GET", "/api/schedules/preview?cron=", ""},
+		{"GET", "/api/schedules/preview?cron=" + strings.Repeat("a", 257), ""},
+		{"GET", "/api/schedules/preview?cron=0+7+*+*+1-5&timeZone=" + strings.Repeat("z", 65), ""},
+		{"GET", "/api/schedules/preview?cron=0+7+*+*+1-5&count=abc", ""},
 		{"POST", "/api/schedules", `{`},
 		{"POST", "/api/schedules", ``},
 		{"PUT", "/api/schedules/roundtable/x", `not json`},
