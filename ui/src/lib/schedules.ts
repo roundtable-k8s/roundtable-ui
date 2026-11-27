@@ -270,12 +270,12 @@ export function runResultText(r: ScheduleRunResult): string {
   return parts.join('\n\n')
 }
 
-/** Outcome of a run result: the phase, else the knight task status or mission phase. */
 /** "repo#12", or "repo" / "#12" / "" for whatever the PR reference carries. */
 export function prLabel(pr: ScheduleRunPR): string {
   return `${pr.repo ?? ''}${pr.number != null ? `#${pr.number}` : ''}`
 }
 
+/** Outcome of a run result: the phase, else the knight task status or mission phase. */
 export function runResultOutcome(r: ScheduleRunResult): string {
   return phaseToOutcome(r.phase || r.task?.status || r.mission?.phase || '')
 }

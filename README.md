@@ -242,8 +242,9 @@ helm upgrade --install roundtable-operator oci://ghcr.io/roundtable-k8s/charts/r
   --set dashboard.ingress.enabled=true \
   --set dashboard.ingress.host=roundtable.example.com
 
-# Port-forward for local access. The Service name follows the Helm release name
-# (<release>-dashboard) and listens on port 80.
+# Port-forward for local access. The Service is `<fullname>-dashboard` and listens
+# on port 80. The chart fullname is `<release>-roundtable-operator` unless the release
+# name already contains `roundtable-operator`, so this command assumes release `roundtable-operator`.
 kubectl port-forward -n roundtable svc/roundtable-operator-dashboard 8080:80
 
 # Open browser to http://localhost:8080
@@ -401,10 +402,13 @@ Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
 - `GET /api/chat/tasks/{taskId}` — Task status and output (same as `GET /api/tasks/dispatch/{taskId}`)
 - `GET /api/chat/tasks/{taskId}/events` — Server-sent events of the task, streamed from the gateway; a non-200 answer (404 when the gateway has no events endpoint, message `Task events not available`) is relayed as JSON so the client can fall back to polling
 
-### Failed & Lost
+### Gateway Lists
 Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
 - `GET /api/gateway/tasks` — Recent gateway tasks, newest first (`GET /v1/tasks`). Query (forwarded as is, other keys dropped): `knight`, `runId`, `status`, `limit` (a positive integer; the gateway caps it at 200 and defaults to 20)
 - `GET /api/gateway/runs` — Chain runs (`GET /v1/runs`, no steps). Query (forwarded as is): `namespace`, `chain`, `phase`, `limit` (a positive integer)
+
+### Failed & Lost
+Gateway-backed: all answer 503 when `GATEWAY_URL` is unset.
 - `GET /api/dead-letters` — List dead letters. Query (forwarded as is): `knight`, `reason`, `state`, `limit`
 - `GET /api/dead-letters/{taskId}` — One dead letter including the original task payload, which the list omits. Optional `?table=`
 - `POST /api/dead-letters/{taskId}/retry` — Retry a dead letter. Optional body `{force?, table?}` (only these two are forwarded); the gateway's status codes (409, 422, …) pass through. The dashboard never sends a `namespace`, so the retry relies on the gateway's default namespace

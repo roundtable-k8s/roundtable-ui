@@ -301,10 +301,6 @@ type routerDeps struct {
 	middleware []mux.MiddlewareFunc
 }
 
-// buildRouter registers every route and the JSON 404/405 answers for /api.
-// Middleware is installed by the caller. The SPA fallback serves every path
-// outside /api, so unknown /api paths reach mux's NotFound and
-// MethodNotAllowed handlers instead of index.html.
 // routeMethods returns the sorted set of methods any registered route accepts.
 func routeMethods(r *mux.Router) []string {
 	set := map[string]bool{}
@@ -347,6 +343,10 @@ func addHeadRoutes(r *mux.Router) {
 	}
 }
 
+// buildRouter registers every route and the JSON 404/405 answers for /api,
+// and installs d.middleware. The SPA fallback serves every path outside /api,
+// so unknown /api paths reach mux's NotFound and MethodNotAllowed handlers
+// instead of index.html.
 func buildRouter(d routerDeps) *mux.Router {
 	r := mux.NewRouter()
 	// Every method any route accepts, walked once on the first 404 so later
