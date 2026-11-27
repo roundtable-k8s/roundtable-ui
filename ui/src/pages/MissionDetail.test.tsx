@@ -130,4 +130,17 @@ describe('MissionDetailPage', () => {
     await screen.findByText('Ship the thing')
     expect(screen.queryByRole('region', { name: 'planning result' })).not.toBeInTheDocument()
   })
+
+  it('says how much of the result is shown when the API cut it', async () => {
+    mockApiGet.mockResolvedValue(mission({ result: 'x'.repeat(4000), resultTruncated: true, resultLength: 5200 }))
+    renderPage()
+    expect(await screen.findByRole('note')).toHaveTextContent('showing 4000 of 5200 characters')
+  })
+
+  it('shows no truncation note for a short result', async () => {
+    mockApiGet.mockResolvedValue(mission({ result: 'all done' }))
+    renderPage()
+    expect(await screen.findByText('all done')).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
 })
