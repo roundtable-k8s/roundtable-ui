@@ -7,6 +7,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type ComponentType, type RefObject } from 'react'
 import { RefreshCw, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { phaseColor } from '../../lib/status'
+import { formatTimestamp } from '../../lib/format'
 
 /* ------------------------------------------------------------------ */
 /* Feedback                                                            */
@@ -124,12 +125,21 @@ export function PageHeader({ icon: Icon, title, subtitle, children }: {
   )
 }
 
-export function RefreshButton({ onClick, loading = false, disabled = false }: {
+export function RefreshButton({ onClick, loading = false, disabled = false, updatedAt }: {
   onClick: () => void
   loading?: boolean
   disabled?: boolean
+  /** Epoch ms of the last successful fetch; shown as "Updated hh:mm:ss" before the button. */
+  updatedAt?: number | null
 }) {
+  const stamp = updatedAt != null ? new Date(updatedAt).toISOString() : null
   return (
+    <>
+      {stamp && (
+        <span className="text-xs text-gray-500" aria-live="off" title={new Date(updatedAt!).toLocaleString()}>
+          Updated {formatTimestamp(stamp)}
+        </span>
+      )}
     <button
       onClick={onClick}
       disabled={disabled}
@@ -138,6 +148,7 @@ export function RefreshButton({ onClick, loading = false, disabled = false }: {
       <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
       Refresh
     </button>
+    </>
   )
 }
 

@@ -6,7 +6,7 @@ import { inTable } from '../lib/tables'
 import { useRunning } from '../hooks/useRunning'
 import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { PageHeader, StatCard, ErrorBanner, ListState } from '../components/ui'
+import { PageHeader, RefreshButton, StatCard, ErrorBanner, ListState } from '../components/ui'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
@@ -133,7 +133,9 @@ export function RunningPage() {
         icon={Activity}
         title="Running"
         subtitle={<>Every in-flight task across all knight pods • {connected ? '🟢 Live' : '🔴 Disconnected'}</>}
-      />
+      >
+        <RefreshButton onClick={refresh} loading={loading} />
+      </PageHeader>
 
       <div className="grid grid-cols-3 gap-4 mb-6 max-w-xl">
         <StatCard label="Running" value={counts.running} color="text-blue-400" />

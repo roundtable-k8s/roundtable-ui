@@ -120,7 +120,7 @@ export function QueuesTable({ queues, history, showTable = false }: {
 
 export function QueuesPage() {
   const { table } = useTableFilter()
-  const { data: queues, loading, error, refresh } = usePolledFetch<KnightQueue[]>(withTable(QUEUES_URL, table), 5000, [])
+  const { data: queues, loading, error, updatedAt, refresh } = usePolledFetch<KnightQueue[]>(withTable(QUEUES_URL, table), 5000, [])
   const { data: history, error: historyError, refresh: refreshHistory } = usePolledFetch<KnightQueueHistory[]>(HISTORY_URL, 15000, [])
 
   const totals = useMemo(() => ({
@@ -136,7 +136,7 @@ export function QueuesPage() {
         title="Queues"
         subtitle={`Tasks waiting per knight · ${totals.pending} pending · ${totals.ackPending} in flight · oldest ${formatWait(totals.oldest)}`}
       >
-        <RefreshButton onClick={() => { refresh(); refreshHistory() }} loading={loading} />
+        <RefreshButton onClick={() => { refresh(); refreshHistory() }} loading={loading} updatedAt={updatedAt} />
       </PageHeader>
 
       {historyError && !error && (

@@ -234,7 +234,7 @@ function ConfirmDialog({ pending, task, working, onCancel, onConfirm }: {
 
 export function SchedulesPage() {
   const { table } = useTableFilter()
-  const { data, loading, error, refresh } = usePolledFetch<ScheduleList>(withTable('/api/schedules', table), POLL_MS, { schedules: [] })
+  const { data, loading, error, updatedAt, refresh } = usePolledFetch<ScheduleList>(withTable('/api/schedules', table), POLL_MS, { schedules: [] })
   // Task text is not in the gateway's schedule view: read it from the Triggers.
   const { data: triggers } = usePolledFetch<Trigger[]>('/api/triggers', POLL_MS, [])
   const [knight, setKnight] = useUrlParam('knight', '')
@@ -290,7 +290,7 @@ export function SchedulesPage() {
         <Link to="/triggers" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
           <Zap className="w-4 h-4" aria-hidden /> All triggers
         </Link>
-        <RefreshButton onClick={refresh} loading={loading} />
+        <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />
         <Link to="/schedules/new" className="inline-flex items-center gap-1.5 rounded-lg border border-roundtable-gold/30 bg-roundtable-gold/10 px-3 py-1.5 text-sm font-medium text-roundtable-gold hover:bg-roundtable-gold/20">
           <Plus className="w-4 h-4" aria-hidden /> New schedule
         </Link>

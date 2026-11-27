@@ -95,14 +95,14 @@ export function TriggersTable({ triggers, showTable = false }: { triggers: Trigg
 
 export function TriggersPage() {
   const { table } = useTableFilter()
-  const { data, loading, error, refresh } = usePolledFetch<Trigger[]>(withTable('/api/triggers', table), POLL_MS, [])
+  const { data, loading, error, updatedAt, refresh } = usePolledFetch<Trigger[]>(withTable('/api/triggers', table), POLL_MS, [])
   return (
     <div>
       <PageHeader icon={Zap} title="Triggers" subtitle="What starts your chains: schedules, NATS subjects and webhooks">
         <Link to="/schedules" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white">
           <CalendarClock className="w-4 h-4" aria-hidden /> Schedules
         </Link>
-        <RefreshButton onClick={refresh} loading={loading} />
+        <RefreshButton onClick={refresh} loading={loading} updatedAt={updatedAt} />
       </PageHeader>
       <ListState loading={loading} error={error} count={data.length} what="triggers" icon={Zap} onRetry={refresh}
         emptyTitle="No Triggers yet"

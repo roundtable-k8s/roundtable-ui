@@ -10,7 +10,7 @@ const tables: RoundTable[] = [
   { ...base, name: 'personal', plannerEnabled: false, knightsSuspended: 1, policies: { costBudgetUSD: '', maxConcurrentPlanTasks: 0, maxMissions: 0 } },
 ]
 
-let fetchState: { data: RoundTable[]; error: string | null } = { data: tables, error: null }
+let fetchState: { data: RoundTable[]; error: string | null; updatedAt?: number | null } = { data: tables, error: null }
 vi.mock('../hooks/usePolledFetch', () => ({
   usePolledFetch: () => ({ ...fetchState, loading: false, refresh: vi.fn() }),
 }))
@@ -21,6 +21,15 @@ const renderPage = (url = '/roundtables') =>
   render(<MemoryRouter initialEntries={[url]}><RoundTablesPage /></MemoryRouter>)
 
 describe('RoundTablesPage planner and breakdown', () => {
+  it('shows the last refresh time next to Refresh', () => {
+    fetchState = { data: tables, error: null, updatedAt: new Date(2026, 0, 2, 14, 3, 21).getTime() }
+    renderPage()
+    expect(screen.getByText(/^Updated /).textContent).toContain('2:03:21')
+  })
+  it('shows no time before the first successful fetch', () => {
+    renderPage()
+    expect(screen.queryByText(/^Updated /)).toBeNull()
+  })
   it('shows planner link and asleep count', () => {
     renderPage()
     expect(screen.getByRole('link', { name: 'dev-planner' })).toBeTruthy()

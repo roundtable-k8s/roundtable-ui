@@ -152,4 +152,29 @@ describe('usePolledFetch', () => {
     unmount()
     expect(second.aborted).toBe(true)
   })
+
+  it('tracks updatedAt: set on success, kept on failure, reset on url change', async () => {
+    vi.setSystemTime(new Date('2026-01-01T10:00:00Z'))
+    mockGet.mockResolvedValue(['a'])
+    const { result, rerender } = renderHook(({ url }) => usePolledFetch<string[]>(url, 1000, []), {
+      initialProps: { url: '/api/a' },
+    })
+    expect(result.current.updatedAt).toBeNull()
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    const first = new Date('2026-01-01T10:00:00Z').getTime()
+    expect(result.current.updatedAt).toBe(first)
+
+    mockGet.mockRejectedValue(new Error('down'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(result.current.error).toBe('down')
+    expect(result.current.updatedAt).toBe(first)
+
+    mockGet.mockResolvedValue(['b'])
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(result.current.updatedAt).toBe(first + 2000)
+
+    mockGet.mockReturnValue(new Promise(() => {}))
+    rerender({ url: '/api/b' })
+    expect(result.current.updatedAt).toBeNull()
+  })
 })

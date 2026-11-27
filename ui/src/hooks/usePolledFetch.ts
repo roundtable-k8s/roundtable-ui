@@ -8,7 +8,7 @@ function statusOf(e: unknown): number | undefined {
   return typeof s === 'number' ? s : undefined
 }
 
-interface PolledState<T> { url: string; data: T; error: string | null; errorStatus?: number; loading: boolean }
+interface PolledState<T> { url: string; data: T; error: string | null; errorStatus?: number; loading: boolean; updatedAt: number | null }
 
 /**
  * Poll a JSON endpoint on an interval, pausing while the tab is hidden (#22).
@@ -18,7 +18,7 @@ interface PolledState<T> { url: string; data: T; error: string | null; errorStat
 export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
   // State is keyed by the url it was fetched for, so a url change (e.g. the
   // table filter) never renders the previous url's data, even for one frame.
-  const [state, setState] = useState<PolledState<T>>({ url, data: initial, error: null, loading: true })
+  const [state, setState] = useState<PolledState<T>>({ url, data: initial, error: null, loading: true, updatedAt: null })
 
   // Accepted: switching A -> B -> A before B answers shows A's earlier data
   // with loading: false, because the state still belongs to url A.
@@ -32,7 +32,7 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
     setState((prev) => {
       const base: PolledState<T> = prev.url === url
         ? prev
-        : { url, data: initialRef.current, error: null, loading: true }
+        : { url, data: initialRef.current, error: null, loading: true, updatedAt: null }
       return { ...base, ...patch }
     })
   }, [url])
@@ -41,7 +41,7 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
     try {
       const next = await apiGet<T>(url, { signal })
       if (current.current !== url || signal?.aborted) return
-      update({ data: next, error: null, errorStatus: undefined, loading: false })
+      update({ data: next, error: null, errorStatus: undefined, loading: false, updatedAt: Date.now() })
     } catch (e) {
       if (current.current !== url || signal?.aborted) return
       update({ error: e instanceof Error ? e.message : 'Unknown error', errorStatus: statusOf(e), loading: false })
@@ -51,6 +51,6 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
 
   useVisibleInterval(refreshWith, intervalMs, true, { immediate: true, key: url })
 
-  if (state.url !== url) return { data: initialRef.current, loading: true, error: null, errorStatus: undefined, refresh }
-  return { data: state.data, loading: state.loading, error: state.error, errorStatus: state.errorStatus, refresh }
+  if (state.url !== url) return { data: initialRef.current, loading: true, error: null, errorStatus: undefined, updatedAt: null, refresh }
+  return { data: state.data, loading: state.loading, error: state.error, errorStatus: state.errorStatus, updatedAt: state.updatedAt, refresh }
 }
