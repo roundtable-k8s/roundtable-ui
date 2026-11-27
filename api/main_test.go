@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -746,6 +747,12 @@ func TestBriefingHandlerErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { os.Chmod(p, 0644) })
+
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+
 		w := serve("2026-01-06")
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d", w.Code)
@@ -753,7 +760,43 @@ func TestBriefingHandlerErrors(t *testing.T) {
 		if strings.Contains(w.Body.String(), tmpDir) {
 			t.Errorf("500 body leaks the vault path: %s", w.Body.String())
 		}
+		if n := strings.Count(buf.String(), "briefing read failed"); n != 1 {
+			t.Errorf("expected exactly one 'briefing read failed' log line, got %d: %q", n, buf.String())
+		}
 	})
+}
+
+// TestBriefingHandlerSkipsFIFO checks that a FIFO named like a briefing is
+// answered 404 instead of blocking the handler on open.
+func TestBriefingHandlerSkipsFIFO(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := "Briefings/Daily"
+	briefingsDir := filepath.Join(tmpDir, dir)
+	if err := os.MkdirAll(briefingsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(briefingsDir, "2026-01-08.md"), 0644); err != nil {
+		t.Skipf("mkfifo unavailable: %v", err)
+	}
+
+	router := mux.NewRouter()
+	api := router.PathPrefix("/api").Subrouter()
+	api.HandleFunc("/briefings/{date}", briefingHandler(tmpDir, []string{dir})).Methods("GET")
+
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest("GET", "/api/briefings/2026-01-08", nil))
+		done <- w
+	}()
+	select {
+	case w := <-done:
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for a FIFO, got %d", w.Code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler blocked on a FIFO briefing")
+	}
 }
 
 // TestMissionsHandler tests the /api/missions endpoint

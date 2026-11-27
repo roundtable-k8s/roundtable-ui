@@ -249,3 +249,16 @@ func TestScheduleManifestInvalidYAML(t *testing.T) {
 		t.Errorf("got %d %s", w.Code, w.Body)
 	}
 }
+
+func TestScheduleManifestBodyTooLarge(t *testing.T) {
+	f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/yaml")
+		io.WriteString(w, strings.Repeat("a", gatewayMaxBody+1))
+	}}
+	srv := f.server(t)
+	r := scheduleRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	w := doReq(r, "GET", "/api/schedules/roundtable/morning-digest/manifest", "")
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), `"error":"Gateway response too large"`) {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+}

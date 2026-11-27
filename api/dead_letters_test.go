@@ -142,7 +142,11 @@ func TestDeadLetterGatewayBodyLimit(t *testing.T) {
 			r, _ := deadLetterRouter(t, 200, jsonOfSize(tt.size))
 			w := doReq(r, "GET", "/api/dead-letters", "")
 			if w.Code != tt.wantCode || !strings.Contains(w.Body.String(), tt.want) {
-				t.Fatalf("got %d (%d bytes body)", w.Code, w.Body.Len())
+				prefix := w.Body.String()
+				if len(prefix) > 200 {
+					prefix = prefix[:200]
+				}
+				t.Fatalf("got %d (%d bytes body), body prefix %q", w.Code, w.Body.Len(), prefix)
 			}
 			if tt.wantCode == 200 && w.Body.Len() != tt.size {
 				t.Errorf("relayed %d bytes, want %d", w.Body.Len(), tt.size)
