@@ -12,6 +12,8 @@ vi.mock('./hooks/useOpenDeadLetters', () => ({
   useOpenDeadLetters: () => ({ count: 0, capped: false, total: 0, error: false }),
   deadLetterBadge: () => ({ text: '', title: '' }),
 }))
+let versionResult: { version: string; commit: string } | null = null
+vi.mock('./hooks/useVersion', () => ({ useVersion: () => versionResult }))
 vi.mock('./pages/Dashboard', () => ({ DashboardPage: () => <h2>Dashboard stub</h2> }))
 vi.mock('./pages/Fleet', () => ({ FleetPage: () => <h2>Fleet stub</h2> }))
 vi.mock('./pages/ScheduleDetail', () => ({ ScheduleDetailPage: () => <h2>Schedule detail stub</h2> }))
@@ -95,5 +97,19 @@ describe('Kubernetes health banner', () => {
     renderAt('/')
     await waitFor(() => expect(f).toHaveBeenCalled())
     expect(screen.queryByText(BANNER)).toBeNull()
+  })
+})
+
+describe('build version footer', () => {
+  it('shows the version and short commit', () => {
+    versionResult = { version: '1.2.3', commit: 'abcdef0123456789' }
+    renderAt('/')
+    expect(screen.getByTestId('build-version').textContent).toBe('v1.2.3 (abcdef0)')
+  })
+
+  it('is absent while loading or when the fetch failed', () => {
+    versionResult = null
+    renderAt('/')
+    expect(screen.queryByTestId('build-version')).toBeNull()
   })
 })

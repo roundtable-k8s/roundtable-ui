@@ -13,7 +13,8 @@ WORKDIR /build
 COPY api/go.mod api/go.sum ./
 RUN go mod download
 COPY api/ .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /roundtable-ui .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=${VERSION}" -o /roundtable-ui .
 
 # Stage 3: Final image
 FROM alpine:3.21
