@@ -21,7 +21,7 @@ interface Props {
   /** Loads one entry including its original task payload. */
   onLoadDetail: (entry: DeadLetter) => Promise<DeadLetter>
   /** Loads the dead-letter entry of one task (used for earlier attempts). */
-  onLoadEntry: (taskId: string, table?: string) => Promise<DeadLetter>
+  onLoadEntry: (taskId: string, table?: string, signal?: AbortSignal) => Promise<DeadLetter>
 }
 
 const stateStyle: Record<string, string> = {
@@ -70,28 +70,29 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
     setEarlier([])
     setEarlierError(null)
     if (!selectedRetryOf) return
-    let cancelled = false
+    // Aborting on cleanup cancels the in-flight request, so a stale walk stops fetching.
+    const ac = new AbortController()
     const walk = async () => {
       const found: DeadLetter[] = []
       let next: string | undefined = selectedRetryOf
       while (next && found.length < MAX_EARLIER_ATTEMPTS) {
         try {
-          const prev = await loadEntryRef.current(next, selectedTable)
-          if (cancelled) return
+          const prev = await loadEntryRef.current(next, selectedTable, ac.signal)
+          if (ac.signal.aborted) return
           found.push(prev)
           next = prev.retryOf
         } catch (err) {
-          if (cancelled) return
+          if (ac.signal.aborted) return
           if (!(err instanceof ApiError && err.status === 404)) {
             setEarlierError(err instanceof Error ? err.message : 'failed to load')
           }
           break
         }
       }
-      if (!cancelled) setEarlier(found.reverse())
+      if (!ac.signal.aborted) setEarlier(found.reverse())
     }
     void walk()
-    return () => { cancelled = true }
+    return () => ac.abort()
   }, [selectedKey, selectedRetryOf, selectedTable])
 
   const knights = useMemo(() => [...new Set(entries.map((e) => e.knight))].sort(), [entries])
@@ -195,7 +196,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
   return (
     <div>
       {error && <div className="mb-4"><ErrorBanner>{error}</ErrorBanner></div>}
-      {retryError && <div className="mb-4"><ErrorBanner>Retry failed: {retryError}</ErrorBanner></div>}
+      {retryError && <div className="mb-4"><ErrorBanner>Retry failed: {sanitizeText(retryError)}</ErrorBanner></div>}
 
       {bulk && (
         <p className="mb-4 text-sm text-gray-300" role="status" data-testid="bulk-summary">

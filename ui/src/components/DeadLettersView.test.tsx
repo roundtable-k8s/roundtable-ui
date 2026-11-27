@@ -110,6 +110,14 @@ describe('DeadLettersView', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('dead letter t1 is retried')
   })
 
+  it('sanitises the retry banner text (ANSI, control character, bidi override)', async () => {
+    setup([lost], vi.fn().mockRejectedValue(new Error('dead letter \u001b[31mt1\u0007\u202e is retried')))
+    await userEvent.click(screen.getByRole('button', { name: /Retry/ }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Retry failed: dead letter t1 is retried')
+    expect(alert.textContent).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202e\u001b]/)
+  })
+
   describe('earlier attempts', () => {
     const attempt1: DeadLetter = { ...lost, taskId: 'a1', attempt: 1, reason: 'timeout', error: 'timed out after 30m\nmore detail' }
     const attempt2: DeadLetter = { ...lost, taskId: 'a2', attempt: 2, reason: 'failed', error: 'usage limit reached', retryOf: 'a1' }
@@ -124,7 +132,7 @@ describe('DeadLettersView', () => {
       expect(section).toHaveTextContent('timed out after 30m')
       expect(section).not.toHaveTextContent('more detail')
       expect(onLoadEntry).toHaveBeenCalledTimes(1)
-      expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined)
+      expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined, expect.any(AbortSignal))
     })
 
     it('makes no extra request for an entry without retryOf', async () => {
@@ -140,7 +148,7 @@ describe('DeadLettersView', () => {
       const onLoadEntry = loaderFrom({})
       setup([attempt2], undefined, onLoadEntry)
       await userEvent.click(screen.getByTestId('dead-letter-row'))
-      await waitFor(() => expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined))
+      await waitFor(() => expect(onLoadEntry).toHaveBeenCalledWith('a1', undefined, expect.any(AbortSignal)))
       // Wait for the 404 to settle before asserting absence, so the assertion cannot pass early.
       await expect(onLoadEntry.mock.results[0].value).rejects.toBeInstanceOf(ApiError)
       expect(screen.queryByTestId('earlier-attempts')).toBeNull()
@@ -149,12 +157,26 @@ describe('DeadLettersView', () => {
     })
 
     it('shows a non-404 load failure as sanitised text', async () => {
-      const onLoadEntry = vi.fn(() => Promise.reject(new Error('gateway \u001b[31mdown\u0007‮ now')))
+      const onLoadEntry = vi.fn(() => Promise.reject(new Error('gateway \u001b[31mdown\u0007\u202e now')))
       setup([attempt2], undefined, onLoadEntry)
       await userEvent.click(screen.getByTestId('dead-letter-row'))
       const note = await screen.findByText(/could not be loaded/)
       expect(note).toHaveTextContent('Earlier attempts could not be loaded: gateway down now')
-      expect(note.textContent).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f‮\u001b]/)
+      expect(note.textContent).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202e\u001b]/)
+    })
+
+    it('aborts the in-flight earlier-attempt request when the view unmounts', async () => {
+      const signals: AbortSignal[] = []
+      const onLoadEntry = vi.fn((_taskId: string, _table?: string, signal?: AbortSignal) => {
+        signals.push(signal!)
+        return new Promise<DeadLetter>(() => {})
+      })
+      const { unmount } = render(<MemoryRouter><DeadLettersView entries={[attempt2]} onRetry={vi.fn()} onLoadDetail={(e) => Promise.resolve(e)} onLoadEntry={onLoadEntry} /></MemoryRouter>)
+      await userEvent.click(screen.getByTestId('dead-letter-row'))
+      await waitFor(() => expect(signals).toHaveLength(1))
+      expect(signals[0].aborted).toBe(false)
+      unmount()
+      expect(signals[0].aborted).toBe(true)
     })
 
     it('follows the chain at most three steps back, oldest first', async () => {

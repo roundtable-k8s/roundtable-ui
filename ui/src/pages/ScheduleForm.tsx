@@ -70,7 +70,7 @@ export function NextRunsPreview({ cron, timeZone, now }: { cron: string; timeZon
   const fallback = current?.fallback ?? false
 
   useEffect(() => {
-    if (cron.trim() === '') return
+    if (empty) return
     let live = true
     const timer = setTimeout(() => {
       apiGet<ScheduleNextRuns>(schedulePreviewUrl(cron, zone, 5))
@@ -85,7 +85,7 @@ export function NextRunsPreview({ cron, timeZone, now }: { cron: string; timeZon
         })
     }, PREVIEW_DEBOUNCE_MS)
     return () => { live = false; clearTimeout(timer) }
-  }, [cron, zone, key])
+  }, [empty, cron, zone])
 
   let local: Date[] = []
   let localError = ''
