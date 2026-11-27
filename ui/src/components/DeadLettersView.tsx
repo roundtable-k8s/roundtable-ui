@@ -162,6 +162,8 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
     try {
       const res = await onRetry(e, force)
       setRetried((r) => ({ ...r, [key]: res }))
+      // A stale bulk "Retry failed" for this row must not sit beside the new "Retried as" link.
+      setRowErrors((r) => { const { [key]: _, ...rest } = r; return rest })
     } catch (err) {
       setRetryError(err instanceof Error ? err.message : 'retry failed')
     } finally {
@@ -197,7 +199,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
 
       {bulk && (
         <p className="mb-4 text-sm text-gray-300" role="status" data-testid="bulk-summary">
-          {bulk.running ? `Retrying ${bulk.done + bulk.failed + 1 > bulk.total ? bulk.total : bulk.done + bulk.failed + 1} of ${bulk.total}…` : `Retried ${bulk.done}, failed ${bulk.failed}`}
+          {bulk.running ? `Retrying ${Math.min(bulk.done + bulk.failed + 1, bulk.total)} of ${bulk.total}…` : `Retried ${bulk.done}, failed ${bulk.failed}`}
         </p>
       )}
 
@@ -267,7 +269,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
                   </td>
                   <td className="p-3 text-right">
                     {retryButton(e)}
-                    {rowErrors[entryKey(e)] && <div className="text-xs text-red-400 mt-1" role="alert">Retry failed: {rowErrors[entryKey(e)]}</div>}
+                    {rowErrors[entryKey(e)] && <div className="text-xs text-red-400 mt-1" role="alert">Retry failed: {sanitizeText(rowErrors[entryKey(e)])}</div>}
                   </td>
                 </tr>
               ))}
@@ -305,7 +307,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
                 </ol>
               </div>
             )}
-            {earlierError && <p className="text-sm text-gray-500">Earlier attempts could not be loaded: {earlierError}</p>}
+            {earlierError && <p className="text-sm text-gray-500">Earlier attempts could not be loaded: {sanitizeText(earlierError)}</p>}
             {selected.state === 'resolved' && <p className="text-sm text-gray-400">A later success arrived for this task.</p>}
             <div>{retryButton(selected)}</div>
             <TraceLink traceId={selected.traceId} />
