@@ -13,7 +13,7 @@ import { countByStatus } from '../lib/running'
 import { getKnightConfig } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
-import { formatCost, formatTimestamp, until } from '../lib/format'
+import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
 
 import type { Chain } from '../lib/types'
 
@@ -26,7 +26,7 @@ interface CostEntry {
 }
 
 function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatDay(date)
 }
 
 export const SESSION_COST_REFRESH_MS = 2000

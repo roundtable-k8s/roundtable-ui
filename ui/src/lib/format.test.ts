@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  budgetText, formatCost, formatDateTime, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
+  budgetText, formatCost, formatDateTime, formatDay, formatNumber, formatAge, formatDuration, formatMsLadder, formatRelativeTime,
   formatSecondsLadder, formatTimestamp, formatTimestampOrDate, formatUptime, until,
 } from './format'
 
@@ -17,6 +17,12 @@ describe('formatCost', () => {
     expect(formatCost(0.00421)).toBe('$0.0042')
     expect(formatCost(0.01)).toBe('$0.01')
     expect(formatCost(1.234)).toBe('$1.23')
+  })
+
+  it('follows the given locale', () => {
+    expect(formatCost(1234.5, 'en-US')).toBe('$1,234.50')
+    expect(formatCost(1234.5, 'de-DE')).toBe('1.234,50\u00a0$')
+    expect(formatCost(0.00421, 'en-US')).toBe('$0.0042')
   })
 })
 
@@ -160,5 +166,25 @@ describe('formatAge', () => {
   it('falls back when absent or invalid', () => {
     expect(formatAge(undefined, '1052h34m12s')).toBe('1052h34m12s')
     expect(formatAge('nope', 'x')).toBe('x')
+  })
+})
+
+describe('formatNumber', () => {
+  it('groups digits per locale', () => {
+    expect(formatNumber(1234.5, { minimumFractionDigits: 2 }, 'en-US')).toBe('1,234.50')
+    expect(formatNumber(1234.5, { minimumFractionDigits: 2 }, 'de-DE')).toBe('1.234,50')
+    expect(formatNumber(1234567, undefined, 'en-US')).toBe('1,234,567')
+  })
+})
+
+describe('formatDay', () => {
+  it('formats a Date or day string, short and long', () => {
+    expect(formatDay('2026-06-10', 'short', 'en-US')).toBe('Jun 10')
+    expect(formatDay(new Date(2026, 5, 10), 'short', 'en-US')).toBe('Jun 10')
+    expect(formatDay('2026-06-10', 'long', 'en-US')).toBe('Wednesday, June 10, 2026')
+    expect(formatDay('2026-06-10', 'long', 'de-DE')).toBe('Mittwoch, 10. Juni 2026')
+  })
+  it('returns unparsable input as-is', () => {
+    expect(formatDay('nope')).toBe('nope')
   })
 })

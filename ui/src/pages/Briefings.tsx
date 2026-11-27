@@ -1,4 +1,5 @@
 import { apiGet, apiGetText, ApiError } from '../lib/api'
+import { formatDay, formatNumber } from '../lib/format'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { BookOpen, Calendar, FileText, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { Spinner, EmptyState, PageHeader, ErrorBanner } from '../components/ui'
@@ -7,18 +8,7 @@ import { useVisibleInterval } from '../hooks/useVisibleInterval'
 
 // Helper to format date in human-friendly format
 function formatDate(dateStr: string): string {
-  try {
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day)
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })
-  } catch {
-    return dateStr
-  }
+  return formatDay(dateStr, 'long')
 }
 
 // Helper to calculate reading time (assuming ~200 words per minute)
@@ -226,7 +216,7 @@ export function BriefingsPage() {
                 <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <FileText className="w-3 h-3" />
-                    {wordCount.toLocaleString()} words
+                    {formatNumber(wordCount)} words
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />

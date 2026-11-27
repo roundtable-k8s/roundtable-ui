@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatNumber } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 
 interface UntrustedTextProps {
@@ -24,7 +25,7 @@ export function UntrustedText({ text, as: Tag = 'pre', className, collapseAfter 
       <Tag className={className}>{shown}{long && !open ? '…' : ''}</Tag>
       {long && (
         <button type="button" className="text-xs text-roundtable-gold hover:underline" onClick={() => setOpen(!open)}>
-          {open ? 'Show less' : `Show all (${clean.length.toLocaleString()} chars)`}
+          {open ? 'Show less' : `Show all (${formatNumber(clean.length)} chars)`}
         </button>
       )}
     </>

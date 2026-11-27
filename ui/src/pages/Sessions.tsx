@@ -6,7 +6,7 @@ import { useFleet } from '../hooks/useFleet'
 import { fetchWithTimeout } from '../hooks/useKnightSession'
 import type { SessionEntry, SessionTreeNode, SessionHistoryItem, KnightSessionStats } from '../hooks/useKnightSession'
 import { Spinner, ErrorBanner, EmptyState, PageHeader, RefreshButton, StatCard, ProgressBar } from '../components/ui'
-import { formatCost, formatDateTime, formatTimestampOrDate } from '../lib/format'
+import { formatCost, formatDateTime, formatTimestampOrDate, formatNumber } from '../lib/format'
 import { UntrustedText } from '../components/UntrustedText'
 import { sanitizeText } from '../lib/untrusted'
 import { groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession } from '../lib/sessions'
@@ -562,7 +562,7 @@ export function SessionsPage() {
             <span className="text-gray-500">Started {formatDateTime(archivedMeta.startedAt)}</span>
           )}
           {archivedMeta && (
-            <span className="text-gray-500">{archivedMeta.total.toLocaleString()} entries{archivedMeta.hasMore ? ' (showing first 300)' : ''}</span>
+            <span className="text-gray-500">{formatNumber(archivedMeta.total)} entries{archivedMeta.hasMore ? ' (showing first 300)' : ''}</span>
           )}
           <button onClick={() => setSelectedSession('live')} className="text-roundtable-gold hover:underline ml-auto">
             ← Back to live
@@ -589,7 +589,7 @@ export function SessionsPage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <StatCard label="Messages" value={stats.session.totalMessages} />
           <StatCard label="Tool Calls" value={stats.session.toolCalls} color="text-purple-400" />
-          <StatCard label="Tokens" value={stats.session.tokens.total.toLocaleString()} />
+          <StatCard label="Tokens" value={formatNumber(stats.session.tokens.total)} />
           <StatCard label="Cost" value={formatCost(stats.session.cost)} color="text-roundtable-gold" />
           <div className="bg-roundtable-slate border border-roundtable-steel rounded-lg p-3 flex items-center justify-center">
             <button onClick={fetchFleetPerf}
@@ -633,7 +633,7 @@ export function SessionsPage() {
                     <div className="flex-1 relative">
                       <ProgressBar percent={barWidth} fillClass="bg-roundtable-gold/30" heightClass="h-5" />
                       <span className="absolute right-2 top-0.5 text-[10px] text-gray-400">
-                        {formatCost(s.session?.cost || 0)} · {s.session?.toolCalls || 0} tools · {(s.session?.tokens.total || 0).toLocaleString()} tokens
+                        {formatCost(s.session?.cost || 0)} · {s.session?.toolCalls || 0} tools · {formatNumber(s.session?.tokens.total || 0)} tokens
                       </span>
                     </div>
                   </div>
