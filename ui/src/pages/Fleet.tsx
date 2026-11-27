@@ -6,6 +6,7 @@ import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
 import { KnightCard } from '../components/KnightCard'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
+import { FirstRun } from '../components/FirstRun'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { getKnightConfig } from '../lib/knights'
 import { parseEvent, resultFailureReason } from '../lib/events'
@@ -184,6 +185,13 @@ export function FleetPage() {
             <p>⚠️ {error}</p>
             <p className="text-red-400/60 text-sm mt-1">Check that the dashboard API is reachable and look at its pod logs.</p>
           </ErrorBanner>
+        </div>
+      )}
+
+      {/* First run: the request succeeded and the fleet is empty */}
+      {!loading && !error && knights.length === 0 && (
+        <div className="mb-6">
+          <FirstRun />
         </div>
       )}
 

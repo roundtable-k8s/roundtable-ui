@@ -256,7 +256,7 @@ describe('DashboardPage', () => {
   it('shows an empty state, not offline tiles, for an empty fleet', () => {
     vi.mocked(useFleet).mockImplementation(() => fleetOf([]))
     renderDashboard()
-    expect(screen.getByText('No knights found')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No knights yet' })).toBeInTheDocument()
     expect(screen.queryByText('offline')).not.toBeInTheDocument()
     expect(screen.queryByText('galahad')).not.toBeInTheDocument()
   })
@@ -378,5 +378,39 @@ describe('DashboardPage scheduled chains', () => {
     expect(await screen.findByText(/^next in 3h/)).toBeInTheDocument()
     expect(screen.getAllByText(/^next in/)).toHaveLength(1)
     vi.mocked(apiGet).mockImplementation(orig)
+  })
+})
+
+describe('DashboardPage first run', () => {
+  const emptyFleet = { knights: [], loading: false, error: null } as unknown as ReturnType<typeof useFleet>
+
+  it('shows the first-run panel in the fleet panel when the fleet is empty', () => {
+    vi.mocked(useFleet).mockReturnValue(emptyFleet)
+    renderDashboard()
+    expect(screen.getByRole('heading', { name: 'No knights yet' })).toBeInTheDocument()
+    expect(screen.queryByText('No knights found')).not.toBeInTheDocument()
+  })
+
+  it('hides the first-run panel while loading', () => {
+    vi.mocked(useFleet).mockReturnValue({ ...emptyFleet, loading: true } as unknown as ReturnType<typeof useFleet>)
+    renderDashboard()
+    expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
+  })
+
+  it('hides the first-run panel on a failed request and keeps the error', () => {
+    vi.mocked(useFleet).mockReturnValue({ ...emptyFleet, error: 'boom' } as unknown as ReturnType<typeof useFleet>)
+    renderDashboard()
+    expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
+    expect(screen.getByText('Failed to load fleet: boom')).toBeInTheDocument()
+  })
+
+  it('hides the first-run panel with one knight', () => {
+    vi.mocked(useFleet).mockReturnValue({
+      knights: [{ name: 'galahad', domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h', image: '', skills: 0, nixTools: 0, labels: {}, phase: 'Ready' }],
+      loading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useFleet>)
+    renderDashboard()
+    expect(screen.queryByRole('heading', { name: 'No knights yet' })).not.toBeInTheDocument()
   })
 })
