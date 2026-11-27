@@ -1485,7 +1485,13 @@ func briefingHandler(vaultPath string, dirs []string) http.HandlerFunc {
 		}
 
 		for _, d := range search {
-			f, err := os.Open(filepath.Join(vaultPath, d, date+".md"))
+			p := filepath.Join(vaultPath, d, date+".md")
+			// Stat before Open: opening a FIFO blocks until a writer appears, so
+			// only regular files (after following symlinks) are opened.
+			if fi, err := os.Stat(p); err == nil && !fi.Mode().IsRegular() {
+				continue
+			}
+			f, err := os.Open(p)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
 					continue
