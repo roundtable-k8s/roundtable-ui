@@ -59,6 +59,9 @@ func TestMissionDetailExtraFields(t *testing.T) {
 	if n := len([]rune(d.Result)); n != maxMissionResultChars {
 		t.Errorf("result length %d", n)
 	}
+	if !d.ResultTruncated || d.ResultLength != 5000 {
+		t.Errorf("truncated %v, full length %d", d.ResultTruncated, d.ResultLength)
+	}
 
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest("GET", "/api/missions", nil))
@@ -86,9 +89,17 @@ func TestMissionDetailExtraFields(t *testing.T) {
 func TestMissionDetailOmitsEmptyFields(t *testing.T) {
 	d := parseMissionDetail(map[string]interface{}{"metadata": map[string]interface{}{"name": "m"}}, MissionSummary{Name: "m"})
 	b, _ := json.Marshal(d)
-	for _, k := range []string{"createdAt", "conditions", "costBreakdown", "result"} {
+	for _, k := range []string{"createdAt", "conditions", "costBreakdown", "result", "resultTruncated", "resultLength"} {
 		if strings.Contains(string(b), `"`+k+`"`) {
 			t.Errorf("%s present: %s", k, b)
 		}
+	}
+}
+
+func TestMissionDetailShortResultNotTruncated(t *testing.T) {
+	obj := map[string]interface{}{"status": map[string]interface{}{"result": "done"}}
+	d := parseMissionDetail(obj, MissionSummary{Name: "m"})
+	if d.Result != "done" || d.ResultTruncated || d.ResultLength != 0 {
+		t.Errorf("short result: %+v", d)
 	}
 }

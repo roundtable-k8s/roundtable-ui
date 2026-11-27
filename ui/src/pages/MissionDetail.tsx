@@ -131,6 +131,9 @@ function MissionBody({ m }: { m: Mission }) {
       {(finished || m.result) && (
         <Section title="Results">
           {m.result && <pre className="mb-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-roundtable-gold/20 bg-roundtable-navy p-3 text-xs text-gray-300">{m.result}</pre>}
+          {m.result && m.resultTruncated && m.resultLength != null && (
+            <p className="mb-3 text-xs text-gray-400" role="note">showing {Array.from(m.result).length} of {m.resultLength} characters</p>
+          )}
           {finished && <MissionResults name={m.name} />}
         </Section>
       )}
