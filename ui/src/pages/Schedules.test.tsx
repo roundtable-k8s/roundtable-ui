@@ -225,3 +225,21 @@ describe('SchedulesPage', () => {
     expect(await screen.findByText(/Failed to load schedules: Gateway not configured/)).toBeInTheDocument()
   })
 })
+
+describe('SchedulesPage policy and suspension', () => {
+  it('shows the concurrency policy under the cadence and who suspended a schedule', async () => {
+    serve([
+      sched({ name: 'capped', concurrency: { policy: 'Allow', maxActive: 3 } }),
+      sched({ name: 'paused', suspended: true, suspendedBy: 'spec,annotation', concurrency: { policy: 'Forbid' } }),
+      sched({ name: 'plain' }),
+    ])
+    renderPage()
+    expect(await rowFor('capped')).toHaveTextContent('Allow, up to 3 active')
+    const paused = await rowFor('paused')
+    expect(within(paused).getByTestId('schedule-policy')).toHaveTextContent('Forbid')
+    expect(within(paused).getByTestId('schedule-suspended-by')).toHaveTextContent('suspended by spec and annotation')
+    const plain = await rowFor('plain')
+    expect(within(plain).queryByTestId('schedule-policy')).toBeNull()
+    expect(within(plain).queryByTestId('schedule-suspended-by')).toBeNull()
+  })
+})

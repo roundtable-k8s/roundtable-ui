@@ -11,7 +11,7 @@ import { countLabel, formatDateTime, formatRelativeTime, until } from '../lib/fo
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
 import {
-  firstLine, scheduleEditPath, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL,
+  describePolicy, describeSuspension, firstLine, scheduleEditPath, scheduleKey, scheduleApi, scheduleLink, targetName, SCHEDULE_DOCS_URL,
   type Schedule, type ScheduleList, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -144,6 +144,7 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
                   <span className="text-gray-200 underline decoration-dotted decoration-gray-600 cursor-help" title={`${s.cron} (${s.timeZone})`}>
                     {s.description || s.cron}
                   </span>
+                  {describePolicy(s) && <div data-testid="schedule-policy" className="mt-0.5 text-xs text-gray-400">{describePolicy(s)}</div>}
                 </td>
                 <td className="px-4 py-3"><NextRun iso={s.suspended ? undefined : s.nextRunAt} /></td>
                 <td className="px-4 py-3"><LastRun s={s} /></td>
@@ -151,6 +152,7 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
                   {s.suspended
                     ? <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Suspended</span>
                     : <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">Active</span>}
+                  {describeSuspension(s) && <div data-testid="schedule-suspended-by" className="mt-1 text-xs text-gray-400">suspended by {describeSuspension(s)}</div>}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap justify-end gap-1">
