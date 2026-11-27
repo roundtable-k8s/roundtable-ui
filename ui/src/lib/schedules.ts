@@ -49,6 +49,8 @@ export interface ScheduleRun {
   durationSeconds?: number
   costUSD?: string
   resultAvailable: boolean
+  /** 32-hex trace ID of the run, when the gateway knows it. */
+  traceId?: string
 }
 
 export interface ScheduleRunStep {

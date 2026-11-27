@@ -3,8 +3,14 @@ import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { DeadLettersView } from './DeadLettersView'
-import { ApiError } from '../lib/api'
+import { ApiError, apiGet } from '../lib/api'
+import { resetConfigCache } from '../hooks/useConfig'
 import type { DeadLetter, RetryResult } from '../lib/deadLetters'
+
+vi.mock('../lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/api')>()),
+  apiGet: vi.fn(() => Promise.resolve({})),
+}))
 
 const lost: DeadLetter = {
   taskId: 't1', knight: 'galahad', state: 'open', reason: 'lost', attempt: 1,
@@ -153,5 +159,29 @@ describe('DeadLettersView', () => {
       expect(text.indexOf('Attempt 2:')).toBeLessThan(text.indexOf('Attempt 3:'))
       expect(text.indexOf('Attempt 3:')).toBeLessThan(text.indexOf('Attempt 4:'))
     })
+  })
+})
+
+describe('DeadLettersView trace link', () => {
+  const traceId = '0af7651916cd43dd8448eb211c80319c'
+
+  it('shows View trace in the drawer of an entry with a trace ID when a viewer is configured', async () => {
+    resetConfigCache()
+    vi.mocked(apiGet).mockResolvedValue({ traceUrlTemplate: 'https://t.example/trace/{traceId}' })
+    setup([{ ...lost, traceId }])
+    await userEvent.click(screen.getAllByTestId('dead-letter-row')[0])
+    await screen.findByText('Original task')
+    const link = await screen.findByRole('link', { name: /View trace/ })
+    expect(link).toHaveAttribute('href', `https://t.example/trace/${traceId}`)
+  })
+
+  it('shows no trace link for an entry without a trace ID', async () => {
+    resetConfigCache()
+    vi.mocked(apiGet).mockResolvedValue({ traceUrlTemplate: 'https://t.example/trace/{traceId}' })
+    setup([lost])
+    await userEvent.click(screen.getAllByTestId('dead-letter-row')[0])
+    await screen.findByText('Original task')
+    await waitFor(() => expect(apiGet).toHaveBeenCalled())
+    expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
   })
 })
