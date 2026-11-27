@@ -230,12 +230,12 @@ func TestRelayErrorLogCarriesTraceID(t *testing.T) {
 
 func TestGatewayRouteTemplate(t *testing.T) {
 	for in, want := range map[string]string{
-		"/v1/knights":                               "/v1/knights",
-		"/v1/tasks/abc/events":                      "/v1/tasks/{id}/events",
-		"/v1/dead-letters/t1/retry":                 "/v1/dead-letters/{id}/retry",
-		"/v1/tasks":                                 "/v1/tasks",
-		"/v1/runs":                                  "/v1/runs",
-		"/v1/runs/ns/run-1/cancel":                  "/v1/runs/{namespace}/{name}/cancel",
+		"/v1/knights":               "/v1/knights",
+		"/v1/tasks/abc/events":      "/v1/tasks/{id}/events",
+		"/v1/dead-letters/t1/retry": "/v1/dead-letters/{id}/retry",
+		"/v1/tasks":                 "/v1/tasks",
+		"/v1/runs":                  "/v1/runs",
+		"/v1/runs/ns/run-1/cancel":  "/v1/runs/{namespace}/{name}/cancel",
 		"/v1/schedules/ns/s/runs/digest-1795600000": "/v1/schedules/{namespace}/{name}/runs/{id}",
 		"/v1/schedules/ns/s/manifest":               "/v1/schedules/{namespace}/{name}/manifest",
 		"/other/thing":                              "/",
