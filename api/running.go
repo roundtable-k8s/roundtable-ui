@@ -239,6 +239,19 @@ func (r *runningRegistry) snapshot() []RunningTask {
 	return r.snapshotLocked()
 }
 
+// countByStatus counts the tracked tasks per status without copying them.
+func (r *runningRegistry) countByStatus() map[string]int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	counts := map[string]int{runningStatusRunning: 0, runningStatusStale: 0, runningStatusLost: 0}
+	for _, t := range r.tasks {
+		if _, ok := counts[t.Status]; ok {
+			counts[t.Status]++
+		}
+	}
+	return counts
+}
+
 func (r *runningRegistry) snapshotLocked() []RunningTask {
 	out := make([]RunningTask, 0, len(r.tasks))
 	for _, t := range r.tasks {

@@ -349,12 +349,15 @@ func addHeadRoutes(r *mux.Router) {
 
 func buildRouter(d routerDeps) *mux.Router {
 	r := mux.NewRouter()
+	// Every method any route accepts. Set once the routes are registered
+	// (below), so a 404 does not walk the router again.
+	var methods []string
 	// gorilla/mux 1.8 loses its own 405 detection inside subrouters (a later
 	// route's inherited /api prefix match clears the mismatch), so the
 	// not-found handler probes the other methods itself.
 	notFound := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var allow []string
-		for _, m := range routeMethods(r) {
+		for _, m := range methods {
 			probe := req.Clone(req.Context())
 			probe.Method = m
 			var match mux.RouteMatch
@@ -484,6 +487,7 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.HandleFunc("/health", healthHandler(d.k8sStatus, d.natsStatus)).Methods("GET")
 
 	addHeadRoutes(r)
+	methods = routeMethods(r)
 
 	// Serve static UI files with SPA fallback for everything outside /api
 	r.MatcherFunc(func(req *http.Request, _ *mux.RouteMatch) bool {

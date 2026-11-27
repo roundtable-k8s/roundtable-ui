@@ -28,14 +28,9 @@ type runningTasksCollector struct{ reg *runningRegistry }
 func (c runningTasksCollector) Describe(ch chan<- *prometheus.Desc) { ch <- runningTasksDesc }
 
 func (c runningTasksCollector) Collect(ch chan<- prometheus.Metric) {
-	counts := map[string]float64{"running": 0, "stale": 0, "lost": 0}
-	for _, t := range c.reg.snapshot() {
-		if _, ok := counts[t.Status]; ok {
-			counts[t.Status]++
-		}
-	}
-	for _, s := range []string{"running", "stale", "lost"} {
-		ch <- prometheus.MustNewConstMetric(runningTasksDesc, prometheus.GaugeValue, counts[s], s)
+	counts := c.reg.countByStatus()
+	for _, s := range []string{runningStatusRunning, runningStatusStale, runningStatusLost} {
+		ch <- prometheus.MustNewConstMetric(runningTasksDesc, prometheus.GaugeValue, float64(counts[s]), s)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -154,8 +155,8 @@ func TestKubeClientsHaveNoHTTPTimeout(t *testing.T) {
 		if !ok {
 			t.Fatal("watch closed before the event")
 		}
-		if ev.Type != "ADDED" {
-			t.Fatalf("event type = %v, want ADDED", ev.Type)
+		if ev.Type != watch.Added {
+			t.Fatalf("event type = %v, want %v", ev.Type, watch.Added)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("no watch event; stream was cut")
