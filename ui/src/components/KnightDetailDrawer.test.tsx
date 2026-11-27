@@ -83,11 +83,12 @@ describe('KnightDetailDrawer', () => {
     await waitFor(() => expect(resolvers['/api/fleet/a%2Fb']).toBeDefined())
   })
 
-  it('lists workspace snapshots with ready state and hides the section when empty', async () => {
+  it('lists workspace snapshots with ready state and shows No snapshots yet when empty', async () => {
     const { unmount } = render(<MemoryRouter><KnightDetailDrawer knight={k('arthur')} onClose={() => {}} /></MemoryRouter>)
     await waitFor(() => expect(resolvers['/api/fleet/arthur']).toBeDefined())
     await act(async () => { resolvers['/api/fleet/arthur'](json(k('arthur', { workspaceSnapshots: [] }))) })
-    expect(screen.queryByText(/Workspace snapshots/)).not.toBeInTheDocument()
+    expect(screen.getByText('No snapshots yet')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Take snapshot/ })).toBeInTheDocument()
     unmount()
 
     render(<MemoryRouter><KnightDetailDrawer knight={k('bors')} onClose={() => {}} /></MemoryRouter>)
