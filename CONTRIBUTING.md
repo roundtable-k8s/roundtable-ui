@@ -52,7 +52,7 @@ Run both before pushing:
 cd api && gofmt -l . && go vet ./... && go test ./...
 
 # UI
-cd ui && npm test && npm run build
+cd ui && npm test && npm run build && npm run build-storybook
 ```
 
 `gofmt -l .` must print nothing. `npm run build` also type-checks (`tsc -b`)
@@ -74,6 +74,18 @@ cd api && go test -run Smoke ./...
 - TypeScript: follow the existing patterns in `ui/src` (pages, components, hooks, `lib`)
 - Write tests for new functionality: `*_test.go` next to the Go code, `*.test.ts(x)` next to the frontend code
 - Lists the API cuts short (pages, caps) must say so in the UI rather than silently dropping items
+
+## Shared components
+
+Storybook (`npm run storybook`) is the catalogue of shared components; stories
+are grouped under `Primitives/` (`ui/src/components/ui`) and `Components/` (the
+rest).
+
+- Look in Storybook before writing UI; reuse what is there.
+- A pattern used on two or more pages becomes a shared component.
+- A shared component ships with a story (`*.stories.tsx` next to it) that shows its states.
+- Pages do not restyle a primitive with ad hoc classes; extend the primitive instead.
+- `npm run build-storybook` runs in CI, so a broken story fails the pull request.
 
 ## What to Work On
 

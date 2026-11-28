@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { TableSelect } from './index'
 
 const meta: Meta<typeof TableSelect> = {
-  title: 'UI/TableSelect',
+  tags: ['autodocs'],
+  title: 'Primitives/TableSelect',
   component: TableSelect,
 }
 export default meta
