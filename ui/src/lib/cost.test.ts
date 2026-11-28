@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { costPanelCsv, costText, notionalShare, parseUSD, tokenCount, tokensText } from './cost'
+import { bufferCoverage, costPanelCsv, costText, notionalShare, parseUSD, tokenCount, tokensText } from './cost'
 
 describe('cost helpers', () => {
   it('formats costs and falls back to — without data', () => {
@@ -53,5 +53,21 @@ describe('costPanelCsv', () => {
       ['Task', 'Knight', 'Cost (USD)', 'Time', 'Status'],
       ['t-1', 'galahad', 0.000001, '2026-01-01T00:00:00Z', 'failed'],
     ])
+  })
+})
+
+describe('bufferCoverage (#661)', () => {
+  it('describes the buffer by count and oldest event, without naming days', () => {
+    const now = Date.now()
+    const events = [
+      { timestamp: new Date(now - 60_000).toISOString() },
+      { timestamp: new Date(now - 2 * 3600_000).toISOString() },
+    ]
+    const text = bufferCoverage(events, now)
+    expect(text).toMatch(/^last 2 events, since /)
+    expect(text).not.toMatch(/days?\b/i)
+  })
+  it('handles an empty buffer', () => {
+    expect(bufferCoverage([])).toBe('no recent events')
   })
 })

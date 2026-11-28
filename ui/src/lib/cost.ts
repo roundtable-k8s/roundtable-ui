@@ -75,3 +75,21 @@ export function costPanelCsv(data: CostPanelCsvInput): (string | number)[][] {
   ]
   return rows
 }
+
+/**
+ * What span the recent-events buffer covers, for labelling figures computed
+ * from it. The buffer holds the last few hundred events, so it is described by
+ * its count and its oldest event rather than as a calendar period.
+ */
+export function bufferCoverage(events: { timestamp: string }[], now: number = Date.now()): string {
+  let oldest = Infinity
+  for (const e of events) {
+    const t = new Date(e.timestamp).getTime()
+    if (!Number.isNaN(t) && t < oldest) oldest = t
+  }
+  if (oldest === Infinity) return 'no recent events'
+  const d = new Date(oldest)
+  const sameDay = d.toDateString() === new Date(now).toDateString()
+  const since = sameDay ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+  return `last ${events.length} events, since ${since}`
+}

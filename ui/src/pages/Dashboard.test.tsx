@@ -267,11 +267,26 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('galahad')).not.toBeInTheDocument()
   })
 
-  it('displays time range selector', async () => {
+  it('puts the date-range selector on the chain cost table only', async () => {
     renderDashboard({ defaultCostExpanded: true })
     await waitFor(() => {
-      expect(screen.getByText('Week')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeInTheDocument()
     })
+  })
+
+  it('labels event-derived cost figures by the buffer span, never as days (#661)', async () => {
+    const ts = new Date(Date.now() - 2 * 3600_000).toISOString()
+    const events = [{
+      type: 'result' as const, subject: 'fleet.results.t-1', timestamp: ts, live: true,
+      data: { knight: 'galahad', cost: 0.5, success: true, task_id: 't-1' },
+    }]
+    vi.mocked(useWebSocket).mockReturnValue({ events, connected: true } as unknown as ReturnType<typeof useWebSocket>)
+    renderDashboard({ defaultCostExpanded: true })
+    const toggle = screen.getByRole('button', { name: /Cost Details/i })
+    expect(toggle).toHaveTextContent(/last 1 events, since/)
+    expect(toggle).not.toHaveTextContent(/days?\b|24h/i)
+    expect(screen.getByTestId('cost-coverage')).toHaveTextContent(/last 1 events, since/)
+    expect(screen.getByTestId('cost-coverage')).not.toHaveTextContent(/days/)
   })
 })
 
@@ -573,7 +588,7 @@ describe('DashboardPage cost CSV download (#514)', () => {
     try {
       renderDashboard({ defaultCostExpanded: true })
       const button = screen.getByRole('button', { name: 'Download CSV' })
-      expect(screen.getByText('Covers recent results only')).toBeInTheDocument()
+      expect(screen.getByTestId('cost-coverage')).toBeInTheDocument()
       await user.click(button)
 
       expect(createObjectURL).toHaveBeenCalledTimes(1)
@@ -585,7 +600,7 @@ describe('DashboardPage cost CSV download (#514)', () => {
       expect(text).toContain('lancelot,0.25,1,0\r\n')
       expect(text).toContain("'=cmd,0.1,1,0")
       expect(text).toContain('Top tasks\r\n')
-      expect(clicks[0].download).toBe('roundtable-costs-week.csv')
+      expect(clicks[0].download).toBe('roundtable-costs.csv')
       expect(clicks[0].href).toBe('blob:cost')
       expect(clicks[0].isConnected).toBe(false)
       await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:cost'))

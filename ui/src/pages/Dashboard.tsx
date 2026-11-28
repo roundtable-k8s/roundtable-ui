@@ -18,7 +18,7 @@ import { FirstRun } from '../components/FirstRun'
 import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
 import { costByChain } from '../lib/chainCost'
 import { CostTag } from '../components/CostTag'
-import { costPanelCsv } from '../lib/cost'
+import { costPanelCsv, bufferCoverage } from '../lib/cost'
 import { toCsv } from '../lib/csv'
 
 import type { Chain } from '../lib/types'
@@ -210,13 +210,10 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     return entries
   }, [events])
 
-  const filteredCostEntries = useMemo(() => {
-    const now = Date.now()
-    const cutoff = timeRange === 'day' ? 24 * 60 * 60 * 1000
-      : timeRange === 'week' ? 7 * 24 * 60 * 60 * 1000
-      : 30 * 24 * 60 * 60 * 1000
-    return costEntries.filter(e => now - new Date(e.timestamp).getTime() <= cutoff)
-  }, [costEntries, timeRange])
+  // The task events are a ring buffer of the most recent events, not a
+  // dated history, so say what span they cover instead of naming a period (#661).
+  const eventsCoverage = useMemo(() => bufferCoverage(events), [events])
+  const filteredCostEntries = costEntries
 
   const costPanelData = useMemo(() => {
     const totalCost = filteredCostEntries.reduce((sum, e) => sum + e.cost, 0)
@@ -259,7 +256,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `roundtable-costs-${timeRange}.csv`
+    link.download = 'roundtable-costs.csv'
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -453,7 +450,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
           </h2>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-400">
-              {filteredCostEntries.length} tasks · {timeRange === 'day' ? 'Last 24h' : timeRange === 'week' ? 'Last 7 days' : 'Last 30 days'}
+              {filteredCostEntries.length} tasks · {eventsCoverage}
             </span>
             {costExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
           </div>
@@ -461,25 +458,10 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
 
         {costExpanded && (
           <div className="px-5 pb-5">
-            {/* Time range + summary */}
+            {/* Summary: task figures cover the event buffer only */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-4">
                 <span className="text-2xl font-bold text-roundtable-gold">{formatCost(costPanelData.totalCost)}</span>
-                <div className="flex gap-1.5">
-                  {(['day', 'week', 'month'] as const).map(range => (
-                    <button
-                      key={range}
-                      onClick={() => setTimeRange(range)}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                        timeRange === range
-                          ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
-                          : 'bg-roundtable-steel/50 text-gray-400 hover:text-gray-300'
-                      }`}
-                    >
-                      {range === 'day' ? 'Today' : range === 'week' ? 'Week' : 'Month'}
-                    </button>
-                  ))}
-                </div>
               </div>
               <div className="flex gap-4 text-sm text-gray-400">
                 <span><span className="text-white font-medium">{filteredCostEntries.length}</span> tasks</span>
@@ -495,7 +477,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                 >
                   <Download className="w-3.5 h-3.5" /> Download CSV
                 </button>
-                <span className="text-xs text-gray-500">Covers recent results only</span>
+                <span className="text-xs text-gray-500" data-testid="cost-coverage">Task figures: {eventsCoverage}</span>
               </div>
             </div>
 
@@ -566,6 +548,21 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                 {chainsNote && (
                   <span className="text-xs text-yellow-400 font-normal" data-testid="cost-chains-truncated">{chainsNote}</span>
                 )}
+                <span className="ml-auto flex gap-1.5 font-normal">
+        {(['day', 'week', 'month'] as const).map(range => (
+          <button
+            key={range}
+            onClick={() => setTimeRange(range)}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+              timeRange === range
+                ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
+                : 'bg-roundtable-steel/50 text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            {range === 'day' ? 'Last 24h' : range === 'week' ? 'Last 7 days' : 'Last 30 days'}
+          </button>
+        ))}
+                </span>
               </h3>
               {chainCostRows.length === 0 ? (
                 <EmptyState title="No chain runs in this range" />
