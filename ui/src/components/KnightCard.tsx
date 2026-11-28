@@ -1,3 +1,4 @@
+import { activatable, FOCUS_RING } from '../lib/activatable'
 import { Shield, Wifi, WifiOff, RotateCw, Cpu, CheckCircle, XCircle, DollarSign } from 'lucide-react'
 import type { Knight } from '../hooks/useFleet'
 import { getKnightConfig } from '../lib/knights'
@@ -94,8 +95,9 @@ export function KnightCard({ knight, onClick, activity, card, showTable, queue }
 
   return (
     <div
-      onClick={onClick}
-      className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-5 hover:border-roundtable-gold/30 transition-all cursor-pointer group relative"
+      {...(onClick ? activatable(onClick) : {})}
+      aria-label={`Open ${knight.name} details`}
+      className={`bg-roundtable-slate border border-roundtable-steel rounded-xl p-5 hover:border-roundtable-gold/30 transition-all cursor-pointer group relative ${FOCUS_RING}`}
     >
       {/* Suspended overlay */}
       {suspended && (

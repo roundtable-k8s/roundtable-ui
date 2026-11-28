@@ -96,6 +96,13 @@ describe('DeadLettersView', () => {
     expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull()
   })
 
+  it('opens the drawer from the keyboard with Enter on a row', async () => {
+    setup([lost])
+    screen.getByTestId('dead-letter-row').focus()
+    await userEvent.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
   it('shows the full error and original task in the drawer', async () => {
     const { onLoadDetail } = setup([lost])
     await userEvent.click(screen.getByTestId('dead-letter-row'))

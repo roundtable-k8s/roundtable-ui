@@ -69,6 +69,16 @@ describe('Toast', () => {
     expect(toast).toHaveClass('border-yellow-500/40', 'bg-yellow-900/30')
   })
 
+  it('puts toasts in a live region and names the dismiss button', async () => {
+    const user = userEvent.setup()
+    render(<ToastProvider><ToastTrigger message="Boom" type="error" /></ToastProvider>)
+    await user.click(screen.getByText('Show Toast'))
+    const region = screen.getByRole('region', { name: 'Notifications' })
+    expect(region).toHaveAttribute('aria-live', 'polite')
+    expect(region).toContainElement(screen.getByRole('alert'))
+    expect(screen.getByRole('button', { name: 'Dismiss notification' })).toBeInTheDocument()
+  })
+
   it('renders error toast with correct styling', async () => {
     const user = userEvent.setup()
     

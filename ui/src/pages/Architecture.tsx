@@ -1,5 +1,7 @@
 import { useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { FOCUS_RING } from '../lib/activatable'
 import { Network, Server, Globe, MessageSquare, Shield, Crown, Cpu } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useFleet } from '../hooks/useFleet'
@@ -18,7 +20,6 @@ interface ComponentNode {
 }
 
 export function ArchitecturePage() {
-  const navigate = useNavigate()
   const { knights, loading: knightsLoading } = useFleet()
   // Tolerate partial failure — render whichever endpoint succeeded
   const rtFetch = usePolledFetch<RoundTable[]>('/api/roundtables', 0, [])
@@ -124,10 +125,8 @@ export function ArchitecturePage() {
         emptyTitle="No architecture data.">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
           {COMPONENTS.map(comp => (
-            <div 
-              key={comp.id} 
-              className={`rounded-xl border p-5 ${comp.color} transition-all hover:scale-[1.02] ${comp.link ? 'cursor-pointer' : ''}`}
-              onClick={() => comp.link && navigate(comp.link)}
+            <Card key={comp.id} link={comp.link}
+              className={`rounded-xl border p-5 block ${comp.color} transition-all hover:scale-[1.02] ${comp.link ? 'cursor-pointer' : ''} ${FOCUS_RING}`}
             >
               <div className="flex items-center gap-3 mb-3">
                 {comp.icon}
@@ -149,7 +148,7 @@ export function ArchitecturePage() {
                   })}
                 </div>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       </ListState>
@@ -181,4 +180,8 @@ export function ArchitecturePage() {
       </div>
     </div>
   )
+}
+
+function Card({ link, className, children }: { link?: string; className: string; children: ReactNode }) {
+  return link ? <Link to={link} className={className}>{children}</Link> : <div className={className}>{children}</div>
 }

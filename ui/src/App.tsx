@@ -169,7 +169,7 @@ export default function App() {
 
       {/* Sidebar */}
       <nav id="main-nav" aria-label="Main" className={`fixed md:relative z-40 h-full w-64 bg-roundtable-slate border-r border-roundtable-steel flex flex-col transition-transform duration-200 ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full invisible md:translate-x-0 md:visible'
       }`}>
         <div className="px-4 pt-4 hidden md:block">
           <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search"

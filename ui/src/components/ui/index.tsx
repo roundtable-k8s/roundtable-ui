@@ -245,6 +245,7 @@ export function Collapsible({ title, defaultOpen = false, children }: {
     <div>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
         className="flex items-center justify-between w-full text-left text-sm text-gray-300 hover:text-white transition-colors"
       >
         <span className="flex items-center gap-2">{title}</span>

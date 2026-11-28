@@ -85,6 +85,7 @@ export function PlanningResultViewer({ result }: PlanningResultViewerProps) {
         <div>
           <button
             onClick={(e) => { e.stopPropagation(); setShowPlanOutput(!showPlanOutput) }}
+            aria-expanded={showPlanOutput}
             className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
           >
             {showPlanOutput ? (

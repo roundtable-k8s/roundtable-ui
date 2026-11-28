@@ -38,6 +38,7 @@ export function ChainCard({ chain, focused = false }: { chain: Chain; focused?: 
     <div ref={cardRef} className={`bg-roundtable-slate border rounded-xl overflow-hidden ${focused ? 'border-roundtable-gold/50' : 'border-roundtable-steel'}`}>
       <button
         onClick={() => setExpanded(e => !e)}
+        aria-expanded={expanded}
         className="w-full min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-4 text-left hover:bg-roundtable-steel/30 transition-colors"
       >
         {expanded
@@ -153,6 +154,7 @@ export function ChainCard({ chain, focused = false }: { chain: Chain; focused?: 
               return (
                 <button key={step.name}
                   onClick={() => setSelectedStep(selectedStep === step.name ? null : step.name)}
+                  aria-pressed={selectedStep === step.name}
                   className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
                     selectedStep === step.name
                       ? 'bg-roundtable-gold/20 border-roundtable-gold/30 text-roundtable-gold'

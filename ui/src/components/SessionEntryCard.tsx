@@ -1,3 +1,4 @@
+import { activatable, FOCUS_RING } from '../lib/activatable'
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { SessionEntry } from '../hooks/useKnightSession'
@@ -18,8 +19,8 @@ function PageCard({ entry }: { entry: SessionEntry }) {
 
   return (
     <div
-      className={`border rounded-lg p-3 cursor-pointer transition-colors ${entryTone(entry).card}`}
-      onClick={() => setExpanded(e => !e)}
+      className={`border rounded-lg p-3 cursor-pointer transition-colors ${entryTone(entry).card} ${FOCUS_RING}`}
+      {...activatable(() => setExpanded(e => !e), expanded)}
     >
       <div className="flex items-center gap-2 text-sm">
         <span className="shrink-0">{entryIcon(entry)}</span>
@@ -63,8 +64,8 @@ function CompactCard({ entry }: { entry: SessionEntry }) {
 
   return (
     <div
-      className="bg-roundtable-slate rounded-lg p-2.5 border border-roundtable-steel/50 cursor-pointer hover:border-roundtable-gold/30 transition-colors"
-      onClick={() => setExpanded(!expanded)}
+      className={`bg-roundtable-slate rounded-lg p-2.5 border border-roundtable-steel/50 cursor-pointer hover:border-roundtable-gold/30 transition-colors ${FOCUS_RING}`}
+      {...activatable(() => setExpanded(e => !e), expanded)}
     >
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">

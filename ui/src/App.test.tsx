@@ -50,6 +50,14 @@ describe('App shell accessibility', { timeout: 15000 }, () => {
     expect(screen.getByRole('button', { name: 'Close menu' }).getAttribute('aria-expanded')).toBe('true')
   })
 
+  it('hides the closed mobile nav from the tab order below md', () => {
+    renderAt('/')
+    const nav = document.getElementById('main-nav')!
+    expect(nav).toHaveClass('invisible', 'md:visible')
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(nav).not.toHaveClass('invisible')
+  })
+
   it('closes the open menu on Escape', () => {
     renderAt('/')
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))

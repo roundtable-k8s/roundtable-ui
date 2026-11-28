@@ -35,6 +35,7 @@ export function CostDetailsPanel({
     <div className="mt-6 bg-roundtable-slate border border-roundtable-steel rounded-xl overflow-hidden">
       <button
         onClick={onToggle}
+        aria-expanded={expanded}
         className="w-full flex flex-wrap items-center justify-between gap-y-2 px-5 py-4 hover:bg-roundtable-steel/20 transition-colors"
       >
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -146,6 +147,7 @@ export function CostDetailsPanel({
         <button
           key={range}
           onClick={() => onTimeRange(range)}
+          aria-pressed={timeRange === range}
           className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
             timeRange === range
               ? 'bg-roundtable-gold/20 text-roundtable-gold border border-roundtable-gold/30'
