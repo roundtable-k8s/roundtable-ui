@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ApiError, DEFAULT_TIMEOUT_MS, apiDelete, apiFetch, apiGet, apiGetText, apiPost, apiPut } from './api'
+import { parseRetryAfter, ApiError, DEFAULT_TIMEOUT_MS, apiDelete, apiFetch, apiGet, apiGetText, apiPost, apiPut } from './api'
 
 const fetchMock = vi.fn()
 
@@ -256,5 +256,24 @@ describe('caller abort after headers', () => {
     const read = response.text()
     ctl.abort()
     await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
+
+describe('parseRetryAfter (#628)', () => {
+  it('reads seconds, HTTP dates and caps at 120 s', () => {
+    expect(parseRetryAfter('30')).toBe(30_000)
+    expect(parseRetryAfter('9999')).toBe(120_000)
+    expect(parseRetryAfter(new Date(1_000_000 + 5000).toUTCString(), 1_000_000)).toBe(5000)
+    expect(parseRetryAfter('garbage')).toBeUndefined()
+    expect(parseRetryAfter(null)).toBeUndefined()
+  })
+})
+
+describe('ApiError retryAfterMs (#628)', () => {
+  it('carries Retry-After from a 429', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{"error":"Rate limit exceeded"}', { status: 429, headers: { 'Retry-After': '30' } }))
+    const e = await apiGet('/api/x').catch((x) => x)
+    expect(e).toBeInstanceOf(ApiError)
+    expect(e.retryAfterMs).toBe(30_000)
   })
 })

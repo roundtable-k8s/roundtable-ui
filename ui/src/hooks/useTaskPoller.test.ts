@@ -17,8 +17,10 @@ function setHidden(hidden: boolean) {
   document.dispatchEvent(new Event('visibilitychange'))
 }
 
-beforeEach(() => { vi.useFakeTimers(); setHidden(false); get.mockReset() })
-afterEach(() => { vi.useRealTimers(); setHidden(false) })
+// The first poll wait is jittered +-10 % (#628); pin it so one interval is exactly one tick.
+let random: ReturnType<typeof vi.spyOn>
+beforeEach(() => { vi.useFakeTimers(); random = vi.spyOn(Math, 'random').mockReturnValue(0.5); setHidden(false); get.mockReset() })
+afterEach(() => { vi.useRealTimers(); random.mockRestore(); setHidden(false) })
 
 function setup(extra: { maxFailures?: number; giveUpOn404?: boolean } = {}, items: Item[] = [{ id: 'a' }, { id: 'done', done: true }]) {
   const onUpdate = vi.fn()

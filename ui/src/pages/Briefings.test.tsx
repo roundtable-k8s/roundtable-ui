@@ -23,14 +23,18 @@ function deferred<T>() {
 }
 
 describe('BriefingsPage', () => {
+  // The first poll wait is jittered +-10 % (#628); pin it so one interval is exactly one tick.
+  let random: ReturnType<typeof vi.spyOn>
   beforeEach(() => {
     vi.clearAllMocks()
+    random = vi.spyOn(Math, 'random').mockReturnValue(0.5)
     apiGetText.mockReset()
     apiGetText.mockResolvedValue('# hi')
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    random.mockRestore()
   })
 
   it('shows an error, not the empty state, when the list fails', async () => {

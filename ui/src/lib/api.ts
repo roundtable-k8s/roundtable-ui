@@ -18,13 +18,32 @@ export class ApiError extends Error {
   readonly status: number
   /** The request field a 400 names, e.g. the gateway's "spec.source.schedule.cron". */
   readonly field?: string
+  /** How long the server asked clients to wait (`Retry-After`), capped at MAX_RETRY_AFTER_MS. */
+  readonly retryAfterMs?: number
 
-  constructor(status: number, message: string, field?: string) {
+  constructor(status: number, message: string, field?: string, retryAfterMs?: number) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.field = field
+    this.retryAfterMs = retryAfterMs
   }
+}
+
+export const MAX_RETRY_AFTER_MS = 120_000
+
+/** A `Retry-After` header (delta-seconds or HTTP date) in ms, capped; undefined when absent or invalid. */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  const v = value?.trim()
+  if (!v) return undefined
+  let ms: number
+  if (/^\d+$/.test(v)) ms = Number(v) * 1000
+  else {
+    const t = Date.parse(v)
+    if (Number.isNaN(t)) return undefined
+    ms = t - now
+  }
+  return Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS)
 }
 
 /** The path of a URL without its query string or fragment, for messages. */
@@ -60,7 +79,7 @@ async function toApiError(res: Response): Promise<ApiError> {
       ? `Not signed in or not allowed (${res.status}${res.statusText ? ` ${res.statusText}` : ''})`
       : `${res.status} ${res.statusText}`
   }
-  return new ApiError(res.status, message, field)
+  return new ApiError(res.status, message, field, parseRetryAfter(res.headers?.get('Retry-After')))
 }
 
 /**

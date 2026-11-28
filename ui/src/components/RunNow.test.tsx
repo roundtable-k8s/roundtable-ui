@@ -13,8 +13,10 @@ vi.mock('../lib/api', () => ({
 const renderIt = () => render(<MemoryRouter><RunNow chain="nightly scan" namespace="ns1" /></MemoryRouter>)
 const click = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Run now/ })) }) }
 
-beforeEach(() => { vi.useFakeTimers(); apiGet.mockReset(); apiPost.mockReset() })
-afterEach(() => { vi.useRealTimers() })
+// The first poll wait is jittered +-10 % (#628); pin it so one interval is exactly one tick.
+let random: ReturnType<typeof vi.spyOn>
+beforeEach(() => { vi.useFakeTimers(); random = vi.spyOn(Math, 'random').mockReturnValue(0.5); apiGet.mockReset(); apiPost.mockReset() })
+afterEach(() => { vi.useRealTimers(); random.mockRestore() })
 
 describe('RunNow', () => {
   it('starts a run with the namespace and no input when blank', async () => {

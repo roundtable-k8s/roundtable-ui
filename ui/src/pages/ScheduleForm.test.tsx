@@ -49,7 +49,11 @@ function renderAt(path: string) {
 const yaml = () => screen.getByTestId('schedule-yaml').textContent ?? ''
 const change = (label: RegExp | string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
 
+// The first poll wait is jittered +-10 % (#628); pin it so one interval is exactly one tick.
+let random: ReturnType<typeof vi.spyOn>
+afterEach(() => { random.mockRestore() })
 beforeEach(() => {
+  random = vi.spyOn(Math, 'random').mockReturnValue(0.5)
   mockGet.mockReset()
   mockPost.mockReset()
   mockPut.mockReset()
