@@ -247,3 +247,154 @@ func TestIdempotencyKeyRejectsRepeatedHeader(t *testing.T) {
 		t.Fatalf("got %d, gateway calls %d", w.Code, len(f.calls))
 	}
 }
+
+// sseTestLimits swaps the relay limits and lifecycle for one test.
+func sseTestLimits(t *testing.T, idle, max time.Duration, slots int) *wsLifecycle {
+	t.Helper()
+	oi, om, os_, ol := sseIdleTimeout, sseMaxDuration, sseSlots, wsLife
+	sseIdleTimeout, sseMaxDuration, sseSlots = idle, max, make(chan struct{}, slots)
+	wsLife = newWSLifecycle()
+	t.Cleanup(func() { sseIdleTimeout, sseMaxDuration, sseSlots, wsLife = oi, om, os_, ol })
+	return wsLife
+}
+
+func sseGateway(t *testing.T, h func(r *http.Request, w http.ResponseWriter)) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h(r, w) }))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func sseRouter(g *gatewayClient) *mux.Router {
+	r := chatRouter(g)
+	r.HandleFunc("/api/chains/runs/{namespace}/{run}/events", chainRunEventsHandler(g)).Methods("GET")
+	return r
+}
+
+func TestSSEForwardsLastEventID(t *testing.T) {
+	sseTestLimits(t, time.Minute, time.Minute, 5)
+	var got string
+	srv := sseGateway(t, func(r *http.Request, w http.ResponseWriter) {
+		got = r.Header.Get("Last-Event-ID")
+		io.WriteString(w, "id: 5\ndata: x\n\n")
+	})
+	r := sseRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	req := httptest.NewRequest("GET", "/api/chat/tasks/t1/events", nil)
+	req.Header.Set("Last-Event-ID", "4")
+	r.ServeHTTP(httptest.NewRecorder(), req)
+	if got != "4" {
+		t.Errorf("Last-Event-ID %q", got)
+	}
+	got = "unset"
+	req = httptest.NewRequest("GET", "/api/chat/tasks/t1/events", nil)
+	req.Header.Set("Last-Event-ID", strings.Repeat("a", 129))
+	r.ServeHTTP(httptest.NewRecorder(), req)
+	if got != "" {
+		t.Errorf("oversized id forwarded: %q", got)
+	}
+}
+
+func TestSSEIdleEndsAndReleasesSlot(t *testing.T) {
+	sseTestLimits(t, 100*time.Millisecond, time.Minute, 1)
+	srv := sseGateway(t, func(r *http.Request, w http.ResponseWriter) {
+		io.WriteString(w, ": heartbeat\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	r := sseRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	done := make(chan struct{})
+	go func() {
+		doReq(r, "GET", "/api/chat/tasks/t1/events", "")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("idle relay did not end")
+	}
+	if len(sseSlots) != 0 {
+		t.Errorf("slot not released: %d", len(sseSlots))
+	}
+}
+
+func TestSSEShutdownEnds(t *testing.T) {
+	life := sseTestLimits(t, time.Minute, time.Minute, 1)
+	srv := sseGateway(t, func(r *http.Request, w http.ResponseWriter) {
+		io.WriteString(w, "data: a\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	r := sseRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	rec := make(chan string, 1)
+	go func() { rec <- doReq(r, "GET", "/api/chat/tasks/t1/events", "").Body.String() }()
+	time.Sleep(200 * time.Millisecond)
+	life.begin()
+	select {
+	case body := <-rec:
+		if !strings.Contains(body, ": server shutting down") {
+			t.Errorf("body %q", body)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("shutdown did not end relay")
+	}
+}
+
+func TestSSECapAnswers429(t *testing.T) {
+	sseTestLimits(t, time.Minute, time.Minute, 1)
+	release := make(chan struct{})
+	srv := sseGateway(t, func(r *http.Request, w http.ResponseWriter) {
+		io.WriteString(w, "data: a\n\n")
+		w.(http.Flusher).Flush()
+		<-release
+	})
+	r := sseRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	first := make(chan struct{})
+	go func() { doReq(r, "GET", "/api/chat/tasks/t1/events", ""); close(first) }()
+	waitFor(t, func() bool { return len(sseSlots) == 1 })
+	w := doReq(r, "GET", "/api/chat/tasks/t2/events", "")
+	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") != "5" ||
+		!strings.Contains(w.Body.String(), `"error"`) {
+		t.Errorf("got %d %v %s", w.Code, w.Header(), w.Body)
+	}
+	close(release)
+	<-first
+}
+
+func TestSSEPassesGatewayErrors(t *testing.T) {
+	sseTestLimits(t, time.Minute, time.Minute, 5)
+	srv := sseGateway(t, func(r *http.Request, w http.ResponseWriter) {
+		if r.URL.Path == "/v1/tasks/t1/events" {
+			w.Header().Set("Retry-After", "7")
+			w.WriteHeader(http.StatusTooManyRequests)
+			io.WriteString(w, `{"error":"too many open event streams"}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, `{"error":"task gone"}`)
+	})
+	r := sseRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	w := doReq(r, "GET", "/api/chat/tasks/t1/events", "")
+	if w.Code != 429 || w.Header().Get("Retry-After") != "7" || !strings.Contains(w.Body.String(), "too many open event streams") {
+		t.Errorf("429: %d %v %s", w.Code, w.Header(), w.Body)
+	}
+	w = doReq(r, "GET", "/api/chat/tasks/t2/events", "")
+	if w.Code != 404 || !strings.Contains(w.Body.String(), "task gone") {
+		t.Errorf("404: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestChainRunEventsRelays(t *testing.T) {
+	sseTestLimits(t, time.Minute, time.Minute, 5)
+	var gotPath string
+	srv := sseGateway(t, func(r *http.Request, w http.ResponseWriter) {
+		gotPath = r.URL.Path
+		io.WriteString(w, "event: step\ndata: {\"n\":1}\n\n")
+	})
+	r := sseRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+	w := doReq(r, "GET", "/api/chains/runs/ns1/run-1/events", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "event: step") || gotPath != "/v1/runs/ns1/run-1/events" {
+		t.Errorf("got %d %s %q", w.Code, w.Body, gotPath)
+	}
+	if w := doReq(r, "GET", "/api/chains/runs/NS!/run-1/events", ""); w.Code != 400 {
+		t.Errorf("invalid ns: %d", w.Code)
+	}
+}
