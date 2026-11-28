@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, Link2, CheckCircle, XCircle, Zap, Hash } from 'lucide-react'
-import { apiGet, ApiError } from '../lib/api'
+import { usePolledFetch } from '../hooks/usePolledFetch'
 import type { ChainStatus, KnightStatus } from '../hooks/useMissions'
 import { getKnightConfig } from '../lib/knights'
 import { phaseColor } from '../lib/status'
@@ -9,31 +8,13 @@ import { CostTag } from './CostTag'
 import { tokensText } from '../lib/cost'
 
 export function MissionResults({ name }: { name: string }) {
-  const [data, setData] = useState<Record<string, unknown> | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [notFound, setNotFound] = useState(false)
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    setData(null)
-    setError(null)
-    setNotFound(false)
-    setLoading(true)
-    apiGet<Record<string, unknown>>(`/api/missions/${encodeURIComponent(name)}/results`, { signal: ctrl.signal })
-      .then(d => { if (!ctrl.signal.aborted) setData(d) })
-      .catch(e => {
-        if (ctrl.signal.aborted) return
-        if (e instanceof ApiError && e.status === 404) setNotFound(true)
-        else setError(e instanceof Error ? e.message : String(e))
-      })
-      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
-    return () => ctrl.abort()
-  }, [name])
+  const { data, loading, error, errorStatus } = usePolledFetch<Record<string, unknown> | null>(
+    `/api/missions/${encodeURIComponent(name)}/results`, 0, null)
+  const notFound = errorStatus === 404
 
   if (loading) return <p className="text-xs text-gray-500 py-2">Loading results...</p>
   if (notFound) return <p className="text-xs text-gray-500 py-2">No results stored yet</p>
-  if (error) return <p className="text-xs text-red-400 py-2">Could not load results: {error}</p>
+  if (error && !notFound) return <p className="text-xs text-red-400 py-2">Could not load results: {error}</p>
 
   return (
     <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-64 overflow-auto bg-roundtable-navy rounded p-3 border border-roundtable-gold/20">

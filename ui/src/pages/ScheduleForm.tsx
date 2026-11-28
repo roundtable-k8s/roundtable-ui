@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarClock, Check, Copy, GitBranch, Link2, Save, Shield, Target } from 'lucide-react'
 import { apiGet, apiPost, apiPut, ApiError } from '../lib/api'
 import { useCards } from '../hooks/useCards'
+import { usePolledFetch } from '../hooks/usePolledFetch'
+import { useConfig } from '../hooks/useConfig'
 import { useTables } from '../hooks/useTables'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { PageHeader, ErrorBanner, Spinner, Button, LinkButton } from '../components/ui'
@@ -155,7 +157,8 @@ function ScheduleFormBody() {
   const [managedBy, setManagedBy] = useState<Schedule['managedBy'] | ''>('')
   const [loading, setLoading] = useState(editing)
   const [loadError, setLoadError] = useState('')
-  const [chains, setChains] = useState<Chain[]>([])
+  const chainsResp = usePolledFetch<Chain[] | null>(CHAINS_URL, 0, null).data
+  const chains = useMemo(() => (Array.isArray(chainsResp) ? chainsResp : []), [chainsResp])
   const [errors, setErrors] = useState<Errors>({})
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -164,17 +167,12 @@ function ScheduleFormBody() {
 
   useVisibleInterval(() => setNow(new Date()), 60_000)
 
-  useEffect(() => {
-    apiGet<Chain[]>(CHAINS_URL).then((c) => setChains(Array.isArray(c) ? c : [])).catch(() => setChains([]))
-  }, [])
-
   // A new schedule goes to the dashboard's namespace unless one is typed.
+  const configNamespace = useConfig().namespace
   useEffect(() => {
-    if (editing) return
-    apiGet<{ namespace?: string }>('/api/config')
-      .then((c) => { if (c?.namespace) setForm((f) => (f.namespace ? f : { ...f, namespace: c.namespace as string })) })
-      .catch(() => {})
-  }, [editing])
+    if (editing || !configNamespace) return
+    setForm((f) => (f.namespace ? f : { ...f, namespace: configNamespace }))
+  }, [editing, configNamespace])
 
   useEffect(() => {
     if (!editing) return

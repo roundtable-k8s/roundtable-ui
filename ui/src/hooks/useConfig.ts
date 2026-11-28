@@ -3,6 +3,8 @@ import { apiGet } from '../lib/api'
 
 export interface AppConfig {
   fleetPrefix?: string
+  /** Namespace the dashboard runs in; new schedules default to it. */
+  namespace?: string
   /** Trace viewer URL with a {traceId} placeholder; absent when not configured. */
   traceUrlTemplate?: string
 }

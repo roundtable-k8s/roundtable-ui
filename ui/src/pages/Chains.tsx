@@ -15,6 +15,7 @@ import { CostTag } from '../components/CostTag'
 import { RunCostTable } from '../components/RunCostTable'
 import { ChainTimeline } from '../components/ChainTimeline'
 import { tokensText } from '../lib/cost'
+import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
@@ -489,26 +490,19 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
  * is used as is.
  */
 function useChainDetail(chain: Chain, expanded: boolean): { view: Chain | null; error: string } {
-  const [detail, setDetail] = useState<Chain | null>(null)
-  const [error, setError] = useState('')
+  const { data: detail, error, refresh } = usePolledFetch<Chain | null>(
+    expanded && chain.slim ? chainDetailUrl(chain.name) : null, 0, null)
+  // Refetch when the slim list item moves on (phase/step), keyed on those
+  // rather than the object: the list poll hands over a new object each time.
+  const seen = useRef(`${chain.phase}/${chain.currentStep}`)
   useEffect(() => {
-    if (!expanded || !chain.slim) return
-    const controller = new AbortController()
-    apiGet<Chain>(chainDetailUrl(chain.name), { signal: controller.signal })
-      .then(d => {
-        if (controller.signal.aborted) return
-        setDetail(d)
-        setError('')
-      })
-      .catch(e => {
-        if (e?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load chain')
-      })
-    return () => controller.abort()
-  // Keyed on identity, phase and step rather than the object: the list poll
-  // hands over a new object each time.
-  }, [expanded, chain.slim, chain.name, chain.namespace, chain.phase, chain.currentStep])
+    const key = `${chain.phase}/${chain.currentStep}`
+    if (seen.current === key) return
+    seen.current = key
+    if (expanded && chain.slim) void refresh()
+  }, [chain.phase, chain.currentStep, chain.slim, expanded, refresh])
   if (!chain.slim) return { view: chain, error: '' }
-  return { view: detail && detail.name === chain.name ? detail : null, error }
+  return { view: detail && detail.name === chain.name ? detail : null, error: error ?? '' }
 }
 
 /** "Cancel run" for a gateway-started run copy that has not finished. The
@@ -813,7 +807,8 @@ export function ChainsPage() {
   const [storedTotal, setStoredTotal] = useState<KeyedTotal | null>(null)
   const listTotal = totalFor(storedTotal, withTable(CHAINS_LIST_URL, table))
   const [groups, setGroups] = useState<ChainRunGroup[]>([])
-  const [focusDetail, setFocusDetail] = useState<Chain | null>(null)
+  const focusData = usePolledFetch<Chain | null>(focusChain ? chainDetailUrl(focusChain) : null, 0, null).data
+  const focusDetail = focusData?.name ? focusData : null
   const [refreshToken, setRefreshToken] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -896,16 +891,6 @@ export function ChainsPage() {
 
   // A deep-linked chain may be a run copy (not in the list): fetch it so its
   // group opens with it, or show it on its own.
-  useEffect(() => {
-    setFocusDetail(null)
-    if (!focusChain) return
-    const controller = new AbortController()
-    apiGet<Chain>(chainDetailUrl(focusChain), { signal: controller.signal })
-      .then(c => { if (!controller.signal.aborted && c?.name) setFocusDetail(c) })
-      .catch(() => { /* not found: nothing to focus */ })
-    return () => controller.abort()
-  }, [focusChain])
-
   // Slow fallback poll only while the live feed is down; paused when hidden (#22)
   useEffect(() => {
     if (connected) return

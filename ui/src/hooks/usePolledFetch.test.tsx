@@ -177,4 +177,43 @@ describe('usePolledFetch', () => {
     rerender({ url: '/api/b' })
     expect(result.current.updatedAt).toBeNull()
   })
+
+  it('does not fetch for a null url', async () => {
+    const { result } = renderHook(() => usePolledFetch<string[]>(null, 1000, ['init']))
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(result.current.data).toEqual(['init'])
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('fetches once per url when intervalMs <= 0', async () => {
+    mockGet.mockResolvedValue(['a'])
+    const { result, rerender } = renderHook(({ url }) => usePolledFetch<string[]>(url, 0, []), { initialProps: { url: '/api/a' } })
+    expect(result.current.loading).toBe(true)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+    expect(mockGet).toHaveBeenCalledTimes(1)
+    expect(result.current.data).toEqual(['a'])
+    expect(result.current.loading).toBe(false)
+    rerender({ url: '/api/b' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(mockGet).toHaveBeenCalledTimes(2)
+  })
+
+  it('refresh() refetches in one-shot mode', async () => {
+    mockGet.mockResolvedValue(['a'])
+    const { result } = renderHook(() => usePolledFetch<string[]>('/api/a', 0, []))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    mockGet.mockResolvedValue(['b'])
+    await act(async () => { await result.current.refresh() })
+    expect(mockGet).toHaveBeenCalledTimes(2)
+    expect(result.current.data).toEqual(['b'])
+  })
+
+  it('starts fetching when a null url becomes a url', async () => {
+    mockGet.mockResolvedValue(['x'])
+    const { result, rerender } = renderHook(({ url }) => usePolledFetch<string[]>(url, 0, []), { initialProps: { url: null as string | null } })
+    rerender({ url: '/api/x' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.data).toEqual(['x'])
+  })
 })

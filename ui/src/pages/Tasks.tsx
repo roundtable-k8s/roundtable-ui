@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Scroll, Clock } from 'lucide-react'
 import { apiGet, apiPost } from '../lib/api'
+import { usePolledFetch } from '../hooks/usePolledFetch'
 import { SubmissionKey } from '../lib/submissionKey'
 import { getKnightConfig } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
@@ -199,7 +200,8 @@ export function TasksPage() {
   const submission = useRef(new SubmissionKey())
   const [results, setResults] = useState<DispatchedTask[]>(loadStored)
   // Every RoundTable the API covers (#239), for the history filter
-  const [tables, setTables] = useState<TableInfo[]>([])
+  const tablesResp = usePolledFetch<{ tables?: TableInfo[] } | null>('/api/tables', 0, null).data
+  const tables = useMemo(() => tablesResp?.tables ?? [], [tablesResp])
   // Shared table filter (?table=); '' = all tables
   const { table: tableFilter } = useTableFilter()
   const { events } = useWebSocket()
@@ -216,12 +218,6 @@ export function TasksPage() {
   const config = getKnightConfig(effective)
   const domain = selected?.domain ?? ''
   const rows = useMemo(() => taskRows(events, tables, tableFilter), [events, tables, tableFilter])
-
-  useEffect(() => {
-    apiGet<{ tables?: TableInfo[] }>('/api/tables')
-      .then((data) => setTables(data.tables ?? []))
-      .catch(() => {})
-  }, [])
 
   // Consecutive failed polls per task id
   const failures = useRef(new Map<string, number>())

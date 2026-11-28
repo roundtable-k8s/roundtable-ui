@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Network, Server, Globe, MessageSquare, Shield, Crown, Cpu } from 'lucide-react'
-import { apiGet } from '../lib/api'
+import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useFleet } from '../hooks/useFleet'
 import type { RoundTable } from '../lib/types'
 import { PageHeader, RefreshButton, ListState } from '../components/ui'
@@ -20,32 +20,20 @@ interface ComponentNode {
 export function ArchitecturePage() {
   const navigate = useNavigate()
   const { knights, loading: knightsLoading } = useFleet()
-  const [roundTables, setRoundTables] = useState<RoundTable[]>([])
-  const [missions, setMissions] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadedOnce, setLoadedOnce] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'unreachable'>('checking')
+  // Tolerate partial failure — render whichever endpoint succeeded
+  const rtFetch = usePolledFetch<RoundTable[]>('/api/roundtables', 0, [])
+  const msFetch = usePolledFetch<any[]>('/api/missions', 0, [])
+  const roundTables = rtFetch.data
+  const missions = msFetch.data
+  const loading = rtFetch.loading || msFetch.loading
+  const loadedOnce = !loading
+  const failure = rtFetch.error ?? msFetch.error
+  const error = failure
+  const apiStatus: 'checking' | 'connected' | 'unreachable' =
+    rtFetch.updatedAt || msFetch.updatedAt ? 'connected' : loading ? 'checking' : 'unreachable'
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    // Tolerate partial failure — render whichever endpoint succeeded
-    const [rt, ms] = await Promise.allSettled([
-      apiGet<RoundTable[]>('/api/roundtables'),
-      apiGet<any[]>('/api/missions'),
-    ])
-    if (rt.status === 'fulfilled') setRoundTables(rt.value)
-    if (ms.status === 'fulfilled') setMissions(ms.value)
-    setApiStatus(rt.status === 'fulfilled' || ms.status === 'fulfilled' ? 'connected' : 'unreachable')
-    const failure = [rt, ms].find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
-    setError(failure ? (failure.reason instanceof Error ? failure.reason.message : 'Unknown error') : null)
-    setLoading(false)
-    setLoadedOnce(true)
-  }, [])
-
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  const fetchData = useCallback(() => Promise.all([rtFetch.refresh(), msFetch.refresh()]),
+    [rtFetch.refresh, msFetch.refresh])
 
   const knightCount = knights.length
   const onlineKnights = knights.filter(k => k.status === 'online').length
