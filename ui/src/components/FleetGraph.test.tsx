@@ -96,3 +96,23 @@ describe('buildEdges with hyphenated knights', () => {
     }
   })
 })
+
+describe('fleet domains', () => {
+  const fleetUi = [
+    { name: 'rt-ui', domain: 'ui', status: 'online' },
+    { name: 'kay', domain: 'research', status: 'online' },
+  ] as unknown as Knight[]
+  it('marks a knight outside the built-in table busy after its task', async () => {
+    render(<FleetGraph knights={fleetUi} events={[taskEvent('ui', '', 't1')]} connected knightStatuses={{ 'rt-ui': 'online' }} />)
+    expect(await screen.findByText('busy')).toBeInTheDocument()
+  })
+  it('does not attribute a shared domain', () => {
+    const shared = fleetUi.map((k) => ({ ...k, domain: 'ui' })) as unknown as Knight[]
+    render(<FleetGraph knights={shared} events={[taskEvent('ui', '', 't1')]} connected knightStatuses={{ 'rt-ui': 'online' }} />)
+    expect(screen.queryByText('busy')).toBeNull()
+  })
+  it('buildEdges uses the domain index', () => {
+    const edges = buildEdges(['rt-ui'], [taskEvent('ui', '', 't1')], new Map([['ui', 'rt-ui']]))
+    expect(edges.find((e) => e.source === 'tim' && e.target === 'rt-ui')?.animated ?? edges.length).toBeTruthy()
+  })
+})

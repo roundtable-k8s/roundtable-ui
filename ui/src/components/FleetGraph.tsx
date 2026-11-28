@@ -14,7 +14,7 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { buildKnightConfigFromFleet, getKnightConfig, knightNameForDomain } from '../lib/knights'
+import { buildKnightConfigFromFleet, getKnightConfig, knightNameForDomain, domainIndex } from '../lib/knights'
 import { parseEvent } from '../lib/events'
 import type { NatsEvent } from '../hooks/useWebSocket'
 import type { Knight } from '../hooks/useFleet'
@@ -177,6 +177,7 @@ function layoutNodes(
 export function buildEdges(
   knightNames: string[],
   recentEvents: NatsEvent[],
+  domains?: ReadonlyMap<string, string>,
 ): Edge[] {
   const nodeIds = new Set(['tim', ...knightNames])
   const edges: Edge[] = []
@@ -197,13 +198,13 @@ export function buildEdges(
   // "coder-1" resolve to the right node.
   const pairs = new Map<string, { src: string; tgt: string; count: number }>()
   for (const event of recentEvents.slice(0, 50)) {
-    const parsed = parseEvent(event)
+    const parsed = parseEvent(event, domains)
     const isTask = event.type === 'task'
     const knight = parsed.knight
     if (!knight) continue
 
     const from = (parsed.data.from as string) || ''
-    const sourceKnight = knightNameForDomain(from)
+    const sourceKnight = domains?.get(from) ?? knightNameForDomain(from)
 
     let src: string
     let tgt: string
@@ -280,6 +281,9 @@ export function FleetGraph({ knights, events, connected, knightStatuses = NO_STA
   const nameKey = knights.map(k => k.name).join('\n')
   const knightNames = useMemo(() => (nameKey ? nameKey.split('\n') : []), [nameKey])
   const knightConfig = useMemo(() => buildKnightConfigFromFleet(knights), [knights])
+  const domainKey = knights.map(k => `${k.name}\t${k.domain ?? ''}`).join('\n')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the joined name/domain pairs so a poll with the same fleet keeps identity
+  const domains = useMemo(() => domainIndex(knights), [domainKey])
 
   // Compute activity from events
   const activity = useMemo(() => {
@@ -297,7 +301,7 @@ export function FleetGraph({ knights, events, connected, knightStatuses = NO_STA
 
     // Process events to compute activity
     for (const event of events) {
-      const parsed = parseEvent(event)
+      const parsed = parseEvent(event, domains)
       const knight = parsed.knight
       if (!knight || !act[knight]) continue
 
@@ -320,7 +324,7 @@ export function FleetGraph({ knights, events, connected, knightStatuses = NO_STA
     }
 
     return act
-  }, [events, knightStatuses, knightNames])
+  }, [events, knightStatuses, knightNames, domains])
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -368,11 +372,11 @@ export function FleetGraph({ knights, events, connected, knightStatuses = NO_STA
     if (knightNames.length === 0) return
     if (edgeTimerRef.current) clearTimeout(edgeTimerRef.current)
     edgeTimerRef.current = setTimeout(() => {
-      const newEdges = buildEdges(knightNames, events)
+      const newEdges = buildEdges(knightNames, events, domains)
       setEdges(newEdges)
     }, 300)
     return () => { if (edgeTimerRef.current) clearTimeout(edgeTimerRef.current) }
-  }, [events, setEdges, knightNames])
+  }, [events, setEdges, knightNames, domains])
 
   // Drop edges whose endpoints are gone while the debounced rebuild is pending
   const visibleEdges = useMemo(() => {

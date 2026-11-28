@@ -38,6 +38,7 @@ interface Accumulator {
 export function computeKnightActivity(
   events: readonly NatsEvent[],
   now: number,
+  domains?: ReadonlyMap<string, string>,
 ): Record<string, KnightActivity> {
   const intervalMs = ACTIVITY_WINDOW_MS / SPARKLINE_BUCKETS
   const acc = new Map<string, Accumulator>()
@@ -46,7 +47,7 @@ export function computeKnightActivity(
     const ts = new Date(event.timestamp).getTime()
     if (Number.isNaN(ts) || now - ts > ACTIVITY_WINDOW_MS) continue
 
-    const name = parseEvent(event).knight
+    const name = parseEvent(event, domains).knight
     if (!name) continue
 
     let a = acc.get(name)

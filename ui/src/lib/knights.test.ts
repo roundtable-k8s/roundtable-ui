@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { KNIGHT_CONFIG, buildKnightConfigFromFleet, getKnightConfig, knightNameForDomain } from './knights'
+import { KNIGHT_CONFIG, buildKnightConfigFromFleet, getKnightConfig, knightNameForDomain, domainIndex } from './knights'
 
 describe('buildKnightConfigFromFleet', () => {
   it('keeps the built-in config and does not mutate it', () => {
@@ -37,5 +37,18 @@ describe('knightNameForDomain', () => {
   })
   it('returns null when nothing matches', () => {
     expect(knightNameForDomain('nope')).toBeNull()
+  })
+})
+
+describe('domainIndex', () => {
+  it('maps a domain to its only knight', () => {
+    const idx = domainIndex([{ name: 'rt-ui', domain: 'ui' }, { name: 'kay', domain: 'research' }])
+    expect(idx.get('ui')).toBe('rt-ui')
+    expect(idx.get('research')).toBe('kay')
+  })
+  it('drops a domain shared by several knights and ignores empty domains', () => {
+    const idx = domainIndex([{ name: 'a', domain: 'coding' }, { name: 'b', domain: 'coding' }, { name: 'c', domain: '' }])
+    expect(idx.has('coding')).toBe(false)
+    expect(idx.size).toBe(0)
   })
 })

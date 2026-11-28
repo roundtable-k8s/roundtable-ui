@@ -11,7 +11,7 @@ import { SESSION_TIMEOUT_MS } from '../hooks/useKnightSession'
 import { useWebSocket, eventKey } from '../hooks/useWebSocket'
 import { useRunning } from '../hooks/useRunning'
 import { countByStatus } from '../lib/running'
-import { getKnightConfig } from '../lib/knights'
+import { getKnightConfig, domainIndex } from '../lib/knights'
 import { parseEvent, eventListKeys, uniqueKeys } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
 import { FirstRun } from '../components/FirstRun'
@@ -113,6 +113,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   // live result arrives for such a knight, re-fetch just that knight's session
   // cost, debounced so a burst of results coalesces into one fetch per knight.
   const sessionKnightsRef = useRef<Set<string>>(new Set())
+  const fleetDomains = useMemo(() => domainIndex(knights), [knights])
   const fleetNames = useMemo(() => new Set(knights.map((k) => k.name)), [knights])
   // Only knights in the current fleet list (the selected table) count.
   const listedSessionCosts = useMemo(
@@ -417,7 +418,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
           </div>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {(() => { const recent = events.slice(0, 10); const keys = eventListKeys(recent); return recent.map((e, i) => {
-              const { knight, domain } = parseEvent(e)
+              const { knight, domain } = parseEvent(e, fleetDomains)
               const cfg = knight ? getKnightConfig(knight) : null
               return (
                 <div key={keys[i]} className="flex items-center gap-2 text-xs py-1">

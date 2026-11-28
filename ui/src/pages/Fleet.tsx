@@ -9,7 +9,7 @@ import { KnightCard } from '../components/KnightCard'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
 import { FirstRun } from '../components/FirstRun'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { getKnightConfig } from '../lib/knights'
+import { getKnightConfig, domainIndex } from '../lib/knights'
 import { parseEvent, resultFailureReason, eventListKeys } from '../lib/events'
 import { computeKnightActivity } from '../lib/knightActivity'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
@@ -110,7 +110,8 @@ export function FleetPage() {
     if (knightParam) setParam('knight', '')
   }
 
-  const knightActivity = useMemo(() => computeKnightActivity(events, Date.now()), [events])
+  const domains = useMemo(() => domainIndex(knights), [knights])
+  const knightActivity = useMemo(() => computeKnightActivity(events, Date.now(), domains), [events, domains])
 
   // Aggregate costs from result events (#40)
   const costStats = useMemo(() => {

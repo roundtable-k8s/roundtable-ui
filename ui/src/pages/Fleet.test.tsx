@@ -19,7 +19,8 @@ let fleetLoading = false
 vi.mock('../hooks/useFleet', () => ({
   useFleet: () => ({ knights, loading: fleetLoading, error: fleetError, refresh: vi.fn() }),
 }))
-vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: [] }) }))
+let wsEvents: unknown[] = []
+vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events: wsEvents }) }))
 let loads: KnightLoadMap = new Map()
 vi.mock('../hooks/useKnightLoad', async (orig) => ({
   ...(await orig<typeof import('../hooks/useKnightLoad')>()),
@@ -39,6 +40,7 @@ beforeEach(() => {
   knights = [k('galahad', 'security'), k('patsy', 'vault'), k('kay', 'research')]
   fleetError = null
   fleetLoading = false
+  wsEvents = []
   loads = new Map()
   cards = new Map([
     [cardKey('personal', 'galahad'), galahadCard],
@@ -272,5 +274,21 @@ describe('Fleet load filter (#579)', () => {
     expect(screen.queryByLabelText('Filter by load')).toBeNull()
     expect(screen.queryAllByTestId('knight-queue')).toHaveLength(0)
     expect(names()).toEqual(['galahad', 'kay', 'patsy'])
+  })
+})
+
+describe('Fleet task attribution', () => {
+  const taskEvent = { type: 'task', subject: 'fleet.tasks.ui.t1', data: {}, timestamp: new Date().toISOString(), live: true }
+  it('shows a knight outside the built-in table as working', () => {
+    knights = [k('rt-ui', 'ui'), k('kay', 'research')]
+    wsEvents = [taskEvent]
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.getAllByText('Working...')).toHaveLength(1)
+  })
+  it('attributes nothing when two knights share the domain', () => {
+    knights = [k('rt-ui', 'ui'), k('rt-ui-2', 'ui')]
+    wsEvents = [taskEvent]
+    render(<MemoryRouter><FleetPage /></MemoryRouter>)
+    expect(screen.queryByText('Working...')).toBeNull()
   })
 })
