@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useUrlParams } from '../hooks/useUrlParams'
 import { MessageSquare, Send, Activity } from 'lucide-react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { apiGet, apiPost, ApiError } from '../lib/api'
+import { usePolledFetch } from '../hooks/usePolledFetch'
 import { SubmissionKey } from '../lib/submissionKey'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
 import { UntrustedText } from '../components/UntrustedText'
@@ -23,8 +24,8 @@ const CHAT_DEFAULTS = { knight: '', ns: '', run: '' }
 
 export function ChatPage() {
   const [{ knight, ns: namespace, run: runId }, update] = useUrlParams(CHAT_DEFAULTS)
-  const [knights, setKnights] = useState<ChatKnight[]>([])
-  const [knightsError, setKnightsError] = useState<string | null>(null)
+  const { data: knightsRaw, error: knightsError, refresh: refreshKnights } = usePolledFetch<unknown>('/api/chat/knights', 0, null)
+  const knights = useMemo<ChatKnight[]>(() => parseKnights(knightsRaw), [knightsRaw])
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [message, setMessage] = useState('')
   const [model, setModel] = useState('')
@@ -37,16 +38,6 @@ export function ChatPage() {
   const generation = useRef(0)
   const [staleIds, setStaleIds] = useState<Set<number>>(new Set())
   const staleTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
-  const [knightsAttempt, setKnightsAttempt] = useState(0)
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    setKnightsError(null)
-    apiGet<unknown>('/api/chat/knights', { signal: ctrl.signal })
-      .then((d) => setKnights(parseKnights(d)))
-      .catch((e: Error) => { if (!ctrl.signal.aborted) setKnightsError(e.message) })
-    return () => ctrl.abort()
-  }, [knightsAttempt])
 
   useEffect(() => {
     const timers = staleTimers.current
@@ -152,7 +143,7 @@ export function ChatPage() {
       {knightsError && (
         <ErrorBanner>
           {knightsError}{' '}
-          <button type="button" className="underline" onClick={() => setKnightsAttempt((n) => n + 1)}>Retry</button>
+          <button type="button" className="underline" onClick={() => { void refreshKnights() }}>Retry</button>
         </ErrorBanner>
       )}
       <div className="flex flex-wrap items-end gap-3">
