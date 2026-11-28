@@ -2,6 +2,11 @@ import { usePolledFetch } from './usePolledFetch'
 import { useTableFilter } from './useTableFilter'
 import { withTable } from '../lib/tables'
 
+/** status values the API produces */
+export type KnightStatusValue = 'online' | 'offline' | 'starting' | 'scaled-to-zero'
+/** KnightStatusValue plus 'busy', which the client derives from queue load */
+export type DisplayStatus = KnightStatusValue | 'busy'
+
 export interface KnightCondition {
   type: string
   status: string
@@ -98,16 +103,14 @@ export interface Knight {
   table?: string
   name: string
   domain: string
-  status: 'online' | 'offline' | 'starting' | 'busy' | 'scaled-to-zero'
+  status: KnightStatusValue
   ready: boolean
   restarts: number
   age: string
   createdAt?: string  // RFC 3339; pod (or Knight CR when no pod) creation time
   startedAt?: string  // RFC 3339; container start time (uptime basis)
   image: string
-  skills: number           // keep for backward compat
   skillsList?: string[]    // actual skill names from CRD
-  nixTools: number         // keep for backward compat
   generatedSkills?: GeneratedSkill[]
   labels: Record<string, string>
   // fields from Knight CRD:

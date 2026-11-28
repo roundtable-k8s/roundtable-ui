@@ -44,8 +44,7 @@ export function LivePage() {
         restarts: 0,
         age: '—',
         image: '',
-        skills: 0,
-        nixTools: 0,
+       
         labels: {},
       } })
     }

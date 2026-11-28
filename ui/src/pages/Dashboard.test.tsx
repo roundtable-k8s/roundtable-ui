@@ -19,8 +19,7 @@ vi.mock('../hooks/useFleet', () => ({
         restarts: 0,
         age: '2h',
         image: 'knight:latest',
-        skills: 5,
-        nixTools: 10,
+       
         labels: {},
         phase: 'Ready',
       },
@@ -32,8 +31,7 @@ vi.mock('../hooks/useFleet', () => ({
         restarts: 0,
         age: '1h',
         image: 'knight:latest',
-        skills: 3,
-        nixTools: 5,
+       
         labels: {},
         phase: 'Ready',
       },
@@ -244,7 +242,7 @@ describe('DashboardPage', () => {
   const fleetOf = (names: string[]) => ({
     knights: names.map(name => ({
       name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h',
-      image: '', skills: 0, nixTools: 0, labels: {}, phase: 'Ready',
+      image: '', labels: {}, phase: 'Ready',
     })),
     loading: false,
     error: null,
@@ -345,7 +343,7 @@ describe('DashboardPage session cost follows the fleet (#645)', () => {
   const fleet = (names: string[]) => ({
     knights: names.map(name => ({
       name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h',
-      image: '', skills: 0, nixTools: 0, labels: {}, phase: 'Ready',
+      image: '', labels: {}, phase: 'Ready',
     })),
     loading: false,
     error: null,
@@ -499,7 +497,7 @@ describe('DashboardPage first run', () => {
 
   it('hides the first-run panel with one knight', () => {
     vi.mocked(useFleet).mockReturnValue({
-      knights: [{ name: 'galahad', domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h', image: '', skills: 0, nixTools: 0, labels: {}, phase: 'Ready' }],
+      knights: [{ name: 'galahad', domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h', image: '', labels: {}, phase: 'Ready' }],
       loading: false,
       error: null,
     } as unknown as ReturnType<typeof useFleet>)

@@ -7,7 +7,7 @@ import { KnightCard } from './KnightCard'
 import type { Knight, KnightPod } from '../hooks/useFleet'
 
 const pod = (o: Partial<KnightPod>): KnightPod => ({ name: 'galahad-a', node: 'node-1', phase: 'Running', ready: true, restarts: 0, age: '5m', draining: false, ...o })
-const base: Knight = { name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '1h', image: 'img', skills: 0, nixTools: 0, labels: {} }
+const base: Knight = { name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '1h', image: 'img', labels: {} }
 const scaling = { autoscaled: true, minReplicas: 0, maxReplicas: 5, desiredReplicas: 3, currentReplicas: 3, readyReplicas: 2 }
 
 describe('PodsPanel', () => {

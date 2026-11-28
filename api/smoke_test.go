@@ -190,7 +190,7 @@ func TestSmokeUIAndRouter(t *testing.T) {
 		}
 		return items
 	}
-	listOf("/api/fleet", 2, []string{"name", "domain", "status", "ready", "restarts", "age", "image", "skills", "nixTools", "labels"})
+	listOf("/api/fleet", 2, []string{"name", "domain", "status", "ready", "restarts", "age", "image", "labels"})
 	missions := listOf("/api/missions", 1, []string{"name", "namespace", "phase", "objective", "startedAt", "expiresAt",
 		"knights", "chains", "costBudgetUSD", "totalCost", "ttlSeconds", "timeoutSeconds", "roundTableRef"})
 	if missions[0]["name"] != "smoke-mission" {

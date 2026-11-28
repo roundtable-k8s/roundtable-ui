@@ -5,7 +5,6 @@ function statusLabel(k: Knight): string {
   switch (k.status) {
     case 'scaled-to-zero': return 'Scaled to zero'
     case 'starting': return 'Starting'
-    case 'busy': return 'Busy'
     case 'online': return 'Online'
     case 'offline': return 'Offline'
     default: return k.ready ? 'Online' : 'Offline'

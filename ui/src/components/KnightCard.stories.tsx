@@ -27,8 +27,7 @@ const baseKnight: Knight = {
   restarts: 0,
   age: '3d 12h',
   image: 'ghcr.io/roundtable/knight:latest',
-  skills: 4,
-  nixTools: 7,
+ 
   labels: {},
 }
 
@@ -52,7 +51,7 @@ export const Starting: Story = {
 
 export const BusyWithActivity: Story = {
   args: {
-    knight: { ...baseKnight, name: 'gawain', domain: 'project', status: 'busy' },
+    knight: { ...baseKnight, name: 'gawain', domain: 'project', status: 'online' },
     activity: {
       recent: 5,
       lastActive: new Date().toISOString(),
@@ -132,7 +131,7 @@ export const WithPerformanceMetrics: Story = {
       ...baseKnight, 
       name: 'gawain', 
       domain: 'project', 
-      status: 'busy',
+      status: 'online',
       phase: 'Ready',
       model: 'claude-sonnet-4-20250514',
       runtime: 'deployment',

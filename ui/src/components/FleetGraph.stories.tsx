@@ -24,18 +24,18 @@ export default meta
 type Story = StoryObj<typeof FleetGraph>
 
 const mockKnights: Knight[] = [
-  { name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '3d', image: 'ghcr.io/roundtable/knight:latest', skills: 4, nixTools: 7, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'kay', domain: 'research', status: 'online', ready: true, restarts: 0, age: '3d', image: 'ghcr.io/roundtable/knight:latest', skills: 5, nixTools: 8, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'tristan', domain: 'infra', status: 'online', ready: true, restarts: 1, age: '2d', image: 'ghcr.io/roundtable/knight:latest', skills: 6, nixTools: 10, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'gawain', domain: 'project', status: 'online', ready: true, restarts: 0, age: '4d', image: 'ghcr.io/roundtable/knight:latest', skills: 3, nixTools: 5, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'agravain', domain: 'pentest', status: 'offline', ready: false, restarts: 5, age: '1h', image: 'ghcr.io/roundtable/knight:latest', skills: 4, nixTools: 6, labels: {}, phase: 'Degraded' },
-  { name: 'bedivere', domain: 'home', status: 'online', ready: true, restarts: 0, age: '5d', image: 'ghcr.io/roundtable/knight:latest', skills: 2, nixTools: 4, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'percival', domain: 'finance', status: 'online', ready: true, restarts: 0, age: '3d', image: 'ghcr.io/roundtable/knight:latest', skills: 3, nixTools: 5, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'patsy', domain: 'vault', status: 'offline', ready: false, restarts: 0, age: '12h', image: 'ghcr.io/roundtable/knight:latest', skills: 1, nixTools: 3, labels: {}, phase: 'Suspended', suspend: true },
-  { name: 'gareth', domain: 'wellness', status: 'online', ready: true, restarts: 0, age: '2d', image: 'ghcr.io/roundtable/knight:latest', skills: 2, nixTools: 4, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'lancelot', domain: 'career', status: 'online', ready: true, restarts: 2, age: '6d', image: 'ghcr.io/roundtable/knight:latest', skills: 4, nixTools: 6, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
-  { name: 'coder-1', domain: 'coding', status: 'online', ready: true, restarts: 0, age: '1d', image: 'ghcr.io/roundtable/knight:latest', skills: 3, nixTools: 8, labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514', runtime: 'sandbox' },
-  { name: 'coder-2', domain: 'coding', status: 'offline', ready: false, restarts: 3, age: '8h', image: 'ghcr.io/roundtable/knight:latest', skills: 3, nixTools: 8, labels: {}, phase: 'Provisioning', runtime: 'sandbox' },
+  { name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '3d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'kay', domain: 'research', status: 'online', ready: true, restarts: 0, age: '3d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'tristan', domain: 'infra', status: 'online', ready: true, restarts: 1, age: '2d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'gawain', domain: 'project', status: 'online', ready: true, restarts: 0, age: '4d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'agravain', domain: 'pentest', status: 'offline', ready: false, restarts: 5, age: '1h', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Degraded' },
+  { name: 'bedivere', domain: 'home', status: 'online', ready: true, restarts: 0, age: '5d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'percival', domain: 'finance', status: 'online', ready: true, restarts: 0, age: '3d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'patsy', domain: 'vault', status: 'offline', ready: false, restarts: 0, age: '12h', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Suspended', suspend: true },
+  { name: 'gareth', domain: 'wellness', status: 'online', ready: true, restarts: 0, age: '2d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'lancelot', domain: 'career', status: 'online', ready: true, restarts: 2, age: '6d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514' },
+  { name: 'coder-1', domain: 'coding', status: 'online', ready: true, restarts: 0, age: '1d', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Ready', model: 'claude-sonnet-4-20250514', runtime: 'sandbox' },
+  { name: 'coder-2', domain: 'coding', status: 'offline', ready: false, restarts: 3, age: '8h', image: 'ghcr.io/roundtable/knight:latest', labels: {}, phase: 'Provisioning', runtime: 'sandbox' },
 ]
 
 const knightStatuses: Record<string, string> = {

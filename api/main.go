@@ -97,8 +97,6 @@ type KnightStatus struct {
 	// StartedAt is when the first container started running (falls back to the pod start time); empty without a pod.
 	StartedAt       string            `json:"startedAt,omitempty"`
 	Image           string            `json:"image"`
-	Skills          int               `json:"skills"`
-	NixTools        int               `json:"nixTools"`
 	Labels          map[string]string `json:"labels"`
 	GeneratedSkills int               `json:"generatedSkills,omitempty"`
 	// CRD-derived fields
@@ -1014,9 +1012,19 @@ type ContainerDetail struct {
 	Started *bool  `json:"started"`
 }
 
+func formatCondTime(t metav1.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
 type PodCondition struct {
-	Type   string `json:"type"`
-	Status string `json:"status"`
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason,omitempty"`
+	Message            string `json:"message,omitempty"`
+	LastTransitionTime string `json:"lastTransitionTime,omitempty"` // RFC 3339
 }
 
 func knightHandler(namespace string) http.HandlerFunc {
@@ -1106,6 +1114,8 @@ func knightHandler(namespace string) http.HandlerFunc {
 			for _, cond := range pod.Status.Conditions {
 				detail.Conditions = append(detail.Conditions, PodCondition{
 					Type: string(cond.Type), Status: string(cond.Status),
+					Reason: cond.Reason, Message: cond.Message,
+					LastTransitionTime: formatCondTime(cond.LastTransitionTime),
 				})
 			}
 		}

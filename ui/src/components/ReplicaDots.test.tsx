@@ -7,7 +7,7 @@ function pod(name: string, over: Partial<KnightPod> = {}): KnightPod {
   return { name, phase: 'Running', ready: true, restarts: 0, age: '1h', draining: false, ...over }
 }
 function knight(over: Partial<Knight> = {}): Knight {
-  return { name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '1h', image: 'i', skills: 0, nixTools: 0, labels: {}, ...over }
+  return { name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '1h', image: 'i', labels: {}, ...over }
 }
 const scaling = (over = {}) => ({ autoscaled: true, minReplicas: 0, maxReplicas: 3, currentReplicas: 2, readyReplicas: 1, ...over })
 

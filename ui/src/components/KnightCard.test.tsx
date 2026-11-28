@@ -14,8 +14,7 @@ const mockKnight: Knight = {
   restarts: 0,
   age: '2h 15m',
   image: 'ghcr.io/roundtable-k8s/knight:latest',
-  skills: 5,
-  nixTools: 10,
+ 
   labels: {
     'app.kubernetes.io/name': 'knight',
     'roundtable.io/domain': 'security',
@@ -306,8 +305,7 @@ describe('KnightCard', () => {
       restarts: 0,
       age: '1h',
       image: 'knight:latest',
-      skills: 0,
-      nixTools: 0,
+     
       labels: {},
     }
     

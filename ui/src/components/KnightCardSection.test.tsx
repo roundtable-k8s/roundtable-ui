@@ -15,7 +15,7 @@ vi.mock('../hooks/useKnightSession', () => ({
 
 const knight: Knight = {
   name: 'galahad', domain: 'security', status: 'online', ready: true, restarts: 0, age: '1h',
-  image: 'knight:latest', skills: 2, nixTools: 2, labels: {},
+  image: 'knight:latest', labels: {},
 }
 
 describe('KnightCardSection', () => {

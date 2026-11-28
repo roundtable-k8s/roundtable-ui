@@ -21,7 +21,7 @@ vi.mock('../components/KnightDetailDrawer', () => ({
 
 const real: Knight = {
   name: 'galahad', namespace: 'ns', domain: 'security', status: 'online', ready: true, restarts: 3,
-  age: '1h', image: 'img', skills: 0, nixTools: 0, labels: {},
+  age: '1h', image: 'img', labels: {},
 }
 
 describe('Live detail drawer', () => {

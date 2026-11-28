@@ -16,7 +16,7 @@ vi.mock('../hooks/useFleet', () => ({
 const mockApiGet = vi.mocked(apiGet)
 
 function knight(name: string, status: Knight['status']): Knight {
-  return { name, domain: 'x', status, ready: true, restarts: 0, age: '1h', image: 'i', skills: 0, nixTools: 0, labels: {} }
+  return { name, domain: 'x', status, ready: true, restarts: 0, age: '1h', image: 'i', labels: {} }
 }
 
 function mockApi(rt: unknown, ms: unknown) {

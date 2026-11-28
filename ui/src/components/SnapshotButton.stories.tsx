@@ -4,7 +4,7 @@ import type { Knight } from '../hooks/useFleet'
 
 const knight: Knight = {
   name: 'galahad', domain: 'dev', status: 'online', ready: true, restarts: 0, age: '1h',
-  image: 'img', skills: 0, nixTools: 0, labels: {},
+  image: 'img', labels: {},
 }
 
 const meta: Meta<typeof SnapshotButton> = {
