@@ -274,7 +274,9 @@ func knightQueueHandler(namespace string) http.HandlerFunc {
 			jsonError(w, "JetStream not available", http.StatusServiceUnavailable)
 			return
 		}
-		cr, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		cr, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
 		if err != nil {
 			writeK8sError(w, r, err, "read", "Knight")
 			return

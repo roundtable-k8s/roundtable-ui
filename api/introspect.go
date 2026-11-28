@@ -70,6 +70,8 @@ func knightPodsForIntrospect(ctx context.Context, namespace, knight string) ([]s
 	if k8sClient == nil {
 		return nil, fmt.Errorf("kubernetes client not available")
 	}
+	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
+	defer cancel()
 	pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("app.kubernetes.io/name=knight,app.kubernetes.io/instance=%s", knight),
 	})

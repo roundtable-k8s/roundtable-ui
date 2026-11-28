@@ -932,7 +932,7 @@ func fleetHandler(namespace string) http.HandlerFunc {
 					podPtr = p
 				}
 			}
-			scaling := buildKnightScaling(r.Context(), cr, pods)
+			scaling := buildKnightScaling(kctx, cr, pods)
 			ks := buildKnightStatus(cr, podPtr, scaling)
 			ks.Pods = buildKnightPods(pods, metrics)
 			ks.Scaling = scaling
@@ -1071,7 +1071,7 @@ func knightHandler(namespace string) http.HandlerFunc {
 		}
 
 		setSpanTable(r.Context(), getRefName(getNestedMap(crObj.Object, "spec"), "roundTableRef"))
-		scaling := buildKnightScaling(r.Context(), crObj, pods)
+		scaling := buildKnightScaling(kctx, crObj, pods)
 
 		// Build safe DTO (#46) from CR + pods
 		detail := KnightDetail{
@@ -1137,6 +1137,8 @@ func getKnightCR(ctx context.Context, knightName string) (*unstructured.Unstruct
 		return nil, fmt.Errorf("kubernetes client not available")
 	}
 	namespace := envOr("NAMESPACE", "roundtable")
+	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
+	defer cancel()
 	obj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(ctx, knightName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get knight %s: %w", knightName, err)
@@ -1270,6 +1272,12 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 		ctx := r.Context()
 		prefix := fleetPrefix // graceful degradation when the CR is unavailable
 		if knightCR, err := getKnightCR(ctx, name); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				// A stalled API server: fail fast instead of spending the
+				// NATS timeout on a fallback that cannot tell readiness.
+				writeK8sError(w, r, err, "read", "Knight")
+				return
+			}
 			slog.WarnContext(ctx, "Failed to fetch Knight CR, falling back to FLEET_PREFIX", "knight", name, "error", err)
 		} else {
 			// Short-circuit offline knights: proxying introspect to a knight
@@ -2101,7 +2109,9 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 			return
 		}
 
-		obj, err := dynClient.Resource(chainGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		obj, err := dynClient.Resource(chainGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
 		if err != nil {
 			writeK8sError(w, r, err, "read", "Chain")
 			return
@@ -2451,7 +2461,9 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
-		obj, err := dynClient.Resource(missionGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		obj, err := dynClient.Resource(missionGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
 		if err != nil {
 			writeK8sError(w, r, err, "read", "Mission")
 			return
@@ -2550,8 +2562,10 @@ func missionCreateHandler(namespace string) http.HandlerFunc {
 		}
 
 		// Create via dynamic client
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
 		obj, err := dynClient.Resource(missionGVR).Namespace(namespace).Create(
-			r.Context(),
+			kctx,
 			&unstructured.Unstructured{Object: mission},
 			metav1.CreateOptions{},
 		)
@@ -2585,7 +2599,9 @@ func missionDeleteHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
-		err := dynClient.Resource(missionGVR).Namespace(namespace).Delete(r.Context(), name, metav1.DeleteOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		err := dynClient.Resource(missionGVR).Namespace(namespace).Delete(kctx, name, metav1.DeleteOptions{})
 		if err != nil {
 			writeK8sError(w, r, err, "delete", "mission")
 			return
@@ -2788,7 +2804,9 @@ func roundTableDetailHandler(namespace string) http.HandlerFunc {
 			return
 		}
 
-		obj, err := dynClient.Resource(roundTableGVR).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
+		kctx, kcancel := k8sCtx(r)
+		defer kcancel()
+		obj, err := dynClient.Resource(roundTableGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
 		if err != nil {
 			writeK8sError(w, r, err, "read", "RoundTable")
 			return
