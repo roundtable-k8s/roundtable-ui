@@ -14,7 +14,7 @@ import { getKnightConfig, domainIndex } from '../lib/knights'
 import { parseEvent, resultFailureReason, eventListKeys } from '../lib/events'
 import { computeKnightActivity } from '../lib/knightActivity'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
-import { formatCost, formatTimestamp } from '../lib/format'
+import { formatCost, formatTimestampOrDate } from '../lib/format'
 import { useCards } from '../hooks/useCards'
 import { SkillFilter } from '../components/SkillFilter'
 import { isNotIsolated } from '../lib/isolation'
@@ -48,6 +48,8 @@ const STATUS_RANK: Record<string, number> = { online: 0, busy: 1, starting: 2, '
 
 export function FleetPage() {
   const { knights, loading, error, refresh } = useFleet()
+  const noData = knights.length === 0 && (loading || !!error)
+  const ph = loading ? '…' : '—'
   const { table } = useTableFilter()
   // Keep the selection as a key and derive the object from the latest poll so
   // the open drawer follows the live fleet entry.
@@ -153,36 +155,36 @@ export function FleetPage() {
       <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-8">
         <StatCard
           label="Online"
-          value={online}
-          total={total}
+          value={noData ? ph : online}
+          total={noData ? undefined : total}
           color="text-green-400"
           icon={<Zap className="w-5 h-5" />}
         />
         <StatCard
           label="Offline"
-          value={knights.filter((k) => k.status === 'offline').length}
-          total={total}
+          value={noData ? ph : knights.filter((k) => k.status === 'offline').length}
+          total={noData ? undefined : total}
           color="text-red-400"
         />
         <StatCard
           label="Restarts"
-          value={knights.reduce((sum, k) => sum + k.restarts, 0)}
+          value={noData ? ph : knights.reduce((sum, k) => sum + k.restarts, 0)}
           color="text-yellow-400"
         />
         <StatCard
           label="Domains"
-          value={new Set(knights.map((k) => k.domain)).size}
+          value={noData ? ph : new Set(knights.map((k) => k.domain)).size}
           color="text-blue-400"
         />
         <StatCard
           label="Session Cost"
-          value={costStats.totalCost > 0 ? formatCost(costStats.totalCost) : '$0.00'}
+          value={noData ? ph : costStats.totalCost > 0 ? formatCost(costStats.totalCost) : '$0.00'}
           color="text-roundtable-gold"
           icon={<DollarSign className="w-5 h-5" />}
         />
         <StatCard
           label="Tasks"
-          value={costStats.taskCount}
+          value={noData ? ph : costStats.taskCount}
           color="text-purple-400"
           icon={<TrendingUp className="w-5 h-5" />}
         />
@@ -235,7 +237,7 @@ export function FleetPage() {
                     <span>{cfg?.emoji || '🤖'}</span>
                     <span className="text-gray-300 capitalize">{knight || 'unknown'}</span>
                     <span className="text-red-400 truncate flex-1">{resultFailureReason(data) || 'Task failed'}</span>
-                    <span className="text-gray-600 flex-shrink-0">{formatTimestamp(e.timestamp)}</span>
+                    <span className="text-gray-600 flex-shrink-0">{formatTimestampOrDate(e.timestamp)}</span>
                   </div>
                 )
               }) })()}

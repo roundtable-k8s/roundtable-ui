@@ -46,6 +46,13 @@ function mockApi(queues: KnightQueue[] | Error, hist: KnightQueueHistory[] | Err
 describe('QueuesPage', () => {
   beforeEach(() => { mockApiGet.mockReset() })
 
+  it('does not claim zero pending while loading', () => {
+    mockApiGet.mockImplementation(() => new Promise(() => {}))
+    render(<MemoryRouter><QueuesPage /></MemoryRouter>)
+    expect(screen.getByText(/… pending · … in flight/)).toBeInTheDocument()
+    expect(screen.queryByText(/0 pending/)).toBeNull()
+  })
+
   it('shows an empty state when there are no knights', async () => {
     mockApi([], [])
     render(<MemoryRouter><QueuesPage /></MemoryRouter>)

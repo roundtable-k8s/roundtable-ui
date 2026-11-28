@@ -208,3 +208,21 @@ describe('countLabel', () => {
     expect(countLabel(1, 1, 'entries', 'entry')).toBe('1 entry')
   })
 })
+
+describe('NaN and negative guards', () => {
+  it('formatRelativeTime gives a dash for garbage and clamps the future', () => {
+    expect(formatRelativeTime('garbage')).toBe('—')
+    expect(formatRelativeTime(new Date(Date.now() + 5000).toISOString())).toBe('0s ago')
+  })
+  it('until gives a dash for garbage', () => {
+    expect(until('x')).toBe('—')
+  })
+  it('formatUptime gives a dash for NaN and negatives', () => {
+    expect(formatUptime(NaN)).toBe('—')
+    expect(formatUptime(-60)).toBe('—')
+  })
+  it('formatTimestampOrDate gives a dash when empty', () => {
+    expect(formatTimestampOrDate(undefined)).toBe('—')
+    expect(formatTimestampOrDate('')).toBe('—')
+  })
+})

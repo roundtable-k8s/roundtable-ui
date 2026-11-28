@@ -26,6 +26,8 @@ const PHASE_FILTERS = [
 
 export function MissionsPage() {
   const { missions, loading, error, refresh } = useMissions()
+  const noData = missions.length === 0 && (loading || !!error)
+  const ph = loading ? '…' : '—'
   const { table } = useTableFilter()
   const navigate = useNavigate()
   const [phaseFilter, setPhaseFilter] = useUrlParam('phase', 'All', PHASE_FILTERS)
@@ -64,12 +66,13 @@ export function MissionsPage() {
       </PageHeader>
 
       {/* Summary Stats */}
+      {/* placeholder while loading, dash after a failed first load */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <StatCard label="Total Missions" value={stats.total} />
-        <StatCard label="Active" value={stats.active} color="text-blue-400" />
-        <StatCard label="Succeeded" value={stats.succeeded} color="text-green-400" />
-        <StatCard label="Failed" value={stats.failed} color="text-red-400" />
-        <StatCard label="Total Cost" value={formatCost(stats.totalCost)} color="text-roundtable-gold" />
+        <StatCard label="Total Missions" value={noData ? ph : stats.total} />
+        <StatCard label="Active" value={noData ? ph : stats.active} color="text-blue-400" />
+        <StatCard label="Succeeded" value={noData ? ph : stats.succeeded} color="text-green-400" />
+        <StatCard label="Failed" value={noData ? ph : stats.failed} color="text-red-400" />
+        <StatCard label="Total Cost" value={noData ? ph : formatCost(stats.totalCost)} color="text-roundtable-gold" />
       </div>
 
       {/* Filters */}

@@ -52,6 +52,12 @@ describe('OvernightPage', () => {
     expect(screen.queryByRole('link', { name: 'old' })).toBeNull()
   })
 
+  it('shows the date for a run that finished yesterday', async () => {
+    renderPage('/overnight?since=24h')
+    const row = (await screen.findByRole('link', { name: 'day-old' })).closest('li')!
+    expect(row.textContent).toContain(new Date(NOW - 20 * 3600_000).toLocaleString())
+  })
+
   it('reads ?since= and widens the window', async () => {
     renderPage('/overnight?since=24h')
     expect(await screen.findByRole('link', { name: 'day-old' })).toBeInTheDocument()

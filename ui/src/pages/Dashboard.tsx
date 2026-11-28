@@ -17,7 +17,7 @@ import { getKnightConfig, domainIndex } from '../lib/knights'
 import { parseEvent, eventListKeys, uniqueKeys } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
 import { FirstRun } from '../components/FirstRun'
-import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
+import { formatCost, formatDay, formatTimestampOrDate, until } from '../lib/format'
 import { costByChain } from '../lib/chainCost'
 import { CostTag } from '../components/CostTag'
 import { costPanelCsv, bufferCoverage } from '../lib/cost'
@@ -369,7 +369,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                   <span>{e.type === 'task' ? '📤' : '📥'}</span>
                   <span>{cfg?.emoji || '🤖'}</span>
                   <span className="text-gray-400 truncate flex-1">{knight || domain || e.type}</span>
-                  <span className="text-gray-600">{formatTimestamp(e.timestamp)}</span>
+                  <span className="text-gray-600">{formatTimestampOrDate(e.timestamp)}</span>
                 </div>
               )
             }) })()}
