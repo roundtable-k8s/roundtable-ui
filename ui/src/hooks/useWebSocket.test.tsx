@@ -81,3 +81,33 @@ describe('useWebSocket activity', () => {
     expect(result.current.events).toHaveLength(0)
   })
 })
+
+describe('useWebSocket reconnect backfill', () => {
+  it('refetches history once per reconnect and deduplicates events', async () => {
+    const { apiGet } = await import('../lib/api')
+    const get = vi.mocked(apiGet)
+    get.mockReset()
+    const row = (ts: string, subject: string) => ({ type: 'result', subject, data: {}, timestamp: ts })
+    get.mockResolvedValueOnce({ results: [row('2026-11-24T10:00:00Z', 'p.results.a')] })
+    const { result } = renderHook(() => useWebSocket(), { wrapper })
+    await act(async () => {})
+    expect(get).toHaveBeenCalledTimes(1)
+
+    // First open does not refetch.
+    act(() => FakeWS.last.onopen!())
+    expect(get).toHaveBeenCalledTimes(1)
+
+    // Socket drops, then reconnects after the backoff.
+    vi.useFakeTimers()
+    act(() => FakeWS.last.onclose!({ code: 1006, reason: '' }))
+    act(() => { vi.advanceTimersByTime(60_000) })
+    vi.useRealTimers()
+
+    get.mockResolvedValueOnce({
+      results: [row('2026-11-24T10:05:00Z', 'p.results.b'), row('2026-11-24T10:00:00Z', 'p.results.a')],
+    })
+    await act(async () => { FakeWS.last.onopen!() })
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(result.current.events.map((e) => e.subject)).toEqual(['p.results.b', 'p.results.a'])
+  })
+})
