@@ -7,7 +7,7 @@ import { formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText, safeUrl } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { TraceLink } from '../components/TraceLink'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, Modal, TableBadge } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Button, LinkButton, ConfirmDialog } from '../components/ui'
 import {
   RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, scheduleNextUrl, type ScheduleNextRuns, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
   runResultText, runResultOutcome, prLabel, describeTurns, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
@@ -93,8 +93,6 @@ function ScheduleSummary({ s }: { s: Schedule }) {
   )
 }
 
-const btn = 'inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50'
-
 /**
  * Run now, Suspend / Resume for every schedule; Delete only when the schedule
  * is not managed in Git (the gateway refuses it with 409 anyway).
@@ -152,57 +150,46 @@ export function ScheduleActions({ s, onChanged, onDeleted }: {
   return (
     <div className="mb-4" data-testid="schedule-actions">
       <div className="flex flex-wrap items-center gap-2">
-        <button className={`${btn} border-roundtable-gold/40 bg-roundtable-gold/10 text-roundtable-gold hover:bg-roundtable-gold/20`}
-          disabled={busy} onClick={() => setConfirm('run')}>
+        <Button tone="gold" disabled={busy} onClick={() => setConfirm('run')}>
           <Play className="w-4 h-4" aria-hidden /> Run now
-        </button>
+        </Button>
         {s.suspended ? (
-          <button className={`${btn} border-green-500/30 text-green-300 hover:bg-green-500/10`} disabled={busy} onClick={() => setSuspended(false)}>
+          <Button tone="green" disabled={busy} onClick={() => setSuspended(false)}>
             <PlayCircle className="w-4 h-4" aria-hidden /> Resume
-          </button>
+          </Button>
         ) : (
-          <button className={`${btn} border-amber-500/30 text-amber-300 hover:bg-amber-500/10`} disabled={busy} onClick={() => setSuspended(true)}>
+          <Button tone="amber" disabled={busy} onClick={() => setSuspended(true)}>
             <Pause className="w-4 h-4" aria-hidden /> Suspend
-          </button>
+          </Button>
         )}
         {s.managedBy !== 'git' && (
-          <Link to={scheduleEditPath(s)} className={`${btn} border-roundtable-steel text-gray-300 hover:bg-white/5`}>
+          <LinkButton to={scheduleEditPath(s)}>
             <Pencil className="w-4 h-4" aria-hidden /> Edit
-          </Link>
+          </LinkButton>
         )}
         {s.managedBy !== 'git' && (
-          <button className={`${btn} border-red-500/30 text-red-300 hover:bg-red-500/10`} disabled={busy} onClick={() => setConfirm('delete')}>
+          <Button tone="red" disabled={busy} onClick={() => setConfirm('delete')}>
             <Trash2 className="w-4 h-4" aria-hidden /> Delete
-          </button>
+          </Button>
         )}
       </div>
       {message && <p role="status" className="mt-2 text-sm text-gray-300">{sanitizeText(message)}</p>}
       {error && <div className="mt-2"><ErrorBanner>{sanitizeText(error)}</ErrorBanner></div>}
 
       {confirm === 'run' && (
-        <Modal title={`Run ${s.name} now?`} icon={<Play className="w-5 h-5 text-roundtable-gold" />} onClose={() => setConfirm(null)}>
-          <div className="space-y-4 p-6">
-            <p className="text-sm text-gray-400">This fires the schedule once now, even while it is suspended:</p>
-            <p className="flex items-center gap-2 rounded-lg bg-black/30 p-3 text-sm text-white" data-testid="run-now-task">
-              <TargetIcon kind={s.target.kind} /> {sanitizeText(s.target.summary)}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button className={`${btn} border-roundtable-steel text-gray-300`} onClick={() => setConfirm(null)}>Cancel</button>
-              <button className={`${btn} border-roundtable-gold/40 bg-roundtable-gold/10 text-roundtable-gold`} disabled={busy} onClick={runNow}>Run</button>
-            </div>
-          </div>
-        </Modal>
+        <ConfirmDialog title={`Run ${s.name} now?`} icon={<Play className="w-5 h-5 text-roundtable-gold" />}
+          confirmLabel="Run" working={busy} onCancel={() => setConfirm(null)} onConfirm={runNow}>
+          <p className="text-sm text-gray-400">This fires the schedule once now, even while it is suspended:</p>
+          <p className="flex items-center gap-2 rounded-lg bg-black/30 p-3 text-sm text-white" data-testid="run-now-task">
+            <TargetIcon kind={s.target.kind} /> {sanitizeText(s.target.summary)}
+          </p>
+        </ConfirmDialog>
       )}
       {confirm === 'delete' && (
-        <Modal title={`Delete ${s.name}?`} icon={<Trash2 className="w-5 h-5 text-red-400" />} onClose={() => setConfirm(null)}>
-          <div className="space-y-4 p-6">
-            <p className="text-sm text-gray-400">The schedule is removed. Runs it already started are kept until their own TTL.</p>
-            <div className="flex justify-end gap-2">
-              <button className={`${btn} border-roundtable-steel text-gray-300`} onClick={() => setConfirm(null)}>Cancel</button>
-              <button className={`${btn} border-red-500/30 bg-red-500/10 text-red-300`} disabled={busy} onClick={remove}>Delete</button>
-            </div>
-          </div>
-        </Modal>
+        <ConfirmDialog title={`Delete ${s.name}?`} icon={<Trash2 className="w-5 h-5 text-red-400" />}
+          confirmLabel="Delete" tone="red" working={busy} onCancel={() => setConfirm(null)} onConfirm={remove}>
+          <p className="text-sm text-gray-400">The schedule is removed. Runs it already started are kept until their own TTL.</p>
+        </ConfirmDialog>
       )}
     </div>
   )
@@ -396,10 +383,10 @@ export function ScheduleYaml({ namespace, name }: { namespace: string; name: str
     <section aria-label="yaml" className="rounded-xl border border-roundtable-steel bg-roundtable-slate p-4">
       <div className="mb-2 flex items-center justify-end gap-2">
         {copyError && <span className="text-xs text-red-400">{copyError}</span>}
-        <button onClick={copy} className={`${btn} border-roundtable-steel text-gray-300 hover:text-white`}>
+        <Button onClick={copy}>
           {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />}
           {copied ? 'Copied' : 'Copy YAML'}
-        </button>
+        </Button>
       </div>
       <pre data-testid="schedule-yaml" className="overflow-auto whitespace-pre rounded-lg bg-black/30 p-3 text-xs text-gray-200">{yaml}</pre>
     </section>

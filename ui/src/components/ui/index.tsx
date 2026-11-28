@@ -395,3 +395,5 @@ export function TableBadge({ table }: { table?: string }) {
     </span>
   )
 }
+
+export { Button, LinkButton, ConfirmDialog, type ButtonTone, type ButtonSize } from './Button'
