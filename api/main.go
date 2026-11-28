@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -258,6 +259,13 @@ func newRateLimiter(max int, interval time.Duration) *rateLimiterT {
 }
 
 func (rl *rateLimiterT) allow() bool {
+	ok, _ := rl.take()
+	return ok
+}
+
+// take is allow plus, for a rejected request, the whole seconds (at least 1)
+// until the window refills — the Retry-After value.
+func (rl *rateLimiterT) take() (bool, int) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
@@ -265,12 +273,43 @@ func (rl *rateLimiterT) allow() bool {
 	if elapsed >= rl.interval {
 		rl.tokens = rl.max
 		rl.last = now
+		elapsed = 0
 	}
 	if rl.tokens <= 0 {
-		return false
+		secs := int(math.Ceil((rl.interval - elapsed).Seconds()))
+		if secs < 1 {
+			secs = 1
+		}
+		return false, secs
 	}
 	rl.tokens--
-	return true
+	return true, 0
+}
+
+// apiRateLimiter builds the global limiter from API_RATE_LIMIT (requests per
+// second, default 100; <= 0 disables it, returning nil) and API_RATE_BURST
+// (requests per window, default = the limit, so the window is one second).
+func apiRateLimiter() *rateLimiterT {
+	rate := 100.0
+	if v := envOr("API_RATE_LIMIT", ""); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
+			rate = f
+		} else {
+			slog.Warn("invalid API_RATE_LIMIT, using default", "value", v)
+		}
+	}
+	if rate <= 0 {
+		return nil
+	}
+	burst := int(math.Ceil(rate))
+	if v := envOr("API_RATE_BURST", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			burst = n
+		} else {
+			slog.Warn("invalid API_RATE_BURST, using default", "value", v)
+		}
+	}
+	return newRateLimiter(burst, time.Duration(float64(burst)/rate*float64(time.Second)))
 }
 
 func (rl *rateLimiterT) middleware(next http.Handler) http.Handler {
@@ -280,7 +319,8 @@ func (rl *rateLimiterT) middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !rl.allow() {
+		if ok, retry := rl.take(); !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(retry))
 			jsonError(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -661,7 +701,7 @@ func main() {
 	}
 
 	// Simple rate limiter (#12)
-	rateLimiter := newRateLimiter(100, time.Second) // 100 req/s
+	rateLimiter := apiRateLimiter() // API_RATE_LIMIT / API_RATE_BURST; default 100 req/s
 
 	// Router
 	d := routerDeps{
@@ -674,7 +714,10 @@ func main() {
 		k8sStatus:     func() string { return k8sHealth(k8sAvailable(dynClient, k8sClient)) },
 		natsStatus:    func() string { return natsHealth(nc) },
 	}
-	d.middleware = []mux.MiddlewareFunc{tracingMiddleware, securityHeaders, metricsMiddleware, authMiddleware, rateLimiter.middleware}
+	d.middleware = []mux.MiddlewareFunc{tracingMiddleware, securityHeaders, metricsMiddleware, authMiddleware}
+	if rateLimiter != nil {
+		d.middleware = append(d.middleware, rateLimiter.middleware)
+	}
 	r := buildRouter(d)
 
 	// CORS — with no origins configured every origin is allowed, without credentials (#57)

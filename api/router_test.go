@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -102,5 +103,45 @@ func TestHeadSkipsStreamingRoutes(t *testing.T) {
 	}
 	if w := do(h, "HEAD", "/api/fleet"); w.Code != http.StatusOK {
 		t.Errorf("HEAD /api/fleet: status %d, want 200", w.Code)
+	}
+}
+
+func TestRateLimitSetsRetryAfter(t *testing.T) {
+	rl := newRateLimiter(1, 3*time.Second)
+	h := routerFor(t, rl)
+	_ = do(h, "GET", "/api/fleet")
+	w := do(h, "GET", "/api/fleet")
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d, want 429", w.Code)
+	}
+	ra, err := strconv.Atoi(w.Header().Get("Retry-After"))
+	if err != nil || ra < 1 || ra > 3 {
+		t.Fatalf("Retry-After %q, want 1..3", w.Header().Get("Retry-After"))
+	}
+}
+
+func TestAPIRateLimiterEnv(t *testing.T) {
+	t.Setenv("API_RATE_LIMIT", "")
+	t.Setenv("API_RATE_BURST", "")
+	rl := apiRateLimiter()
+	if rl == nil || rl.max != 100 || rl.interval != time.Second {
+		t.Fatalf("defaults changed: %+v", rl)
+	}
+	t.Setenv("API_RATE_LIMIT", "10")
+	t.Setenv("API_RATE_BURST", "50")
+	rl = apiRateLimiter()
+	if rl.max != 50 || rl.interval != 5*time.Second {
+		t.Fatalf("custom: %+v", rl)
+	}
+	for _, v := range []string{"0", "-1"} {
+		t.Setenv("API_RATE_LIMIT", v)
+		if apiRateLimiter() != nil {
+			t.Fatalf("API_RATE_LIMIT=%s must disable", v)
+		}
+	}
+	t.Setenv("API_RATE_LIMIT", "bogus")
+	t.Setenv("API_RATE_BURST", "-3")
+	if rl = apiRateLimiter(); rl == nil || rl.max != 100 {
+		t.Fatalf("invalid values must fall back: %+v", rl)
 	}
 }

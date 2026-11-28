@@ -272,6 +272,7 @@ The dashboard API server is configured via environment variables:
 | `GATEWAY_URL` | Base URL of the roundtable gateway; dispatch, run-now and the Failed & lost page (dead letters, retry) go through it (unset = those endpoints return 503) | _(unset)_ |
 | `GATEWAY_TOKEN_FILE` | File whose first line is the gateway bearer token; re-read when the gateway answers 401 (token rotation). Takes precedence over `GATEWAY_TOKEN` | _(none)_ |
 | `GATEWAY_TOKEN` | Optional bearer token sent to the gateway | _(none)_ |
+| `API_RATE_LIMIT` / `API_RATE_BURST` | Global rate limit of the API (requests/sec, requests per window; the window is burst / rate seconds, so one second by default), shared by all clients. A rejected request gets 429 with `Retry-After`. `API_RATE_LIMIT` <= 0 disables it; `/api/health` and `/metrics` are never limited | `100` / `100` |
 | `DISPATCH_RATE` / `DISPATCH_BURST` | Rate limit (requests/sec, bucket size) of dispatch and run-now; rate <= 0 disables it | `2` / `10` |
 | `KUBE_QPS` / `KUBE_BURST` | Client-side rate limit (requests/sec, bucket size) of the Kubernetes client, shared by all handlers, informers and watchers. `KUBE_QPS` may be fractional. Invalid or <= 0 values fall back. No client-wide timeout is set (it would cut watches); handlers bound their Kubernetes calls to 10s instead | `20` / `40` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication. The `?api_key=` query form is accepted on `/api/ws` only; use the `Authorization` header elsewhere | _(none)_ |
