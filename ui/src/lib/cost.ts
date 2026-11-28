@@ -29,7 +29,7 @@ export function tokenCount(n: number): string {
 }
 
 /** "10k in / 1.5k out", or "—" without token data. */
-export function tokensText(t: TokenTotals | null | undefined): string {
+export function tokensText(t: Partial<TokenTotals> | null | undefined): string {
   if (!t) return '—'
   return `${tokenCount(t.input || 0)} in / ${tokenCount(t.output || 0)} out`
 }

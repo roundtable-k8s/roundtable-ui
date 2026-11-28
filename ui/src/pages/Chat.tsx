@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useUrlParams } from '../hooks/useUrlParams'
 import { MessageSquare, Send, Activity } from 'lucide-react'
-import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { apiGet, apiPost, ApiError } from '../lib/api'
+import { useTaskPoller } from '../hooks/useTaskPoller'
+import { apiPost } from '../lib/api'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { SubmissionKey } from '../lib/submissionKey'
 import { PageHeader, EmptyState, ErrorBanner } from '../components/ui'
@@ -16,7 +16,6 @@ import { CostTag } from '../components/CostTag'
 import { sanitizeText } from '../lib/untrusted'
 import { isFinalStatus, mergeTurn, knightKey, parseKnights, type ChatKnight, type ChatTask, type ChatTurn } from '../lib/chat'
 
-const POLL_MS = 2000
 /** After this long without a result the turn is flagged and Send is re-enabled. */
 export const STALE_TURN_MS = 2 * 60 * 1000
 
@@ -60,24 +59,17 @@ export function ChatPage() {
   }, [turns])
 
   // Poll every pending turn until the gateway reports a final status.
-  const pendingIds = turns.filter((t) => t.taskId && !isFinalStatus(t.status)).map((t) => t.taskId).join(',')
-  useVisibleInterval(
-    (signal) =>
-      Promise.all(pendingIds.split(',').map((id) =>
-        apiGet<ChatTask>(`/api/chat/tasks/${encodeURIComponent(id)}`, { signal })
-          .then((t) => setTurns((ts) => ts.map((x) => (x.taskId === id ? mergeTurn(x, t) : x))))
-          .catch((e: unknown) => {
-            // A missing task will never finish; stop polling and unblock Send.
-            if (e instanceof ApiError && e.status === 404) {
-              setTurns((ts) => ts.map((x) => (x.taskId === id ? { ...x, status: 'failed', error: 'Task not found on the gateway' } : x)))
-            }
-            // other errors are transient: next tick retries
-          }),
-      )),
-    POLL_MS,
-    !!pendingIds,
-    { key: pendingIds },
-  )
+  // A missing task (404) will never finish: fail the turn and unblock Send. Other errors are retried.
+  useTaskPoller<ChatTurn, ChatTask>({
+    items: turns,
+    idOf: (t) => t.taskId ?? '',
+    isDone: (t) => !t.taskId || isFinalStatus(t.status),
+    fetchUrl: (t) => `/api/chat/tasks/${encodeURIComponent(t.taskId ?? '')}`,
+    onUpdate: (id, t) => setTurns((ts) => ts.map((x) => (x.taskId === id ? mergeTurn(x, t) : x))),
+    onGiveUp: (id) => setTurns((ts) => ts.map((x) => (x.taskId === id ? { ...x, status: 'failed', error: 'Task not found on the gateway' } : x))),
+    giveUpOn404: true,
+    maxFailures: Infinity,
+  })
 
   async function send() {
     const text = message.trim()

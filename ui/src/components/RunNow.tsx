@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { Play } from 'lucide-react'
-import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { apiGet, apiPost } from '../lib/api'
+import { useTaskPoller } from '../hooks/useTaskPoller'
+import { apiPost } from '../lib/api'
 import { SubmissionKey } from '../lib/submissionKey'
 import { sanitizeText } from '../lib/untrusted'
 
@@ -28,18 +28,17 @@ export function RunNow({ chain, namespace }: { chain: string; namespace: string 
   const [run, setRun] = useState<ChainRun | null>(null)
   const [error, setError] = useState('')
 
-  // Follow the run until it finishes
-  const runName = run && !run.done ? run.run : ''
+  // Follow the run until it finishes; errors are swallowed and retried forever
   const runNs = run?.namespace ?? namespace
-  useVisibleInterval(
-    (signal) =>
-      apiGet<ChainRun>(`/api/chains/runs/${encodeURIComponent(runNs)}/${encodeURIComponent(runName)}`, { signal })
-        .then((r) => setRun((prev) => (prev && prev.run === r.run ? { ...prev, ...r } : prev)))
-        .catch(() => {}),
-    POLL_MS,
-    !!runName,
-    { key: `${runNs}/${runName}` },
-  )
+  useTaskPoller<ChainRun, ChainRun>({
+    items: run ? [run] : [],
+    idOf: (r) => r.run,
+    isDone: (r) => !!r.done,
+    fetchUrl: (r) => `/api/chains/runs/${encodeURIComponent(runNs)}/${encodeURIComponent(r.run)}`,
+    onUpdate: (_id, r) => setRun((prev) => (prev && prev.run === r.run ? { ...prev, ...r } : prev)),
+    maxFailures: Infinity,
+    intervalMs: POLL_MS,
+  })
 
   const start = async () => {
     if (starting) return
