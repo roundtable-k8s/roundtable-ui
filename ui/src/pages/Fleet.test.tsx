@@ -10,7 +10,7 @@ import { isolated, notEnforced, optedOut } from '../test/fixtures/isolation'
 import type { KnightLoadMap } from '../hooks/useKnightLoad'
 
 const k = (name: string, domain: string): Knight => ({
-  name, domain, status: 'online', ready: true, restarts: 0, age: '1h', image: 'knight:latest', skills: 1, nixTools: 1, labels: {},
+  name, domain, status: 'online', ready: true, restarts: 0, age: '1h', image: 'knight:latest', labels: {},
 })
 
 let knights: Knight[] = []

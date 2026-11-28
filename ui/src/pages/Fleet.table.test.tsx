@@ -13,7 +13,7 @@ vi.mock('../components/KnightDetailDrawer', () => ({
 }))
 
 const k = (name: string, table: string): Knight => ({
-  table, name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h', image: 'i', skills: 1, nixTools: 1, labels: {},
+  table, name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h', image: 'i', labels: {},
 })
 const all = [k('galahad', 'personal'), k('rt-ui', 'roundtable-dev')]
 const mockApiGet = vi.mocked(apiGet)

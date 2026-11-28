@@ -327,7 +327,11 @@ func TestKnightHandler(t *testing.T) {
 				},
 			},
 			Conditions: []corev1.PodCondition{
-				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				{
+					Type: corev1.PodReady, Status: corev1.ConditionTrue,
+					Reason: "AllGood", Message: "pod is ready",
+					LastTransitionTime: metav1.NewTime(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)),
+				},
 			},
 		},
 	}
@@ -377,6 +381,12 @@ func TestKnightHandler(t *testing.T) {
 				}
 				if detail.Name != "tristan" {
 					t.Errorf("expected name 'tristan', got '%s'", detail.Name)
+				}
+				if len(detail.Conditions) != 1 {
+					t.Fatalf("expected 1 condition, got %d", len(detail.Conditions))
+				}
+				if c := detail.Conditions[0]; c.Reason != "AllGood" || c.Message != "pod is ready" || c.LastTransitionTime != "2026-01-02T03:04:05Z" {
+					t.Errorf("condition fields not propagated: %+v", c)
 				}
 				if detail.Node != "node-1" {
 					t.Errorf("expected node 'node-1', got '%s'", detail.Node)

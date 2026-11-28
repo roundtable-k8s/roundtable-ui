@@ -73,7 +73,7 @@ describe('KnightIsolationSection', () => {
   it('renders in the drawer from the fleet entry', () => {
     const knight: Knight = {
       name: 'kay', domain: 'research', status: 'online', ready: true, restarts: 0, age: '1h',
-      image: 'knight:latest', skills: 0, nixTools: 0, labels: {}, isolation: optedOut,
+      image: 'knight:latest', labels: {}, isolation: optedOut,
     }
     render(<MemoryRouter><KnightDetailDrawer knight={knight} onClose={() => {}} /></MemoryRouter>)
     const section = screen.getByTestId('knight-isolation-section')

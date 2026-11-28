@@ -29,7 +29,7 @@ export function KnightPicker(p: Props) {
           className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-4 py-2 text-white pr-8 appearance-none min-w-[200px]">
           {(filteredKnights.some(k => k.name === selectedKnight) ? filteredKnights : [...knights.filter(k => k.name === selectedKnight), ...filteredKnights]).map(k => {
             const kc = knightConfig[k.name]
-            const statusIcon = k.status === 'online' ? '🟢' : k.status === 'busy' ? '🟡' : '🔴'
+            const statusIcon = k.status === 'online' ? '🟢' : '🔴'
             return <option key={k.name} value={k.name}>{kc?.emoji || '🤖'} {k.name} {statusIcon}</option>
           })}
         </select>

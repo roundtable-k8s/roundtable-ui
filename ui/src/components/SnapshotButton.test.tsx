@@ -5,7 +5,7 @@ import { SnapshotButton } from './SnapshotButton'
 import type { Knight } from '../hooks/useFleet'
 
 const k = (over: Partial<Knight> = {}): Knight => ({
-  name: 'galahad', domain: 'dev', status: 'online', ready: true, restarts: 0, age: '1h', image: 'img', skills: 0, nixTools: 0, labels: {}, ...over,
+  name: 'galahad', domain: 'dev', status: 'online', ready: true, restarts: 0, age: '1h', image: 'img', labels: {}, ...over,
 })
 const res = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })

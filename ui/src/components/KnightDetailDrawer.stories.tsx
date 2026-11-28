@@ -23,8 +23,7 @@ const mockKnight: Knight = {
   restarts: 0,
   age: '3d 12h',
   image: 'ghcr.io/roundtable/knight:latest',
-  skills: 4,
-  nixTools: 7,
+ 
   labels: {},
 }
 

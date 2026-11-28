@@ -5,7 +5,7 @@ import { KnightDetailDrawer } from './KnightDetailDrawer'
 import type { Knight } from '../hooks/useFleet'
 
 const k = (name: string, over: Partial<Knight> = {}): Knight => ({
-  name, domain: 'dev', status: 'online', ready: true, restarts: 0, age: '1h', image: 'img', skills: 0, nixTools: 0, labels: {}, ...over,
+  name, domain: 'dev', status: 'online', ready: true, restarts: 0, age: '1h', image: 'img', labels: {}, ...over,
 })
 
 const resolvers: Record<string, (r: Response) => void> = {}
@@ -52,6 +52,19 @@ describe('KnightDetailDrawer', () => {
     expect(screen.getByText(/^2h.* uptime$/)).toBeInTheDocument()
     rerender(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { ...over, ready: false, status: 'offline' })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText(/^9h.* age$/)).toBeInTheDocument()
+  })
+
+  it('shows the pod condition reason, falling back to message', async () => {
+    render(<MemoryRouter><KnightDetailDrawer knight={k('kay')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(resolvers['/api/fleet/kay']).toBeDefined())
+    await act(async () => {
+      resolvers['/api/fleet/kay'](json(k('kay', { conditions: [
+        { type: 'Ready', status: 'False', reason: 'ContainersNotReady', message: 'containers with unready status' },
+        { type: 'PodScheduled', status: 'True', message: 'scheduled to node-1' },
+      ] })))
+    })
+    expect(screen.getByText('ContainersNotReady')).toBeInTheDocument()
+    expect(screen.getByText('scheduled to node-1')).toBeInTheDocument()
   })
 
   it('shows a False WorkspaceSnapshots condition and its message with zero snapshots', async () => {
