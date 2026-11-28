@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -202,8 +201,7 @@ func triggersHandler(namespace string) http.HandlerFunc {
 		}
 		items, err := cachedList(r.Context(), dynClient, triggerGVR, namespace)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Trigger list error", "error", err)
-			jsonError(w, "Failed to list triggers", http.StatusInternalServerError)
+			upstreamError(w, r, err, "triggers")
 			return
 		}
 		chainTables := chainTableMap(r.Context(), namespace)

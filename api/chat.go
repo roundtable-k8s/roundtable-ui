@@ -219,8 +219,7 @@ func (g *gatewayClient) relaySSE(w http.ResponseWriter, r *http.Request, path st
 		resp, err = g.stream(ctx, path, g.bearer(ctx, true), lastID)
 	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), "gateway stream failed", "path", path, "error", err)
-		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
+		g.fail(w, r, path, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -233,6 +232,11 @@ func (g *gatewayClient) relaySSE(w http.ResponseWriter, r *http.Request, path st
 			msg = body.Error
 		} else if resp.StatusCode == http.StatusNotFound {
 			msg = "Task events not available"
+		}
+		if isGatewayAuthRejection(resp.StatusCode, []byte(`{"error":`+strconv.Quote(msg)+`}`)) {
+			warnGatewayCredentials(r, path, resp.StatusCode)
+			jsonError(w, gatewayCredentialsMsg, http.StatusBadGateway)
+			return
 		}
 		if ra := resp.Header.Get("Retry-After"); ra != "" && validLastEventID(ra) {
 			w.Header().Set("Retry-After", ra)

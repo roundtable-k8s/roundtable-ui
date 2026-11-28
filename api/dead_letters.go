@@ -240,18 +240,22 @@ func (g *gatewayClient) relayKeyed(w http.ResponseWriter, r *http.Request, metho
 		return
 	}
 	status, b, hdr, err := g.doKeyed(r.Context(), routeLabel(r), method, path, query, body, idemKey)
-	if errors.Is(err, errGatewayBodyTooLarge) {
-		slog.WarnContext(r.Context(), "gateway response over relay limit", "path", path, "limit_bytes", gatewayMaxBody)
-		jsonError(w, "Gateway response too large", http.StatusBadGateway)
+	if err != nil {
+		g.fail(w, r, path, err)
 		return
 	}
-	if err != nil {
-		slog.ErrorContext(r.Context(), "gateway request failed", "path", path, "error", err)
-		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
+	if isGatewayAuthRejection(status, b) {
+		warnGatewayCredentials(r, path, status)
+		jsonError(w, gatewayCredentialsMsg, http.StatusBadGateway)
 		return
 	}
 	if v := hdr.Get("Idempotent-Replay"); v != "" {
 		w.Header().Set("Idempotent-Replay", v)
+	}
+	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+		if v := hdr.Get("Retry-After"); v != "" && validLastEventID(v) {
+			w.Header().Set("Retry-After", v)
+		}
 	}
 	writeGatewayResponse(w, status, b)
 }

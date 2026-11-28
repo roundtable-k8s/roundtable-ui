@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -229,8 +228,7 @@ func chainsHandler(namespace string, running *runningRegistry) http.HandlerFunc 
 
 		items, err := cachedList(r.Context(), dynClient, chainGVR, namespace)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Chain list error", "error", err)
-			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
+			upstreamError(w, r, err, "chains")
 			return
 		}
 
@@ -314,8 +312,7 @@ func chainGroupsHandler(namespace string) http.HandlerFunc {
 		}
 		items, err := cachedList(r.Context(), dynClient, chainGVR, namespace)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Chain list error", "error", err)
-			jsonError(w, "Failed to list chains", http.StatusInternalServerError)
+			upstreamError(w, r, err, "chains")
 			return
 		}
 		all := make([]ChainSummary, 0, len(items))

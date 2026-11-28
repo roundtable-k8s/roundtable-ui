@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -165,11 +166,11 @@ func TestGatewayTokenFileRereadOn401(t *testing.T) {
 	if len(f.calls) != 2 || f.calls[0].auth != "Bearer old-token-0123456789" || f.calls[1].auth != "Bearer new-token-0123456789" {
 		t.Errorf("calls %+v", f.calls)
 	}
-	// A persistent 401 is relayed after exactly one retry.
+	// A persistent 401 is answered 502 (the dashboard's credential) after exactly one retry.
 	f.calls = nil
 	os.WriteFile(tokFile, []byte("bad-token-0123456789\n"), 0o600)
 	g.fileToken = ""
-	if w := doReq(r, "POST", "/api/tasks/dispatch", `{"knight":"galahad","task":"x"}`); w.Code != http.StatusUnauthorized || len(f.calls) != 2 {
+	if w := doReq(r, "POST", "/api/tasks/dispatch", `{"knight":"galahad","task":"x"}`); w.Code != http.StatusBadGateway || len(f.calls) != 2 {
 		t.Errorf("got %d after %d calls", w.Code, len(f.calls))
 	}
 }
@@ -407,5 +408,68 @@ func TestIdempotencyKeyInvalid(t *testing.T) {
 		if len(f.calls) != 0 {
 			t.Errorf("key %q reached the gateway", k)
 		}
+	}
+}
+
+func TestGatewayRelayUpstreamMapping(t *testing.T) {
+	gatewayWarnLast = time.Time{}
+	cases := []struct {
+		name       string
+		status     int
+		body       string
+		retryAfter string
+		wantStatus int
+		wantSub    string
+		wantRA     string
+	}{
+		{"401 is the dashboard's credential", 401, `{"error":"unauthorized"}`, "", 502, "GATEWAY_TOKEN", ""},
+		{"403 auth middleware", 403, `{"error":"forbidden: service account not allowed"}`, "", 502, "GATEWAY_TOKEN", ""},
+		{"403 feature stays 403", 403, `{"error":"snapshots disabled"}`, "", 403, "snapshots disabled", ""},
+		{"429 keeps Retry-After", 429, `{"error":"slow down"}`, "7", 429, "slow down", "7"},
+		{"503 keeps Retry-After", 503, `{"error":"busy"}`, "3", 503, "busy", "3"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := &fakeGateway{handler: func(_ gwCall, w http.ResponseWriter) {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+				if c.retryAfter != "" {
+					w.Header().Set("Retry-After", c.retryAfter)
+				}
+				w.WriteHeader(c.status)
+				io.WriteString(w, c.body)
+			}}
+			srv := f.server(t)
+			r := dispatchRouter(&gatewayClient{baseURL: srv.URL, http: srv.Client()})
+			w := doReq(r, "GET", "/api/tasks/dispatch/t1", "")
+			if w.Code != c.wantStatus || !strings.Contains(w.Body.String(), c.wantSub) {
+				t.Fatalf("got %d %s", w.Code, w.Body)
+			}
+			if got := w.Header().Get("Retry-After"); got != c.wantRA {
+				t.Errorf("Retry-After = %q, want %q", got, c.wantRA)
+			}
+			if w.Header().Get("WWW-Authenticate") != "" {
+				t.Error("WWW-Authenticate must not be forwarded")
+			}
+		})
+	}
+}
+
+func TestGatewayRelayTransportFailures(t *testing.T) {
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	t.Cleanup(slow.Close)
+	timeoutClient := &http.Client{Timeout: 50 * time.Millisecond}
+	w := doReq(dispatchRouter(&gatewayClient{baseURL: slow.URL, http: timeoutClient}), "GET", "/api/tasks/dispatch/t1", "")
+	if w.Code != http.StatusGatewayTimeout || !strings.Contains(w.Body.String(), "Gateway timed out") {
+		t.Errorf("timeout: got %d %s", w.Code, w.Body)
+	}
+
+	dead := httptest.NewServer(http.NotFoundHandler())
+	url := dead.URL
+	dead.Close()
+	w = doReq(dispatchRouter(&gatewayClient{baseURL: url, http: http.DefaultClient}), "GET", "/api/tasks/dispatch/t1", "")
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "Gateway unreachable") {
+		t.Errorf("refused: got %d %s", w.Code, w.Body)
 	}
 }

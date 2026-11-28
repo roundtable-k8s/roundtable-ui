@@ -525,8 +525,7 @@ func cardsHandler(store *cardStore) http.HandlerFunc {
 			cards, err = store.list(ctx, tables)
 		}
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Cards: list failed", "bucket", store.bucket, "error", err)
-			jsonError(w, "Cards unavailable", http.StatusInternalServerError)
+			upstreamError(w, r, err, "cards")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

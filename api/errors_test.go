@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"github.com/nats-io/nats.go"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -202,5 +204,35 @@ func TestK8sErrorStatusInvalidOnlyForWrites(t *testing.T) {
 				t.Errorf("%s: got %d, want 422", verb, code)
 			}
 		}
+	}
+}
+
+func TestUpstreamError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"nats timeout", nats.ErrTimeout, 502},
+		{"deadline", context.DeadlineExceeded, 502},
+		{"k8s server timeout", apierrors.NewServerTimeout(schema.GroupResource{}, "list", 1), 502},
+		{"k8s unavailable", apierrors.NewServiceUnavailable("down"), 502},
+		{"other", errors.New("boom"), 500},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			upstreamError(w, httptest.NewRequest("GET", "/x", nil), c.err, "chains")
+			if w.Code != c.want || !strings.Contains(w.Body.String(), `"error"`) {
+				t.Errorf("got %d %s", w.Code, w.Body)
+			}
+		})
+	}
+	w := httptest.NewRecorder()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	upstreamError(w, httptest.NewRequest("GET", "/x", nil).WithContext(ctx), context.Canceled, "chains")
+	if w.Body.Len() != 0 {
+		t.Errorf("cancelled request must write nothing, got %s", w.Body)
 	}
 }

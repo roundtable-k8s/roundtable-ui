@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -308,14 +307,8 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 			return
 		}
 		status, b, err := g.do(r.Context(), routeLabel(r), http.MethodGet, p+"/manifest", nil, nil)
-		if errors.Is(err, errGatewayBodyTooLarge) {
-			slog.WarnContext(r.Context(), "gateway response over relay limit", "path", p+"/manifest", "limit_bytes", gatewayMaxBody)
-			jsonError(w, "Gateway response too large", http.StatusBadGateway)
-			return
-		}
 		if err != nil {
-			slog.ErrorContext(r.Context(), "gateway request failed", "path", p+"/manifest", "error", err)
-			jsonError(w, "Gateway unreachable", http.StatusBadGateway)
+			g.fail(w, r, p+"/manifest", err)
 			return
 		}
 		if status != http.StatusOK {
