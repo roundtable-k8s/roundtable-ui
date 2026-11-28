@@ -61,6 +61,8 @@ type knightPodsResponse struct {
 // listPodsOfKnight returns the knight's own pods (selected by the operator's
 // instance label, so another knight's pods are never included).
 func listPodsOfKnight(ctx context.Context, namespace, knight string) ([]corev1.Pod, error) {
+	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
+	defer cancel()
 	pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("app.kubernetes.io/name=knight,app.kubernetes.io/instance=%s", knight),
 	})
@@ -161,8 +163,7 @@ func knightPodsHandler(namespace string, reg *runningRegistry) http.HandlerFunc 
 		}
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "List knight pods failed", "knight", name, "error", err)
-			jsonError(w, "Failed to list pods", http.StatusInternalServerError)
+			writeK8sError(w, r, err, "list", "pods")
 			return
 		}
 		activity := lastActivityByPod(reg, name)
@@ -246,8 +247,7 @@ func knightLogsHandler(namespace string) http.HandlerFunc {
 
 		pods, err := listPodsOfKnight(r.Context(), namespace, name)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "List knight pods failed", "knight", name, "error", err)
-			jsonError(w, "Failed to list pods", http.StatusInternalServerError)
+			writeK8sError(w, r, err, "list", "pods")
 			return
 		}
 		if len(pods) == 0 {

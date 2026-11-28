@@ -99,7 +99,9 @@ func cachedList(ctx context.Context, client dynamic.Interface, gvr schema.GroupV
 	listCacheMu.Unlock()
 
 	direct := func() ([]unstructured.Unstructured, error) {
-		list, err := client.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+		dctx, dcancel := context.WithTimeout(ctx, k8sRequestTimeout)
+		defer dcancel()
+		list, err := client.Resource(gvr).Namespace(namespace).List(dctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}

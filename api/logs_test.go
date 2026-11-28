@@ -311,15 +311,15 @@ func TestKnightLogs_ListErrorIs500(t *testing.T) {
 	var line map[string]any
 	for _, l := range bytes.Split(buf.Bytes(), []byte("\n")) {
 		var m map[string]any
-		if json.Unmarshal(l, &m) == nil && m["msg"] == "List knight pods failed" {
+		if json.Unmarshal(l, &m) == nil && m["msg"] == "list pods failed" {
 			line = m
 		}
 	}
 	if line == nil {
 		t.Fatalf("list error not logged: %s", buf.String())
 	}
-	if line["level"] != "ERROR" || line["knight"] != "galahad" {
-		t.Errorf("log line %v: want level ERROR and knight galahad", line)
+	if line["level"] != "ERROR" {
+		t.Errorf("log line %v: want level ERROR", line)
 	}
 	if id, _ := line["trace_id"].(string); len(id) != 32 {
 		t.Errorf("trace_id = %v, want 32-char id", line["trace_id"])
