@@ -3,7 +3,7 @@ import { Zap, ArrowLeft, ExternalLink, CalendarClock } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, ListState, TableBadge, Badge } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, ListState, TableBadge, Badge, DataTable } from '../components/ui'
 import type { Tone } from '../lib/tone'
 import { countLabel, formatRelativeTime, until } from '../lib/format'
 import { chainLink, TRIGGER_DOCS_URL, type Trigger } from '../lib/triggers'
@@ -53,20 +53,15 @@ function TriggersEmptyExtra() {
 
 export function TriggersTable({ triggers, showTable = false }: { triggers: Trigger[]; showTable?: boolean }) {
   return (
-    <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
-            <th className="px-4 py-3 font-medium">Trigger</th>
-            <th className="px-4 py-3 font-medium">Source</th>
-            <th className="px-4 py-3 font-medium">Target</th>
-            <th className="px-4 py-3 font-medium">Last fired</th>
-            <th className="px-4 py-3 font-medium">Next scheduled</th>
-            <th className="px-4 py-3 font-medium text-right">Active runs</th>
-            <th className="px-4 py-3 font-medium">State</th>
-          </tr>
-        </thead>
-        <tbody>
+    <DataTable label="Triggers" columns={[
+      { key: 'trigger', header: 'Trigger' },
+      { key: 'source', header: 'Source' },
+      { key: 'target', header: 'Target' },
+      { key: 'last-fired', header: 'Last fired' },
+      { key: 'next-scheduled', header: 'Next scheduled' },
+      { key: 'active-runs', header: 'Active runs', align: 'right' },
+      { key: 'state', header: 'State' },
+    ]}>
           {triggers.map(t => (
             <tr key={`${t.namespace}/${t.name}`} className="border-b border-roundtable-steel/50 last:border-0">
               <td className="px-4 py-3">
@@ -86,9 +81,7 @@ export function TriggersTable({ triggers, showTable = false }: { triggers: Trigg
               <td className="px-4 py-3"><ReadyBadge t={t} /></td>
             </tr>
           ))}
-        </tbody>
-      </table>
-    </div>
+    </DataTable>
   )
 }
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Workflow, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useUrlParam } from '../hooks/useUrlParam'
-import { PageHeader, RefreshButton, ListState, PhaseBadge, Badge } from '../components/ui'
+import { PageHeader, RefreshButton, ListState, PhaseBadge, Badge, DataTable } from '../components/ui'
 import type { Tone } from '../lib/tone'
 import { TraceLink } from '../components/TraceLink'
 import { UntrustedText } from '../components/UntrustedText'
@@ -47,19 +47,14 @@ function runAge(run: GatewayRun): string {
 
 export function RunsTable({ runs }: { runs: GatewayRun[] }) {
   return (
-    <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-      <table aria-label="Runs" className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
-            <th className="px-4 py-2">Chain</th>
-            <th className="px-4 py-2">Phase</th>
-            <th className="px-4 py-2">Source</th>
-            <th className="px-4 py-2">Age</th>
-            <th className="px-4 py-2">Issue</th>
-            <th className="px-4 py-2">Trace</th>
-          </tr>
-        </thead>
-        <tbody>
+    <DataTable label="Runs" columns={[
+      { key: 'chain', header: 'Chain' },
+      { key: 'phase', header: 'Phase' },
+      { key: 'source', header: 'Source' },
+      { key: 'age', header: 'Age' },
+      { key: 'issue', header: 'Issue' },
+      { key: 'trace', header: 'Trace' },
+    ]}>
           {runs.map((r) => (
             <tr key={`${r.namespace ?? ''}/${r.run}`} className="border-b border-roundtable-steel/50 last:border-0">
               <td className="px-4 py-2">
@@ -75,9 +70,7 @@ export function RunsTable({ runs }: { runs: GatewayRun[] }) {
               <td className="px-4 py-2"><TraceLink traceId={r.traceId} /></td>
             </tr>
           ))}
-        </tbody>
-      </table>
-    </div>
+    </DataTable>
   )
 }
 
