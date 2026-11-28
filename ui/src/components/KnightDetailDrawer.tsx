@@ -69,7 +69,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const refreshAll = () => { refreshDetail(); refreshSession(knight.name) }
 
   return (
-    <Drawer onClose={onClose} label={`${knight.name} details`} widthClass="w-[520px]">
+    <Drawer onClose={onClose} label={`${knight.name} details`} widthClass="w-full max-w-[520px]">
         {/* Header */}
         <div className="sticky top-0 bg-roundtable-slate border-b border-roundtable-steel p-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">

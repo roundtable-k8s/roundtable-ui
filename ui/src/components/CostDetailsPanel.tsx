@@ -35,7 +35,7 @@ export function CostDetailsPanel({
     <div className="mt-6 bg-roundtable-slate border border-roundtable-steel rounded-xl overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-roundtable-steel/20 transition-colors"
+        className="w-full flex flex-wrap items-center justify-between gap-y-2 px-5 py-4 hover:bg-roundtable-steel/20 transition-colors"
       >
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
           <DollarSign className="w-5 h-5 text-roundtable-gold" />
@@ -52,11 +52,11 @@ export function CostDetailsPanel({
       {expanded && (
         <div className="px-5 pb-5">
           {/* Summary: task figures cover the event buffer only */}
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-5">
             <div className="flex items-center gap-4">
               <span className="text-2xl font-bold text-roundtable-gold">{formatCost(costPanelData.totalCost)}</span>
             </div>
-            <div className="flex gap-4 text-sm text-gray-400">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
               <span><span className="text-white font-medium">{entries.length}</span> tasks</span>
               <span><span className="text-white font-medium">{costPanelData.costByKnight.length}</span> active knights</span>
               <span>avg <span className="text-roundtable-gold font-medium">{entries.length > 0 ? formatCost(costPanelData.totalCost / entries.length) : '$0.00'}</span>/task</span>

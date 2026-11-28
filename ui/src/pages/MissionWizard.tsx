@@ -253,7 +253,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                   When enabled, a planner knight will automatically generate chains and knights from your objective.
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field id="wiz-cost-budget" label="Cost Budget (USD)" size="sm" {...err('costBudgetUSD')}>
                   <TextInput id="wiz-cost-budget"
                     value={form.costBudgetUSD}
@@ -424,7 +424,7 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                     />
                     </Field>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <Field id="wiz-planner-timeout" label="Timeout (s)" {...err('planner.timeout')}>
                       <TextInput id="wiz-planner-timeout"
                         type="number"
