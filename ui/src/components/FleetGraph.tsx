@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   ReactFlow,
+  type ReactFlowInstance,
   type Node,
   type Edge,
   Background,
@@ -173,12 +174,12 @@ function layoutNodes(
   return nodes
 }
 
-function buildEdges(
+export function buildEdges(
   knightNames: string[],
   recentEvents: NatsEvent[],
 ): Edge[] {
+  const nodeIds = new Set(['tim', ...knightNames])
   const edges: Edge[] = []
-  const edgeActivity: Record<string, number> = {}
 
   // Base edges from Tim to each knight (faint)
   knightNames.forEach((name) => {
@@ -191,7 +192,10 @@ function buildEdges(
     })
   })
 
-  // Count recent messages per edge pair
+  // Count recent messages per directed pair. The pair is kept as a key
+  // (never re-split from a string) so hyphenated knight names such as
+  // "coder-1" resolve to the right node.
+  const pairs = new Map<string, { src: string; tgt: string; count: number }>()
   for (const event of recentEvents.slice(0, 50)) {
     const parsed = parseEvent(event)
     const isTask = event.type === 'task'
@@ -201,59 +205,62 @@ function buildEdges(
     const from = (parsed.data.from as string) || ''
     const sourceKnight = knightNameForDomain(from)
 
-    let edgeKey: string
+    let src: string
+    let tgt: string
     if (isTask) {
-      edgeKey = sourceKnight ? `${sourceKnight}-${knight}` : `tim-${knight}`
+      src = sourceKnight ?? 'tim'
+      tgt = knight
     } else {
-      edgeKey = sourceKnight ? `${knight}-${sourceKnight}` : `${knight}-tim`
+      src = knight
+      tgt = sourceKnight ?? 'tim'
     }
 
-    edgeActivity[edgeKey] = (edgeActivity[edgeKey] || 0) + 1
+    const pairKey = `${src}\u0000${tgt}`
+    const entry = pairs.get(pairKey)
+    if (entry) entry.count++
+    else pairs.set(pairKey, { src, tgt, count: 1 })
   }
 
-  // Add knight-to-knight edges for cross-communication
-  for (const [key, count] of Object.entries(edgeActivity)) {
-    const [src, tgt] = key.split('-')
-    if (!src || !tgt) continue
+  for (const { src, tgt, count } of pairs.values()) {
+    // Only draw edges between nodes that exist (unknown knights are skipped)
+    if (!nodeIds.has(src) || !nodeIds.has(tgt)) continue
 
-    const existingIdx = edges.findIndex((e) => e.id === key || e.id === `${tgt}-${src}`)
     const intensity = Math.min(count / 5, 1)
-    const strokeWidth = 1 + intensity * 3
+    const visual = {
+      style: {
+        stroke: heatColor(intensity),
+        strokeWidth: 1 + intensity * 3,
+      },
+      animated: count > 0,
+      label: count > 1 ? `${count}` : undefined,
+      labelStyle: { fill: '#9ca3af', fontSize: 10 },
+      labelBgStyle: { fill: '#0f172a', fillOpacity: 0.8 },
+      labelBgPadding: [4, 2] as [number, number],
+    }
 
+    // Upgrade the existing Tim edge (or a reverse edge) if there is one
+    const existingIdx = edges.findIndex(
+      (e) => (e.source === src && e.target === tgt) || (e.source === tgt && e.target === src),
+    )
     if (existingIdx >= 0) {
-      // Upgrade existing edge
-      edges[existingIdx] = {
-        ...edges[existingIdx],
-        style: {
-          stroke: heatColor(intensity),
-          strokeWidth,
-        },
-        animated: count > 0,
-        label: count > 1 ? `${count}` : undefined,
-        labelStyle: { fill: '#9ca3af', fontSize: 10 },
-        labelBgStyle: { fill: '#0f172a', fillOpacity: 0.8 },
-        labelBgPadding: [4, 2] as [number, number],
-      }
+      edges[existingIdx] = { ...edges[existingIdx], ...visual }
     } else {
       // New knight-to-knight edge (#41 — animated task journey)
-      edges.push({
-        id: key,
-        source: src,
-        target: tgt,
-        style: {
-          stroke: heatColor(intensity),
-          strokeWidth,
-        },
-        animated: count > 0,
-        label: count > 1 ? `${count}` : undefined,
-        labelStyle: { fill: '#9ca3af', fontSize: 10 },
-        labelBgStyle: { fill: '#0f172a', fillOpacity: 0.8 },
-        labelBgPadding: [4, 2] as [number, number],
-      })
+      edges.push({ id: `${src}->${tgt}`, source: src, target: tgt, ...visual })
     }
   }
 
   return edges
+}
+
+// Reuse one empty object so the default prop does not change identity every render
+const NO_STATUSES: Record<string, string> = {}
+
+// Keep existing nodes (and any position the user dragged them to); add new
+// knights from the fresh layout; drop knights that left the fleet.
+function reconcileNodes(prev: Node[], knightNames: string[]): Node[] {
+  const prevById = new Map(prev.map((n) => [n.id, n]))
+  return layoutNodes(knightNames, {}).map((node) => prevById.get(node.id) ?? node)
 }
 
 // --- Main Component ---
@@ -265,12 +272,14 @@ interface FleetGraphProps {
   onKnightClick?: (knightName: string) => void
 }
 
-export function FleetGraph({ knights, events, connected, knightStatuses = {}, onKnightClick }: FleetGraphProps) {
-  const lastLayoutRef = useRef<string>('')
+export function FleetGraph({ knights, events, connected, knightStatuses = NO_STATUSES, onKnightClick }: FleetGraphProps) {
+  const rfRef = useRef<ReactFlowInstance<Node, Edge> | null>(null)
 
-  // Build dynamic knight config and names from fleet data
+  // Build dynamic knight config and names from fleet data. The names are keyed
+  // on their joined string so a poll that returns the same fleet keeps identity.
+  const nameKey = knights.map(k => k.name).join('\n')
+  const knightNames = useMemo(() => (nameKey ? nameKey.split('\n') : []), [nameKey])
   const knightConfig = useMemo(() => buildKnightConfigFromFleet(knights), [knights])
-  const knightNames = useMemo(() => knights.map(k => k.name), [knights])
 
   // Compute activity from events
   const activity = useMemo(() => {
@@ -313,25 +322,20 @@ export function FleetGraph({ knights, events, connected, knightStatuses = {}, on
     return act
   }, [events, knightStatuses, knightNames])
 
-  // Build initial nodes
-  const initialNodes = useMemo(() => {
-    if (knightNames.length === 0) return []
-    const nodes = layoutNodes(knightNames, activity)
-    // Update hub data
-    const hub = nodes.find((n) => n.id === 'tim')
-    if (hub) {
-      hub.data = { connected, totalMessages: events.length }
-    }
-    return nodes
-  }, [knightNames.length]) // Recompute layout when knight count changes
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
-  const initialEdges = useMemo(() => {
-    if (knightNames.length === 0) return []
-    return buildEdges(knightNames, events)
+  // Add/remove nodes when the fleet changes. Existing nodes keep their position.
+  useEffect(() => {
+    setNodes((prev) => reconcileNodes(prev, knightNames))
+  }, [knightNames, setNodes])
+
+  // Re-fit the view when the number of knights changes
+  useEffect(() => {
+    if (knightNames.length === 0) return
+    const frame = requestAnimationFrame(() => rfRef.current?.fitView({ padding: 0.2 }))
+    return () => cancelAnimationFrame(frame)
   }, [knightNames.length])
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
   // Update node data (heat, status) without changing positions
   useEffect(() => {
@@ -370,6 +374,12 @@ export function FleetGraph({ knights, events, connected, knightStatuses = {}, on
     return () => { if (edgeTimerRef.current) clearTimeout(edgeTimerRef.current) }
   }, [events, setEdges, knightNames])
 
+  // Drop edges whose endpoints are gone while the debounced rebuild is pending
+  const visibleEdges = useMemo(() => {
+    const ids = new Set(nodes.map((n) => n.id))
+    return edges.filter((e) => ids.has(e.source) && ids.has(e.target))
+  }, [nodes, edges])
+
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (node.id !== 'tim' && onKnightClick) {
@@ -395,11 +405,12 @@ export function FleetGraph({ knights, events, connected, knightStatuses = {}, on
     <div className="w-full h-[500px] bg-roundtable-navy rounded-xl border border-roundtable-steel overflow-hidden">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={visibleEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
+        onInit={(instance) => { rfRef.current = instance }}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.5}
