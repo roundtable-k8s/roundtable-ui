@@ -216,8 +216,11 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const [logsExpanded, setLogsExpanded] = useState(false)
   const [knightDetail, setKnightDetail] = useState<Knight | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
 
   const detailAbort = useRef<AbortController | null>(null)
+  // Latest recent-activity request: a superseded refresh must not clear the spinner.
+  const recentSeq = useRef(0)
 
   const fetchKnightDetail = async (knightName: string) => {
     // One detail request at a time: abort the previous one (other knight or
@@ -226,11 +229,15 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
     const controller = new AbortController()
     detailAbort.current = controller
     setDetailLoading(true)
+    setDetailError(null)
     try {
       const detail = await apiGet<Knight>(`/api/fleet/${encodeURIComponent(knightName)}`, { signal: controller.signal })
       if (!controller.signal.aborted) setKnightDetail(detail)
     } catch (e) {
-      if (!controller.signal.aborted) console.error('Failed to fetch knight detail:', e)
+      if (!controller.signal.aborted) {
+        console.error('Failed to fetch knight detail:', e)
+        setDetailError(e instanceof Error ? e.message : String(e))
+      }
     } finally {
       if (!controller.signal.aborted) setDetailLoading(false)
     }
@@ -239,9 +246,10 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
   const refreshAll = async (knightName: string) => {
     fetchStats(knightName)
     fetchKnightDetail(knightName)
+    const seq = ++recentSeq.current
     setRecentLoading(true)
     await fetchRecent(knightName, 30)
-    setRecentLoading(false)
+    if (seq === recentSeq.current) setRecentLoading(false)
   }
 
   // Keyed on the knight's identity, not the object: the fleet poll hands the
@@ -318,6 +326,23 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
               ⚠️ {error}
               <p className="text-red-400/60 text-xs mt-1">Knight may not have introspection enabled yet</p>
             </ErrorBanner>
+          )}
+
+          {detailError && !knightDetail && (
+            <ErrorBanner>
+              <p>Could not load the knight&apos;s details: {sanitizeText(detailError)}</p>
+              <button
+                type="button"
+                onClick={() => fetchKnightDetail(knight.name)}
+                className="mt-2 text-xs text-red-300 underline hover:text-white"
+              >
+                Retry
+              </button>
+            </ErrorBanner>
+          )}
+
+          {detailLoading && !knightDetail && !detailError && (
+            <p className="text-gray-500 text-xs" role="status">Loading details...</p>
           )}
 
           {/* Agent card (#243) */}
