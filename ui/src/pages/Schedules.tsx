@@ -6,7 +6,7 @@ import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { apiDelete, apiPost } from '../lib/api'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Button, LinkButton, ConfirmDialog as ConfirmModal } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Badge, Button, LinkButton, ConfirmDialog as ConfirmModal } from '../components/ui'
 import { countLabel, formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
@@ -29,13 +29,13 @@ function KindIcon({ kind }: { kind: string }) {
 function ManagedByBadge({ managedBy }: { managedBy: Schedule['managedBy'] }) {
   if (managedBy === 'git') {
     return (
-      <span data-testid="managed-git" title="Change it in Git; the gateway refuses edits and deletes"
-        className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-300">
-        <GitBranch className="w-3 h-3" aria-hidden /> managed in Git
-      </span>
+      <Badge tone="sky" testId="managed-git" title="Change it in Git; the gateway refuses edits and deletes"
+        icon={<GitBranch className="w-3 h-3" aria-hidden />}>
+        managed in Git
+      </Badge>
     )
   }
-  return <span className="rounded-full border border-gray-500/30 bg-gray-500/10 px-2 py-0.5 text-xs text-gray-400">{managedBy === 'api' ? 'API' : 'other'}</span>
+  return <Badge tone="gray">{managedBy === 'api' ? 'API' : 'other'}</Badge>
 }
 
 function outcomeClass(outcome: string): string {
@@ -161,8 +161,8 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
                 <td className="px-4 py-3"><LastRun s={s} /></td>
                 <td className="px-4 py-3">
                   {s.suspended
-                    ? <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Suspended</span>
-                    : <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">Active</span>}
+                    ? <Badge tone="amber">Suspended</Badge>
+                    : <Badge tone="green">Active</Badge>}
                   {describeSuspension(s) && <div data-testid="schedule-suspended-by" className="mt-1 text-xs text-gray-400">suspended by {describeSuspension(s)}</div>}
                 </td>
                 <td className="px-4 py-3">

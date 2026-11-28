@@ -4,6 +4,7 @@
  * (roundtable-k8s/roundtable docs/gateway.md, "Schedules").
  */
 import { formatCost, formatSecondsLadder } from './format'
+import type { Tone } from './tone'
 
 /** Who owns a schedule. Git-managed schedules cannot be edited or deleted here. */
 export type ManagedBy = 'git' | 'api' | 'other'
@@ -271,17 +272,17 @@ export function outcomeLabel(outcome: string): string {
   return OUTCOME_LABELS[outcome] ?? outcome
 }
 
-export function outcomeClass(outcome: string): string {
+export function outcomeTone(outcome: string): Tone {
   switch (outcome) {
-    case 'succeeded': return 'border-green-500/30 bg-green-500/10 text-green-300'
+    case 'succeeded': return 'green'
     case 'failed':
-    case 'lost': return 'border-red-500/30 bg-red-500/10 text-red-300'
+    case 'lost': return 'red'
     case 'partiallySucceeded':
-    case 'skipped': return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    case 'skipped': return 'amber'
     case 'running':
     case 'pending':
-    case 'started': return 'border-blue-500/30 bg-blue-500/10 text-blue-300'
-    default: return 'border-gray-500/30 bg-gray-500/10 text-gray-300'
+    case 'started': return 'blue'
+    default: return 'gray'
   }
 }
 

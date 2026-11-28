@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, Externa
 import { UntrustedText } from '../components/UntrustedText'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
-import { PageHeader, RefreshButton, PhaseBadge, ErrorBanner, ListState } from '../components/ui'
+import { PageHeader, RefreshButton, PhaseBadge, ErrorBanner, ListState, Badge } from '../components/ui'
 import { countLabel, formatDuration, formatRelativeTime, until } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainRunGroup, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
@@ -434,9 +434,7 @@ function StepDetail({ step, chainName }: { step: ChainStep; chainName: string })
         <span className="font-semibold text-white capitalize">{step.name}</span>
         <PhaseBadge phase={step.phase} />
         {step.continueOnFailure && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
-            soft fail
-          </span>
+          <Badge tone="yellow" strength="strong" className="font-medium">soft fail</Badge>
         )}
         <span className="text-xs text-gray-500 ml-auto">{formatDuration(step.startTime, step.completionTime)}</span>
       </div>
@@ -579,9 +577,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
         <span className="font-semibold text-white">{chain.name}</span>
         <PhaseBadge phase={chain.phase} />
         {chain.suspend && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-red-500/20 text-red-400 border-red-500/30">
-            ⏸ suspended
-          </span>
+          <Badge tone="red" strength="strong" className="font-medium">⏸ suspended</Badge>
         )}
         {chain.schedule && (
           <span data-testid="scheduled-badge" className="text-xs font-medium px-2 py-0.5 rounded-full border bg-roundtable-gold/10 text-roundtable-gold border-roundtable-gold/30">

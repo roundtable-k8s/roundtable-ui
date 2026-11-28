@@ -3,7 +3,8 @@ import { Zap, ArrowLeft, ExternalLink, CalendarClock } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, ListState, TableBadge } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, ListState, TableBadge, Badge } from '../components/ui'
+import type { Tone } from '../lib/tone'
 import { countLabel, formatRelativeTime, until } from '../lib/format'
 import { chainLink, TRIGGER_DOCS_URL, type Trigger } from '../lib/triggers'
 
@@ -11,13 +12,11 @@ const POLL_MS = 10000
 
 function ReadyBadge({ t }: { t: Trigger }) {
   if (t.suspended) {
-    return <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Suspended</span>
+    return <Badge tone="amber">Suspended</Badge>
   }
-  const cls = t.ready === 'true' ? 'border-green-500/30 bg-green-500/10 text-green-300'
-    : t.ready === 'false' ? 'border-red-500/30 bg-red-500/10 text-red-300'
-    : 'border-gray-500/30 bg-gray-500/10 text-gray-300'
+  const tone: Tone = t.ready === 'true' ? 'green' : t.ready === 'false' ? 'red' : 'gray'
   const label = t.ready === 'true' ? 'Ready' : t.ready === 'false' ? 'Not ready' : 'Unknown'
-  return <span className={`rounded-full border px-2 py-0.5 text-xs ${cls}`}>{label}</span>
+  return <Badge tone={tone}>{label}</Badge>
 }
 
 function TargetCell({ t }: { t: Trigger }) {

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { Workflow, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useUrlParam } from '../hooks/useUrlParam'
-import { PageHeader, RefreshButton, ListState, PhaseBadge } from '../components/ui'
+import { PageHeader, RefreshButton, ListState, PhaseBadge, Badge } from '../components/ui'
+import type { Tone } from '../lib/tone'
 import { TraceLink } from '../components/TraceLink'
 import { UntrustedText } from '../components/UntrustedText'
 import { sanitizeText } from '../lib/untrusted'
@@ -15,18 +16,12 @@ import {
 const POLL_MS = 10_000
 const SOURCE_OPTIONS = ['all', ...RUN_SOURCES] as const
 
-const SOURCE_STYLES: Record<string, string> = {
-  gateway: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
-  trigger: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
-  pickup: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
-}
+const SOURCE_TONES: Record<string, Tone> = { gateway: 'blue', trigger: 'purple', pickup: 'emerald' }
 
 function SourceBadge({ source }: { source?: string }) {
   if (!source) return <span className="text-gray-600">—</span>
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${SOURCE_STYLES[source] ?? 'bg-gray-500/10 text-gray-300 border-gray-500/30'}`}>
-      {sanitizeText(source)}
-    </span>
+    <Badge tone={SOURCE_TONES[source] ?? 'gray'} className="font-medium">{sanitizeText(source)}</Badge>
   )
 }
 

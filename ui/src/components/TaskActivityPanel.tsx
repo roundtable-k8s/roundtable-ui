@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowDown, Bot, CheckCircle2, Loader2, Play, Scissors, Wrench, X, XCircle } from 'lucide-react'
-import { Drawer } from './ui'
+import { Drawer, Badge } from './ui'
 import { UntrustedText } from './UntrustedText'
 import { useTaskActivity } from '../hooks/useTaskActivity'
 import { useNow } from '../hooks/useNow'
@@ -310,9 +310,9 @@ export function TaskActivityPanel({ taskId, hint, extra, onClose }: TaskActivity
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               Task activity
               {state.finished ? (
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-gray-500/20 text-gray-300 border-gray-500/30">finished</span>
+                <Badge tone="gray" strength="strong" className="font-medium">finished</Badge>
               ) : state.loaded ? (
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-blue-500/20 text-blue-400 border-blue-500/30">live</span>
+                <Badge tone="blue" strength="strong" className="font-medium">live</Badge>
               ) : null}
             </h2>
             <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-200">

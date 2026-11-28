@@ -6,7 +6,8 @@
  */
 import { useEffect, useId, useRef, useState, type ReactNode, type ComponentType, type RefObject } from 'react'
 import { RefreshCw, ChevronDown, ChevronUp, X } from 'lucide-react'
-import { phaseColor } from '../../lib/status'
+import { phaseStyle } from '../../lib/status'
+import { toneClasses, type Tone, type ToneStrength } from '../../lib/tone'
 import { formatTimestamp } from '../../lib/format'
 
 /* ------------------------------------------------------------------ */
@@ -180,13 +181,35 @@ export function StatCard({ label, value, total, color = 'text-white', icon, deta
   )
 }
 
-/** Phase pill colored via the shared lib/status map. */
-export function PhaseBadge({ phase }: { phase: string }) {
+/** The one status pill: a tone's colours on a rounded-full bordered label. */
+export function Badge({ tone, strength = 'soft', size = 'xs', icon, title, className = '', testId, children }: {
+  tone: Tone
+  strength?: ToneStrength
+  size?: 'xs' | 'sm'
+  icon?: ReactNode
+  title?: string
+  /** Extra layout classes (margins, font weight); never colours. */
+  className?: string
+  testId?: string
+  children: ReactNode
+}) {
+  const dims = size === 'sm' ? 'px-2.5 py-1 text-sm' : 'px-2 py-0.5 text-xs'
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${phaseColor(phase)}`}>
-      {phase}
+    <span
+      title={title}
+      data-testid={testId}
+      className={`${icon ? 'inline-flex items-center gap-1 ' : ''}rounded-full border ${dims} ${toneClasses(tone, strength)}${className ? ` ${className}` : ''}`}
+    >
+      {icon}
+      {children}
     </span>
   )
+}
+
+/** Phase pill colored via the shared lib/status map. */
+export function PhaseBadge({ phase }: { phase: string }) {
+  const { tone, strength } = phaseStyle(phase)
+  return <Badge tone={tone} strength={strength} className="font-medium">{phase}</Badge>
 }
 
 /** Horizontal meter: track + colored fill, percent 0–100. */
