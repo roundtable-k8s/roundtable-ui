@@ -1,7 +1,6 @@
-import { useState } from 'react'
-import { useVisibleInterval } from './useVisibleInterval'
+import { useMemo } from 'react'
+import { usePolledFetch } from './usePolledFetch'
 import { inTable } from '../lib/tables'
-import { apiGet, ApiError } from '../lib/api'
 import { DEAD_LETTERS_URL, type DeadLetter } from '../lib/deadLetters'
 
 /** The gateway lists at most this many dead letters by default, so a count this high may be cut short. */
@@ -20,29 +19,27 @@ export interface OpenDeadLetters {
   loading?: boolean
 }
 
-/** Open dead letters, polled for the nav badge. `error` is set when the last poll failed (the count is then unknown). */
+/**
+ * Open dead letters, polled for the nav badge. The list is fetched unfiltered and shared by every
+ * component using it; the table filter is applied in the browser. `error` is set when the last
+ * poll failed (the count is then unknown).
+ */
 export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLetters {
-  const [state, setState] = useState<OpenDeadLetters>({ count: 0, capped: false, loading: true })
-  useVisibleInterval(
-    (signal) =>
-      apiGet<{ deadLetters?: DeadLetter[]; total?: number }>(`${DEAD_LETTERS_URL}?state=open`, { signal })
-        .then((d) => {
-          const all = d.deadLetters ?? []
-          const count = all.filter((x) => inTable(table, x.table)).length
-          const capped = all.length >= DEAD_LETTER_CAP || (typeof d.total === 'number' && d.total > all.length)
-          setState({ count, capped, total: !table && typeof d.total === 'number' ? d.total : undefined, loading: false })
-        })
-        .catch((e) => {
-          if (signal.aborted) return
-          // 503 means the API has no GATEWAY_URL: nothing to count, not a failure (an unreachable gateway is 502).
-          if (e instanceof ApiError && e.status === 503) setState({ count: 0, capped: false, loading: false })
-          else setState((prev) => ({ ...prev, error: true }))
-        }),
-    intervalMs,
-    true,
-    { immediate: true, key: table },
-  )
-  return state
+  const { data, error, errorStatus, loading } = usePolledFetch<{ deadLetters?: DeadLetter[]; total?: number } | null>(
+    `${DEAD_LETTERS_URL}?state=open`, intervalMs, null)
+  return useMemo(() => {
+    if (!data) {
+      // 503 means the API has no GATEWAY_URL: nothing to count, not a failure (an unreachable gateway is 502).
+      if (error && errorStatus === 503) return { count: 0, capped: false, loading: false }
+      return error ? { count: 0, capped: false, loading: false, error: true } : { count: 0, capped: false, loading }
+    }
+    const all = data.deadLetters ?? []
+    const count = all.filter((x) => inTable(table, x.table)).length
+    const capped = all.length >= DEAD_LETTER_CAP || (typeof data.total === 'number' && data.total > all.length)
+    const res: OpenDeadLetters = { count, capped, total: !table && typeof data.total === 'number' ? data.total : undefined, loading: false }
+    if (error && errorStatus !== 503) res.error = true
+    return res
+  }, [data, error, errorStatus, loading, table])
 }
 
 /** Badge text and tooltip: "100+" with the real count in the title when known. */

@@ -36,8 +36,9 @@ describe('useOpenDeadLetters', () => {
 
   it('is loading, not zero, until the first answer', async () => {
     apiGet.mockReturnValue(new Promise(() => {}))
-    const { result } = renderHook(() => useOpenDeadLetters(''))
+    const { result, unmount } = renderHook(() => useOpenDeadLetters(''))
     expect(result.current.loading).toBe(true)
+    unmount() // the request is shared per url: drop the pending one before the next hook asks
     apiGet.mockResolvedValue({ deadLetters: [] })
     const done = renderHook(() => useOpenDeadLetters(''))
     await waitFor(() => expect(done.result.current.loading).toBe(false))

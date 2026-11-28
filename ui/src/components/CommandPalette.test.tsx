@@ -84,4 +84,17 @@ describe('CommandPalette', () => {
       err.mockRestore()
     }
   })
+
+  it('reuses fresh lists when reopened within 30 s and asks for 100 chains', async () => {
+    const first = renderIt()
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'gal' } })
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(5))
+    expect(apiGet).toHaveBeenCalledTimes(5)
+    expect(apiGet.mock.calls.some((c) => String(c[0]).includes('/api/chains') && String(c[0]).includes('limit=100'))).toBe(true)
+    first.unmount()
+    renderIt()
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'gal' } })
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(5))
+    expect(apiGet).toHaveBeenCalledTimes(5)
+  })
 })
