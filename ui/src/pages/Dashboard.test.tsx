@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { DashboardPage } from './Dashboard'
 import { useFleet } from '../hooks/useFleet'
-import { apiGet, apiGetWithTotal, apiFetch } from '../lib/api'
+import { apiGet, apiGetWithTotal, ApiError } from '../lib/api'
 import { useWebSocket } from '../hooks/useWebSocket'
 
 // Mock the hooks
@@ -80,9 +80,11 @@ vi.mock('../lib/api', () => ({
     const { apiGet } = await import('../lib/api')
     return { items: await apiGet(url, init as never), total: null }
   }),
-  // fetchWithTimeout (session introspection) goes through apiFetch — report
-  // "unsupported" so cost fan-out resolves without network access
-  apiFetch: vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) })),
+  // session introspection goes through apiGet — the default {} answer is
+  // an empty reply, so cost fan-out resolves without network access
+  ApiError: class ApiError extends Error {
+    constructor(public status: number, message: string) { super(message) }
+  },
 }))
 
 function renderDashboard(props = {}) {
@@ -94,12 +96,11 @@ function renderDashboard(props = {}) {
 }
 
 // Tests override these mocks; put the defaults back after every test, pass or fail.
-let defaults: { apiGetWithTotal: unknown; apiGet: unknown; apiFetch: unknown; useFleet: unknown; useWebSocket: unknown }
+let defaults: { apiGetWithTotal: unknown; apiGet: unknown; useFleet: unknown; useWebSocket: unknown }
 beforeEach(() => {
   defaults = {
     apiGetWithTotal: vi.mocked(apiGetWithTotal).getMockImplementation(),
     apiGet: vi.mocked(apiGet).getMockImplementation(),
-    apiFetch: vi.mocked(apiFetch).getMockImplementation(),
     useFleet: vi.mocked(useFleet).getMockImplementation(),
     useWebSocket: vi.mocked(useWebSocket).getMockImplementation(),
   }
@@ -107,7 +108,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.mocked(apiGet).mockReset().mockImplementation(defaults.apiGet as typeof apiGet)
   vi.mocked(apiGetWithTotal).mockReset().mockImplementation(defaults.apiGetWithTotal as typeof apiGetWithTotal)
-  vi.mocked(apiFetch).mockReset().mockImplementation(defaults.apiFetch as typeof apiFetch)
   vi.mocked(useFleet).mockReset().mockImplementation(defaults.useFleet as typeof useFleet)
   vi.mocked(useWebSocket).mockReset().mockImplementation(defaults.useWebSocket as typeof useWebSocket)
 })
@@ -285,45 +285,44 @@ describe('DashboardPage session cost refresh (#152)', () => {
   })
 
   async function setup(events: unknown[], sessionCost: () => number) {
-    vi.mocked(apiFetch).mockImplementation(((url: string) => {
+    vi.mocked(apiGet).mockImplementation(((url: string, init?: unknown) => {
       const m = /fleet\/(\w+)\/session/.exec(url)
+      if (!m) return (defaults.apiGet as (u: string, i?: unknown) => Promise<unknown>)(url, init)
       // Only galahad has session stats
-      if (m?.[1] === 'galahad') {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ session: { cost: sessionCost() } }) })
-      }
-      return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
-    }) as unknown as typeof apiFetch)
+      if (m[1] === 'galahad') return Promise.resolve({ session: { cost: sessionCost() } })
+      return Promise.reject(new ApiError(404, 'no introspection'))
+    }) as unknown as typeof apiGet)
     const ws = vi.mocked(useWebSocket)
     ws.mockReturnValue({ events: [], connected: true } as unknown as ReturnType<typeof useWebSocket>)
     const view = renderDashboard()
     await waitFor(() => expect(screen.getAllByText('$1.00').length).toBeGreaterThan(0))
     ws.mockReturnValue({ events, connected: true } as unknown as ReturnType<typeof useWebSocket>)
-    return { view, apiFetch }
+    return { view }
   }
 
   it('refreshes (debounced) session cost for a knight with session stats, without double-counting', async () => {
     let cost = 1
     const evs = [result('galahad', '2026-01-01T00:00:02Z', 0.5), result('galahad', '2026-01-01T00:00:01Z', 0.5)]
-    const { view, apiFetch } = await setup(evs, () => cost)
-    const before = vi.mocked(apiFetch).mock.calls.length
+    const { view } = await setup(evs, () => cost)
+    const before = vi.mocked(apiGet).mock.calls.filter(c => /\/session\?/.test(String(c[0]))).length
     cost = 2
     view.rerender(<BrowserRouter><DashboardPage /></BrowserRouter>)
     await waitFor(() => expect(screen.getAllByText('$2.00').length).toBeGreaterThan(0), { timeout: 4000 })
     // Two results in a burst => a single coalesced fetch; live costs not added on top
-    expect(vi.mocked(apiFetch).mock.calls.length - before).toBe(1)
+    expect(vi.mocked(apiGet).mock.calls.filter(c => /\/session\?/.test(String(c[0]))).length - before).toBe(1)
     expect(screen.queryByText('$3.00')).not.toBeInTheDocument()
   })
 
   it('backfills live cost for a knight without session stats and does not fetch', async () => {
-    const { view, apiFetch } = await setup([], () => 1)
-    const before = vi.mocked(apiFetch).mock.calls.length
+    const { view } = await setup([], () => 1)
+    const before = vi.mocked(apiGet).mock.calls.filter(c => /\/session\?/.test(String(c[0]))).length
     vi.mocked(useWebSocket).mockReturnValue({
       events: [result('lancelot', '2026-01-01T00:00:03Z', 0.25)], connected: true,
     } as unknown as ReturnType<typeof useWebSocket>)
     view.rerender(<BrowserRouter><DashboardPage /></BrowserRouter>)
     await waitFor(() => expect(screen.getAllByText('$1.25').length).toBeGreaterThan(0))
     await new Promise(r => setTimeout(r, 2300))
-    expect(vi.mocked(apiFetch).mock.calls.length).toBe(before)
+    expect(vi.mocked(apiGet).mock.calls.filter(c => /\/session\?/.test(String(c[0]))).length).toBe(before)
   })
 })
 
@@ -336,14 +335,15 @@ describe('DashboardPage session cost follows the fleet (#645)', () => {
     loading: false,
     error: null,
   }) as unknown as ReturnType<typeof useFleet>
-  const sessionCalls = () => vi.mocked(apiFetch).mock.calls.filter(c => /session/.test(String(c[0])))
+  const sessionCalls = () => vi.mocked(apiGet).mock.calls.filter(c => /session/.test(String(c[0])))
   const costs: Record<string, number> = { a: 1, b: 2 }
   beforeEach(() => {
-    vi.mocked(apiFetch).mockImplementation(((url: string) => {
+    vi.mocked(apiGet).mockImplementation(((url: string, init?: unknown) => {
       const m = /fleet\/(\w+)\/session/.exec(url)
-      const c = m ? costs[m[1]] : undefined
-      return Promise.resolve({ ok: !!c, json: () => Promise.resolve({ session: { cost: c } }) })
-    }) as unknown as typeof apiFetch)
+      if (!m) return (defaults.apiGet as (u: string, i?: unknown) => Promise<unknown>)(url, init)
+      const c = costs[m[1]]
+      return c ? Promise.resolve({ session: { cost: c } }) : Promise.reject(new ApiError(404, 'no introspection'))
+    }) as unknown as typeof apiGet)
   })
 
   it('fetches and counts a knight that appears after the first poll', async () => {
@@ -404,7 +404,7 @@ describe('DashboardPage truncated chain list', () => {
     expect(await screen.findByTestId('chains-truncated')).toHaveTextContent('showing 500 of 731')
     // one list request, no second limit=1 call
     expect(vi.mocked(apiGetWithTotal)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(apiFetch).mock.calls.some(c => String(c[0]).includes('limit=1'))).toBe(false)
+    expect(vi.mocked(apiGet).mock.calls.some(c => String(c[0]).includes('limit=1'))).toBe(false)
   })
 
   it('shows no note with fewer than 500 chains', async () => {

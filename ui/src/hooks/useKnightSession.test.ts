@@ -1,61 +1,100 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fetchWithTimeout, SESSION_TIMEOUT_MS } from './useKnightSession'
-import { apiFetch } from '../lib/api'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
+import { useKnightSession } from './useKnightSession'
+import { apiGet, ApiError } from '../lib/api'
 
-vi.mock('../lib/api', () => ({ apiFetch: vi.fn() }))
-const mockFetch = vi.mocked(apiFetch)
+vi.mock('../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api')
+  return { ...actual, apiGet: vi.fn() }
+})
+const mockGet = vi.mocked(apiGet)
 
-function abortError() {
-  const e = new Error('aborted')
-  e.name = 'AbortError'
-  return e
-}
+afterEach(() => { vi.clearAllMocks() })
 
-/** A fetch that never answers until its signal aborts. */
-function hang() {
-  mockFetch.mockImplementation((_url, init) => new Promise((_res, rej) => {
-    init?.signal?.addEventListener('abort', () => rej(abortError()))
-  }))
-}
+const statsBody = { knight: 'galahad', session: null, runtime: { uptime: 1, activeTasks: 0, model: 'm' } }
 
-beforeEach(() => { vi.useFakeTimers() })
-afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
-
-describe('fetchWithTimeout', () => {
-  it('returns the response and clears the timer', async () => {
-    const res = new Response('ok')
-    mockFetch.mockResolvedValue(res)
-    await expect(fetchWithTimeout('/x')).resolves.toBe(res)
-    expect(vi.getTimerCount()).toBe(0)
+describe('useKnightSession.fetchStats', () => {
+  it('goes through apiGet with the session timeout and a signal', async () => {
+    mockGet.mockResolvedValue(statsBody)
+    const { result } = renderHook(() => useKnightSession())
+    await act(() => result.current.fetchStats('galahad'))
+    expect(mockGet).toHaveBeenCalledWith('/api/fleet/galahad/session?type=stats', { timeoutMs: 8000, signal: expect.any(AbortSignal) })
+    expect(result.current.stats?.supported).toBe(true)
+    expect(result.current.error).toBeNull()
   })
 
-  it('passes an abort signal to apiFetch', async () => {
-    mockFetch.mockResolvedValue(new Response('ok'))
-    await fetchWithTimeout('/x')
-    expect(mockFetch).toHaveBeenCalledWith('/x', { signal: expect.any(AbortSignal), timeoutMs: 0 })
+  it('treats an offline knight ({}) as supported with no data', async () => {
+    mockGet.mockResolvedValue({})
+    const { result } = renderHook(() => useKnightSession())
+    await act(() => result.current.fetchStats('galahad'))
+    expect(result.current.stats?.supported).toBe(true)
+    expect(result.current.stats?.session).toBeUndefined()
+    expect(result.current.error).toBeNull()
   })
 
-  it('returns null when the timeout fires first', async () => {
-    hang()
-    const p = fetchWithTimeout('/x', 100)
-    await vi.advanceTimersByTimeAsync(100)
-    await expect(p).resolves.toBeNull()
-    expect(vi.getTimerCount()).toBe(0)
+  it('marks the knight unsupported on a 404', async () => {
+    mockGet.mockRejectedValue(new ApiError(404, 'not found'))
+    const { result } = renderHook(() => useKnightSession())
+    await act(() => result.current.fetchStats('galahad'))
+    expect(result.current.stats?.supported).toBe(false)
+    expect(result.current.error).toBeNull()
   })
 
-  it('uses the default timeout', async () => {
-    hang()
-    let done = false
-    const p = fetchWithTimeout('/x').then((r) => { done = true; return r })
-    await vi.advanceTimersByTimeAsync(SESSION_TIMEOUT_MS - 1)
-    expect(done).toBe(false)
-    await vi.advanceTimersByTimeAsync(1)
-    await expect(p).resolves.toBeNull()
+  it.each([[503, /unavailable/], [502, /unavailable/], [429, /unavailable/], [504, /in time/], [0, /in time/], [500, /Failed/]])(
+    'shows an error, not "unsupported", on status %i',
+    async (status, msg) => {
+      mockGet.mockRejectedValue(new ApiError(status, 'x'))
+      const { result } = renderHook(() => useKnightSession())
+      await act(() => result.current.fetchStats('galahad'))
+      expect(result.current.stats?.supported).not.toBe(false)
+      expect(result.current.error).toMatch(msg)
+      expect(result.current.loading).toBe(false)
+    },
+  )
+
+  it('aborts the request on knight change (reset) and ignores the aborted answer', async () => {
+    let signal!: AbortSignal
+    mockGet.mockImplementation((_u, init) => new Promise((_res, rej) => {
+      signal = init!.signal!
+      signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+    }))
+    const { result } = renderHook(() => useKnightSession())
+    let p!: Promise<void>
+    act(() => { p = result.current.fetchStats('galahad') })
+    act(() => result.current.reset())
+    expect(signal.aborted).toBe(true)
+    await act(() => p)
+    expect(result.current.error).toBeNull()
+    expect(result.current.stats).toBeNull()
   })
 
-  it('rethrows other errors and clears the timer', async () => {
-    mockFetch.mockRejectedValue(new TypeError('network down'))
-    await expect(fetchWithTimeout('/x')).rejects.toThrow('network down')
-    expect(vi.getTimerCount()).toBe(0)
+  it('aborts on unmount', async () => {
+    let signal!: AbortSignal
+    mockGet.mockImplementation((_u, init) => { signal = init!.signal!; return new Promise(() => {}) })
+    const { result, unmount } = renderHook(() => useKnightSession())
+    act(() => { void result.current.fetchStats('galahad') })
+    unmount()
+    expect(signal.aborted).toBe(true)
+  })
+})
+
+describe('useKnightSession.fetchRecent / fetchTree', () => {
+  it('shows an error on 503 and empties the list', async () => {
+    mockGet.mockRejectedValue(new ApiError(503, 'down'))
+    const { result } = renderHook(() => useKnightSession())
+    await act(() => result.current.fetchRecent('galahad'))
+    expect(result.current.recent).toEqual([])
+    expect(result.current.error).toMatch(/unavailable/)
+    await act(() => result.current.fetchTree('galahad'))
+    expect(result.current.tree).toEqual([])
+  })
+
+  it('reads entries and nodes', async () => {
+    mockGet.mockResolvedValueOnce({ entries: [{ id: 'e' }] }).mockResolvedValueOnce({ nodes: [{ id: 'n' }] })
+    const { result } = renderHook(() => useKnightSession())
+    await act(() => result.current.fetchRecent('galahad'))
+    await act(() => result.current.fetchTree('galahad'))
+    expect(result.current.recent).toHaveLength(1)
+    expect(result.current.tree).toHaveLength(1)
   })
 })
