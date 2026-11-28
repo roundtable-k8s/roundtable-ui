@@ -10,7 +10,7 @@ import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
 import { FirstRun } from '../components/FirstRun'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { getKnightConfig } from '../lib/knights'
-import { parseEvent, resultFailureReason } from '../lib/events'
+import { parseEvent, resultFailureReason, eventListKeys } from '../lib/events'
 import { computeKnightActivity } from '../lib/knightActivity'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
@@ -234,18 +234,18 @@ export function FleetPage() {
           <div className="bg-red-900/10 border border-red-500/20 rounded-xl p-4 mb-6">
             <h3 className="text-sm font-medium text-red-400 mb-3">⚠️ Recent Failures ({errors.length})</h3>
             <div className="space-y-2">
-              {errors.map((e, i) => {
+              {(() => { const keys = eventListKeys(errors); return errors.map((e, i) => {
                 const { knight, data } = parseEvent(e)
                 const cfg = knight ? getKnightConfig(knight) : null
                 return (
-                  <div key={i} className="flex items-center gap-2 text-xs">
+                  <div key={keys[i]} className="flex items-center gap-2 text-xs">
                     <span>{cfg?.emoji || '🤖'}</span>
                     <span className="text-gray-300 capitalize">{knight || 'unknown'}</span>
                     <span className="text-red-400 truncate flex-1">{resultFailureReason(data) || 'Task failed'}</span>
                     <span className="text-gray-600 flex-shrink-0">{formatTimestamp(e.timestamp)}</span>
                   </div>
                 )
-              })}
+              }) })()}
             </div>
           </div>
         )

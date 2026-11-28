@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseEvent, parseEventData, resultFailureReason } from './events'
+import { parseEvent, parseEventData, resultFailureReason, uniqueKeys, displayText } from './events'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
 function makeEvent(type: NatsEvent['type'], subject: string, data: unknown): NatsEvent {
@@ -80,5 +80,25 @@ describe('resultFailureReason', () => {
 
   it('falls back to unknown error when result is empty', () => {
     expect(resultFailureReason({ success: false })).toBe('unknown error')
+  })
+})
+
+describe('payload hardening', () => {
+  it('parseEventData gives {} for non-object values and {raw} for non-object strings', () => {
+    expect(parseEventData(null)).toEqual({})
+    expect(parseEventData(12)).toEqual({})
+    expect(parseEventData('null')).toEqual({ raw: 'null' })
+    expect(parseEventData('12')).toEqual({ raw: '12' })
+    expect(parseEventData('{"a":1}')).toEqual({ a: 1 })
+    expect(parseEventData('nope')).toEqual({ raw: 'nope' })
+  })
+  it('uniqueKeys suffixes repeats only', () => {
+    expect(uniqueKeys(['a', 'b', 'a'])).toEqual(['a', 'b', 'a#1'])
+  })
+  it('displayText bounds and stringifies', () => {
+    expect(displayText('x')).toBe('x')
+    expect(displayText({ a: 1 })).toBe('{"a":1}')
+    expect(displayText('y'.repeat(400))).toHaveLength(301)
+    expect(displayText(undefined)).toBe('')
   })
 })
