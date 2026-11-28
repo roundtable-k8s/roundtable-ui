@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -101,5 +102,34 @@ func TestMissionDetailShortResultNotTruncated(t *testing.T) {
 	d := parseMissionDetail(obj, MissionSummary{Name: "m"})
 	if d.Result != "done" || d.ResultTruncated || d.ResultLength != 0 {
 		t.Errorf("short result: %+v", d)
+	}
+}
+
+func TestMissionPathNames(t *testing.T) {
+	router := setupTestRouter()
+	m := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "ai.roundtable.io/v1alpha1",
+		"kind":       "Mission",
+		"metadata":   map[string]interface{}{"name": "7day-scan", "namespace": "test-namespace"},
+		"spec":       map[string]interface{}{"objective": "x"},
+	}}
+	if _, err := dynClient.Resource(missionGVR).Namespace("test-namespace").Create(context.Background(), m, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	do := func(method, path string) int {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+		return rec.Code
+	}
+	if c := do("GET", "/api/missions/7day-scan"); c != 200 {
+		t.Errorf("detail: %d", c)
+	}
+	for _, bad := range []string{"a.b", "a%20b", strings.Repeat("a", 64)} {
+		if c := do("GET", "/api/missions/"+bad); c != 400 {
+			t.Errorf("%q: %d, want 400", bad, c)
+		}
+	}
+	if c := do("DELETE", "/api/missions/7day-scan"); c == 400 {
+		t.Errorf("delete rejected a digit-leading name")
 	}
 }
