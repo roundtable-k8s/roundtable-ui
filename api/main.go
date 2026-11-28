@@ -1485,7 +1485,7 @@ func taskHistoryHandler(src *tableSource) http.HandlerFunc {
 				unavailable = append(unavailable, t.Name)
 				continue
 			}
-			events, msgs, err := readResults(ctx, t.ResultsStream, t.Prefix+".results.>", taskHistoryPerTable)
+			events, msgs, err := taskHistory.get(ctx, t.ResultsStream, t.Prefix+".results.>", taskHistoryPerTable)
 			if err != nil {
 				slog.ErrorContext(ctx, "JetStream task history error", "table", t.Name, "stream", t.ResultsStream, "error", err)
 				unavailable = append(unavailable, t.Name)

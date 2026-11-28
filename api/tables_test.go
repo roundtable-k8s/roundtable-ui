@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/nats-io/nats.go/jetstream"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -70,7 +73,8 @@ func withTwoTables(t *testing.T) {
 func stubResults(t *testing.T, byStream map[string][]TaskEvent, failing ...string) *[]string {
 	t.Helper()
 	old := readResults
-	t.Cleanup(func() { readResults = old })
+	resetTaskHistory()
+	t.Cleanup(func() { readResults = old; resetTaskHistory() })
 	var filters []string
 	readResults = func(_ context.Context, stream, filter string, limit int) ([]TaskEvent, uint64, error) {
 		for _, f := range failing {
@@ -437,5 +441,166 @@ func TestTablesPanickingDiscoveryReleasesWaiters(t *testing.T) {
 	defer src.mu.Unlock()
 	if src.inflight != nil {
 		t.Fatal("inflight not cleared after panic")
+	}
+}
+
+func resetTaskHistory() {
+	taskHistory.mu.Lock()
+	taskHistory.entries = map[string]historyEntry{}
+	taskHistory.mu.Unlock()
+}
+
+// fakeStream records calls and serves messages by sequence.
+type fakeStream struct {
+	mu        sync.Mutex
+	msgs      map[uint64]*jetstream.RawStreamMsg // missing seq = deleted
+	last      uint64
+	getErr    error
+	consumers int
+	deleted   int
+	gets      int
+}
+
+func (f *fakeStream) Info(context.Context, ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error) {
+	return &jetstream.StreamInfo{State: jetstream.StreamState{FirstSeq: 1, LastSeq: f.last, Msgs: uint64(len(f.msgs))}}, nil
+}
+
+func (f *fakeStream) GetMsg(_ context.Context, seq uint64, _ ...jetstream.GetMsgOpt) (*jetstream.RawStreamMsg, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gets++
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if m, ok := f.msgs[seq]; ok {
+		return m, nil
+	}
+	return nil, jetstream.ErrMsgNotFound
+}
+
+func (f *fakeStream) CreateOrUpdateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	f.mu.Lock()
+	f.consumers++
+	f.mu.Unlock()
+	return nil, errors.New("consumer creation not expected")
+}
+
+func (f *fakeStream) DeleteConsumer(context.Context, string) error {
+	f.mu.Lock()
+	f.deleted++
+	f.mu.Unlock()
+	return nil
+}
+
+func newFakeStream(n int) *fakeStream {
+	f := &fakeStream{msgs: map[uint64]*jetstream.RawStreamMsg{}, last: uint64(n)}
+	for i := 1; i <= n; i++ {
+		f.msgs[uint64(i)] = &jetstream.RawStreamMsg{Subject: fmt.Sprintf("rt.results.t%d", i), Sequence: uint64(i), Data: []byte(`{}`)}
+	}
+	return f
+}
+
+func TestReadNewestResultsDirectGet(t *testing.T) {
+	f := newFakeStream(10)
+	delete(f.msgs, 9)                     // deleted
+	f.msgs[8].Subject = "other.results.x" // other subject
+	evs, total, err := readNewestResults(context.Background(), f, "rt.results.>", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range evs {
+		got = append(got, e.Subject)
+	}
+	want := []string{"rt.results.t6", "rt.results.t7", "rt.results.t10"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if total != 9 {
+		t.Errorf("total = %d", total)
+	}
+	if f.consumers != 0 {
+		t.Errorf("consumers created: %d", f.consumers)
+	}
+}
+
+func TestReadNewestResultsLookupCap(t *testing.T) {
+	f := newFakeStream(100)
+	for i := 1; i <= 100; i++ {
+		f.msgs[uint64(i)].Subject = "other.x"
+	}
+	evs, _, err := readNewestResults(context.Background(), f, "rt.results.>", 5)
+	if err != nil || len(evs) != 0 {
+		t.Fatalf("evs=%v err=%v", evs, err)
+	}
+	if f.gets != 10 {
+		t.Errorf("lookups = %d, want 10", f.gets)
+	}
+}
+
+func TestReadNewestResultsFallbackUsesConsumer(t *testing.T) {
+	f := newFakeStream(3)
+	f.getErr = errors.New("direct get not allowed")
+	evs, total, err := readNewestResults(context.Background(), f, "rt.results.>", 3)
+	if err != nil || len(evs) != 0 || total != 3 {
+		t.Fatalf("evs=%v total=%d err=%v", evs, total, err)
+	}
+	if f.consumers != 1 {
+		t.Errorf("fallback consumers = %d, want 1", f.consumers)
+	}
+}
+
+func TestTaskHistoryCacheSingleRead(t *testing.T) {
+	resetTaskHistory()
+	t.Cleanup(resetTaskHistory)
+	old := readResults
+	t.Cleanup(func() { readResults = old })
+	var reads atomic.Int32
+	release := make(chan struct{})
+	readResults = func(context.Context, string, string, int) ([]TaskEvent, uint64, error) {
+		reads.Add(1)
+		<-release
+		return []TaskEvent{{Subject: "a"}}, 1, nil
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			evs, _, err := taskHistory.get(context.Background(), "s", "f", 50)
+			if err != nil || len(evs) != 1 {
+				t.Errorf("evs=%v err=%v", evs, err)
+			}
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	if _, _, err := taskHistory.get(context.Background(), "s", "f", 50); err != nil {
+		t.Fatal(err)
+	}
+	if n := reads.Load(); n != 1 {
+		t.Errorf("reads = %d, want 1", n)
+	}
+}
+
+func TestTaskHistoryCacheDoesNotCacheErrors(t *testing.T) {
+	resetTaskHistory()
+	t.Cleanup(resetTaskHistory)
+	old := readResults
+	t.Cleanup(func() { readResults = old })
+	var reads int
+	readResults = func(context.Context, string, string, int) ([]TaskEvent, uint64, error) {
+		reads++
+		if reads == 1 {
+			return nil, 0, errors.New("boom")
+		}
+		return []TaskEvent{{Subject: "a"}}, 1, nil
+	}
+	if _, _, err := taskHistory.get(context.Background(), "s", "f", 50); err == nil {
+		t.Fatal("want error")
+	}
+	if evs, _, err := taskHistory.get(context.Background(), "s", "f", 50); err != nil || len(evs) != 1 {
+		t.Fatalf("evs=%v err=%v", evs, err)
 	}
 }
