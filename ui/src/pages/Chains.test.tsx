@@ -537,11 +537,11 @@ describe('ChainsPage detail refetch', () => {
         : url.startsWith('/api/chains/pr-pipeline') ? Promise.resolve(prPipelineChain())
         : Promise.reject(new Error('no KV')))
     renderPage('/chains?chain=pr-pipeline')
-    // One fetch for the ?chain= focus, one for the expanded slim card.
-    await waitFor(() => expect(detailCalls()).toBe(2))
+    // The ?chain= focus and the expanded slim card poll the same url: one shared fetch.
+    await waitFor(() => expect(detailCalls()).toBe(1))
     await act(async () => { vi.advanceTimersByTime(FALLBACK_POLL_MS) })
     await waitFor(() => expect(listCalls()).toBe(2))
-    expect(detailCalls()).toBe(2)
+    expect(detailCalls()).toBe(1)
   })
 })
 

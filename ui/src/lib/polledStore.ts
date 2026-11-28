@@ -45,7 +45,7 @@ function load(en: Entry): Promise<void> {
   if (en.inflight) return en.inflight
   const ctrl = new AbortController()
   en.ctrl = ctrl
-  const p = apiGet<unknown>(en.url, { signal: ctrl.signal }).then(
+  const p = Promise.resolve(apiGet<unknown>(en.url, { signal: ctrl.signal })).then(
     (data) => {
       if (ctrl.signal.aborted) return
       set(en, { data, hasData: true, error: null, errorStatus: undefined, loading: false, updatedAt: Date.now() })
