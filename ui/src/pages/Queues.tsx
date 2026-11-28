@@ -127,7 +127,9 @@ export function QueuesPage() {
       <PageHeader
         icon={Inbox}
         title="Queues"
-        subtitle={`Tasks waiting per knight · ${totals.pending} pending · ${totals.ackPending} in flight · oldest ${formatWait(totals.oldest)}`}
+        subtitle={queues.length === 0 && (loading || error)
+          ? `Tasks waiting per knight · ${loading ? '…' : '—'} pending · ${loading ? '…' : '—'} in flight`
+          : `Tasks waiting per knight · ${totals.pending} pending · ${totals.ackPending} in flight · oldest ${formatWait(totals.oldest)}`}
       >
         <RefreshButton onClick={() => { refresh(); refreshHistory() }} loading={loading} updatedAt={updatedAt} />
       </PageHeader>

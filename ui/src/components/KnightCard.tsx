@@ -86,8 +86,8 @@ function extractModelShortName(model?: string): string | null {
 export function KnightCard({ knight, onClick, activity, card, showTable, queue }: KnightCardProps) {
   const config = getKnightConfig(knight.name)
   const modelShortName = extractModelShortName(knight.model)
-  const successRate = knight.tasksCompleted !== undefined && knight.tasksFailed !== undefined
-    ? knight.tasksCompleted / (knight.tasksCompleted + knight.tasksFailed || 1)
+  const successRate = knight.tasksCompleted !== undefined && knight.tasksFailed !== undefined && knight.tasksCompleted + knight.tasksFailed > 0
+    ? knight.tasksCompleted / (knight.tasksCompleted + knight.tasksFailed)
     : null
   const suspended = knight.suspend || card?.card.roundtable.suspended === true
   const description = card?.card.description

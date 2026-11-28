@@ -33,6 +33,12 @@ const mockKnight: Knight = {
 }
 
 describe('KnightCard', () => {
+  it('hides the success tile for a knight with no tasks', () => {
+    render(<KnightCard knight={{ ...mockKnight, tasksCompleted: 0, tasksFailed: 0 }} />)
+    expect(screen.queryByText('success')).toBeNull()
+    expect(screen.queryByText('0%')).toBeNull()
+  })
+
   it('renders knight name', () => {
     render(<KnightCard knight={mockKnight} />)
     expect(screen.getByText('galahad')).toBeInTheDocument()

@@ -9,7 +9,7 @@ import { useUrlParam } from '../hooks/useUrlParam'
 import { CHAIN_LIST_LIMIT, truncationNote } from '../lib/chainTotal'
 import { DEAD_LETTERS_URL, deadLetterTime, errorExcerpt, type DeadLetter } from '../lib/deadLetters'
 import { NOTIONAL_HINT } from '../lib/cost'
-import { formatCost, formatTimestamp } from '../lib/format'
+import { formatCost, formatTimestampOrDate } from '../lib/format'
 import { DEFAULT_SINCE, SINCE_PRESETS, resolveSince, summarise } from '../lib/overnight'
 import { outcomeTone, outcomeLabel, scheduleLink, type Schedule } from '../lib/schedules'
 import { sanitizeText } from '../lib/untrusted'
@@ -113,7 +113,7 @@ export function OvernightPage() {
           {s.failedRuns.map((c) => (
             <li key={`${c.namespace}/${c.name}`} className="text-sm">
               <Link to={`/chains?chain=${encodeURIComponent(c.name)}`} className="text-roundtable-gold hover:underline">{c.name}</Link>
-              <span className="text-gray-400"> · {c.phase} · {formatTimestamp(c.completionTime ?? '')}</span>
+              <span className="text-gray-400"> · {c.phase}{c.completionTime ? ` · ${formatTimestampOrDate(c.completionTime)}` : ''}</span>
             </li>
           ))}
         </ul>
@@ -128,7 +128,7 @@ export function OvernightPage() {
           {s.openDeadLetters.map((d) => (
             <li key={d.taskId} className="text-sm">
               <Link to="/failed" className="text-roundtable-gold hover:underline">{sanitizeText(d.knight)}</Link>
-              <span className="text-gray-400"> · {sanitizeText(d.reason)} · {formatTimestamp(deadLetterTime(d))}
+              <span className="text-gray-400"> · {sanitizeText(d.reason)} · {formatTimestampOrDate(deadLetterTime(d))}
                 {d.error ? ` · ${sanitizeText(errorExcerpt(d.error))}` : ''}</span>
             </li>
           ))}
@@ -148,7 +148,7 @@ export function OvernightPage() {
               <li key={`${x.namespace}/${x.name}`} className="text-sm">
                 <Link to={scheduleLink(x.namespace, x.name)} className="text-roundtable-gold hover:underline">{x.name}</Link>
                 <Badge tone={outcomeTone(outcome)} className="ml-2">{outcomeLabel(outcome)}</Badge>
-                <span className="text-gray-400"> · {formatTimestamp(x.lastRunAt ?? '')}</span>
+                <span className="text-gray-400">{x.lastRunAt ? ` · ${formatTimestampOrDate(x.lastRunAt)}` : ''}</span>
               </li>
             )
           })}

@@ -92,8 +92,9 @@ export function formatDuration(start: string | null, end: string | null): string
 /** "42s ago" / "3m ago" / "5h ago" / "2d ago" */
 export function formatRelativeTime(iso: string | null): string {
   if (!iso) return '—'
-  const diff = Date.now() - new Date(iso).getTime()
-  const sec = Math.floor(diff / 1000)
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return '—'
+  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000))
   if (sec < 60) return `${sec}s ago`
   const min = Math.floor(sec / 60)
   if (min < 60) return `${min}m ago`
@@ -117,6 +118,7 @@ export function formatAge(iso: string | undefined, fallback = '—', now: number
 
 /** Uptime seconds → "3h 12m" / "45m" */
 export function formatUptime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
@@ -139,7 +141,8 @@ export function formatTimestamp(ts: string | Date): string {
 }
 
 /** Time of day for today's events, date and time for older ones. */
-export function formatTimestampOrDate(ts: string, now: number = Date.now()): string {
+export function formatTimestampOrDate(ts: string | null | undefined, now: number = Date.now()): string {
+  if (!ts) return '—'
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ts
   return d.toDateString() === new Date(now).toDateString() ? d.toLocaleTimeString() : d.toLocaleString()
@@ -148,7 +151,9 @@ export function formatTimestampOrDate(ts: string, now: number = Date.now()): str
 /** Future timestamps (next scheduled run) as "in 5m". */
 export function until(iso?: string): string {
   if (!iso) return '—'
-  const sec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return '—'
+  const sec = Math.round((t - Date.now()) / 1000)
   if (sec <= 0) return 'due now'
   if (sec < 60) return `in ${sec}s`
   if (sec < 3600) return `in ${Math.floor(sec / 60)}m`

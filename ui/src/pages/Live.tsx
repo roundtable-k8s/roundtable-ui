@@ -11,7 +11,7 @@ import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { eventInTable } from '../lib/tables'
 import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
-import { formatCost, formatTimestamp } from '../lib/format'
+import { formatCost, formatMsLadder, formatTimestampOrDate } from '../lib/format'
 
 export function LivePage() {
   const { events: allEvents, connected, error: wsError, historyError } = useWebSocket()
@@ -272,13 +272,13 @@ function EventCard({ event, expanded, onToggle, onOpenActivity }: {
           <span className="text-gray-500">{formatCost(cost)}</span>
         )}
         {!isTask && durationMs !== undefined && (
-          <span className="text-gray-500">{(durationMs / 1000).toFixed(1)}s</span>
+          <span className="text-gray-500">{formatMsLadder(durationMs)}</span>
         )}
         {!isTask && toolCalls !== undefined && (
           <span className="text-gray-500">🔧{toolCalls}</span>
         )}
         <span className="text-gray-600 ml-auto flex-shrink-0">
-          {formatTimestamp(event.timestamp)}
+          {formatTimestampOrDate(event.timestamp)}
         </span>
         {taskId && onOpenActivity && (
           <button
