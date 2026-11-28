@@ -37,7 +37,7 @@ describe('costPanelCsv', () => {
   it('writes three labelled sections with the panel figures', () => {
     const rows = costPanelCsv({
       costByKnight: [{ knight: '=cmd', cost: 1.5, tasks: 2, failures: 1 }],
-      dailyCosts: [{ date: 'Jan 1', cost: 1.5 }],
+      dailyCosts: [{ day: '2026-01-01', date: 'Jan 1', cost: 1.5 }],
       topTasks: [{ knight: 'galahad', cost: 0.0000012, taskId: 't-1', timestamp: '2026-01-01T00:00:00Z', success: false }],
     })
     expect(rows).toEqual([
@@ -47,7 +47,7 @@ describe('costPanelCsv', () => {
       [],
       ['By day'],
       ['Day', 'Cost (USD)'],
-      ['Jan 1', 1.5],
+      ['2026-01-01', 1.5],
       [],
       ['Top tasks'],
       ['Task', 'Knight', 'Cost (USD)', 'Time', 'Status'],
