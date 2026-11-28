@@ -104,19 +104,25 @@ func knightTableName(cr *unstructured.Unstructured) string {
 // tableDefaultsByName lists RoundTables once and returns each table's
 // spec.defaults, keyed by name. Best effort: nil on error.
 func tableDefaultsByName(ctx context.Context, namespace string) map[string]map[string]interface{} {
+	out, _ := tableDefaultsErr(ctx, namespace)
+	return out
+}
+
+// tableDefaultsErr is tableDefaultsByName with the list error returned.
+func tableDefaultsErr(ctx context.Context, namespace string) (map[string]map[string]interface{}, error) {
 	if dynClient == nil {
-		return nil
+		return nil, nil
 	}
 	list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.DebugContext(ctx, "RoundTable list for isolation defaults failed", "error", err)
-		return nil
+		return nil, err
 	}
 	out := make(map[string]map[string]interface{}, len(list.Items))
 	for i := range list.Items {
 		out[list.Items[i].GetName()] = getNestedMap(getNestedMap(list.Items[i].Object, "spec"), "defaults")
 	}
-	return out
+	return out, nil
 }
 
 // tableDefaultsFor fetches one RoundTable's spec.defaults. Best effort.

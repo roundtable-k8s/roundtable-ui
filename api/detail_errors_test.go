@@ -40,7 +40,11 @@ func TestDetailHandlers_GetErrors(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			router := setupTestRouter()
 			withQueueFixture(t, newFakeJetStream(), time.Now())
-			dynClient.(*fake.FakeDynamicClient).PrependReactor("get", c.resource, func(k8stesting.Action) (bool, runtime.Object, error) {
+			verb := "get"
+			if c.path == "/api/fleet/x" {
+				verb = "list" // the knight detail reads its CR from the list cache
+			}
+			dynClient.(*fake.FakeDynamicClient).PrependReactor(verb, c.resource, func(k8stesting.Action) (bool, runtime.Object, error) {
 				return true, nil, c.err
 			})
 			w := httptest.NewRecorder()

@@ -311,6 +311,7 @@ func TestKnightHandlerPodsAndMetrics(t *testing.T) {
 		map[schema.GroupVersionResource]string{
 			knightGVR:     "KnightList",
 			podMetricsGVR: "PodMetricsList",
+			roundTableGVR: "RoundTableList",
 		})
 	oldDynClient := dynClient
 	dynClient = fakeDyn
@@ -374,6 +375,7 @@ func TestKnightHandlerScalingFallback(t *testing.T) {
 		map[schema.GroupVersionResource]string{
 			knightGVR:       "KnightList",
 			scaledObjectGVR: "ScaledObjectList",
+			roundTableGVR:   "RoundTableList",
 		})
 	oldDynClient := dynClient
 	dynClient = fakeDyn
