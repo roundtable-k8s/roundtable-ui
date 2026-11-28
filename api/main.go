@@ -1136,13 +1136,21 @@ func getKnightCR(ctx context.Context, knightName string) (*unstructured.Unstruct
 		return nil, fmt.Errorf("kubernetes client not available")
 	}
 	namespace := envOr("NAMESPACE", "roundtable")
+	// The informer cache already holds every Knight (the fleet list reads it),
+	// so a per-request GET is wasted. cachedList falls back to a direct LIST
+	// when the informer has not synced.
 	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
 	defer cancel()
-	obj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(ctx, knightName, metav1.GetOptions{})
+	items, err := cachedList(ctx, dynClient, knightGVR, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get knight %s: %w", knightName, err)
 	}
-	return obj, nil
+	for i := range items {
+		if items[i].GetName() == knightName {
+			return items[i].DeepCopy(), nil
+		}
+	}
+	return nil, apierrors.NewNotFound(knightGVR.GroupResource(), knightName)
 }
 
 // knightIsReady reports whether the operator marked the Knight as ready to
@@ -1343,6 +1351,14 @@ func knightSessionHandler(fleetPrefix string) http.HandlerFunc {
 // serveIntrospect routes one introspect request to the right pod(s); see
 // introspect.go for the per-pod model.
 func serveIntrospect(w http.ResponseWriter, ctx context.Context, req introspectRequester, prefix, name, podParam, reqType string, payload []byte, timeout time.Duration) {
+	if reqType == "stats" {
+		serveStatsCached(w, ctx, req, prefix, name, podParam, payload, timeout)
+		return
+	}
+	serveIntrospectUncached(w, ctx, req, prefix, name, podParam, reqType, payload, timeout)
+}
+
+func serveIntrospectUncached(w http.ResponseWriter, ctx context.Context, req introspectRequester, prefix, name, podParam, reqType string, payload []byte, timeout time.Duration) {
 	namespace := envOr("NAMESPACE", "roundtable")
 	pods, podErr := knightPodsForIntrospect(ctx, namespace, name)
 	if podErr != nil {

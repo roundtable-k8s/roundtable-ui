@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"sort"
 	"strings"
@@ -13,8 +14,10 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"golang.org/x/sync/singleflight"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Per-pod introspection (#219).
@@ -70,6 +73,49 @@ func knightPodsForIntrospect(ctx context.Context, namespace, knight string) ([]s
 	if k8sClient == nil {
 		return nil, fmt.Errorf("kubernetes client not available")
 	}
+	key := introspectPodsKey{k8sClient, namespace, knight}
+	introspectPodsMu.Lock()
+	if e, ok := introspectPodsCache[key]; ok && time.Since(e.at) < podSnapshotTTL {
+		pods := append([]string(nil), e.pods...)
+		introspectPodsMu.Unlock()
+		return pods, nil
+	}
+	introspectPodsMu.Unlock()
+	v, err, _ := introspectPodsGroup.Do(fmt.Sprintf("%p/%s/%s", k8sClient, namespace, knight), func() (interface{}, error) {
+		// The flight must not die with its first caller's request.
+		pods, err := listKnightPodsForIntrospect(context.WithoutCancel(ctx), namespace, knight)
+		if err != nil {
+			return nil, err // errors are not cached
+		}
+		introspectPodsMu.Lock()
+		introspectPodsCache[key] = introspectPodsEntry{pods: pods, at: time.Now()}
+		introspectPodsMu.Unlock()
+		return pods, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), v.([]string)...), nil
+}
+
+type introspectPodsKey struct {
+	client    kubernetes.Interface
+	namespace string
+	knight    string
+}
+
+type introspectPodsEntry struct {
+	pods []string
+	at   time.Time
+}
+
+var (
+	introspectPodsMu    sync.Mutex
+	introspectPodsCache = map[introspectPodsKey]introspectPodsEntry{}
+	introspectPodsGroup singleflight.Group
+)
+
+func listKnightPodsForIntrospect(ctx context.Context, namespace, knight string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, k8sRequestTimeout)
 	defer cancel()
 	pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
@@ -462,4 +508,74 @@ func writePodGone(w http.ResponseWriter, pod string) {
 		"podGone": true,
 		"pod":     pod,
 	})
+}
+
+// statsCacheTTL is how long an aggregated type=stats answer is shared between
+// concurrent dashboards.
+var statsCacheTTL = 5 * time.Second
+
+type statsCacheKey struct {
+	client   kubernetes.Interface
+	prefix   string
+	knight   string
+	podParam string
+	payload  string // runId/limit pick which session's stats the knight returns
+}
+
+type statsCacheEntry struct {
+	header http.Header
+	body   []byte
+	at     time.Time
+}
+
+var (
+	statsCacheMu    sync.Mutex
+	statsCache      = map[statsCacheKey]statsCacheEntry{}
+	statsCacheGroup singleflight.Group
+)
+
+func writeStatsEntry(w http.ResponseWriter, e statsCacheEntry) {
+	for k, v := range e.header {
+		w.Header()[k] = append([]string(nil), v...)
+	}
+	w.Write(e.body)
+}
+
+// serveStatsCached answers type=stats from a 5 s cache, and lets concurrent
+// requests for the same (knight, pod) share one fan-out. Only 200 answers are
+// cached; history/session/recent/tree never come through here.
+func serveStatsCached(w http.ResponseWriter, ctx context.Context, req introspectRequester, prefix, name, podParam string, payload []byte, timeout time.Duration) {
+	key := statsCacheKey{k8sClient, prefix, name, podParam, string(payload)}
+	statsCacheMu.Lock()
+	if e, ok := statsCache[key]; ok && time.Since(e.at) < statsCacheTTL {
+		statsCacheMu.Unlock()
+		writeStatsEntry(w, e)
+		return
+	}
+	statsCacheMu.Unlock()
+
+	type result struct {
+		e    statsCacheEntry
+		code int
+	}
+	v, _, _ := statsCacheGroup.Do(fmt.Sprintf("%p/%s/%s/%s/%s", k8sClient, prefix, name, podParam, payload), func() (interface{}, error) {
+		// The flight must not die with its first caller's request.
+		rec := httptest.NewRecorder()
+		serveIntrospectUncached(rec, context.WithoutCancel(ctx), req, prefix, name, podParam, "stats", payload, timeout)
+		e := statsCacheEntry{header: rec.Header().Clone(), body: rec.Body.Bytes(), at: time.Now()}
+		if rec.Code == http.StatusOK {
+			statsCacheMu.Lock()
+			statsCache[key] = e
+			statsCacheMu.Unlock()
+		}
+		return result{e, rec.Code}, nil
+	})
+	res := v.(result)
+	if res.code != http.StatusOK {
+		w.Header().Set("Content-Type", res.e.header.Get("Content-Type"))
+		w.WriteHeader(res.code)
+		w.Write(res.e.body)
+		return
+	}
+	writeStatsEntry(w, res.e)
 }
