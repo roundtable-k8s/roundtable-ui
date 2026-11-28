@@ -49,8 +49,49 @@ function useWebSocketConnection() {
   const reconnectDelay = useRef(RECONNECT_DELAY_MS)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
+  const hasConnected = useRef(false)
   const seenEvents = useRef(new Set<string>())
   const topicListeners = useRef(new Map<string, Set<TopicListener>>())
+
+  /**
+   * Seed the feed from /api/tasks (JetStream history). Runs on mount and after
+   * every reconnect so results published while the socket was down appear;
+   * events merge through the existing key dedup, once each (#630).
+   */
+  const loadHistory = useCallback(() => {
+    type HistoryResult = { type?: string; subject?: string; table?: string; data?: unknown; timestamp?: string }
+    apiGet<{ results?: HistoryResult[] }>('/api/tasks')
+      .then((data) => {
+        if (!mountedRef.current) return
+        const historical: NatsEvent[] = (data.results || [])
+          .map((r: HistoryResult) => ({
+            type: (r.type || 'result') as NatsEvent['type'],
+            subject: r.subject || '',
+            ...(r.table ? { table: r.table } : {}),
+            data: r.data,
+            timestamp: r.timestamp || new Date().toISOString(),
+          }))
+          .reverse() // newest first
+          .slice(0, MAX_EVENTS)
+        if (historical.length > 0) {
+          // Track historical event keys for dedup
+          for (const h of historical) {
+            seenEvents.current.add(eventKey(h))
+          }
+          setEvents((prev) => {
+            // Merge: live events take priority, dedup against history
+            const existingKeys = new Set(prev.map(eventKey))
+            const newHistory = historical.filter((h: NatsEvent) => !existingKeys.has(eventKey(h)))
+            const merged = [...prev, ...newHistory]
+            // A backfill after a reconnect holds events newer than some
+            // already shown; keep the feed newest first.
+            merged.sort((x, y) => (Date.parse(y.timestamp) || 0) - (Date.parse(x.timestamp) || 0))
+            return merged.slice(0, MAX_EVENTS)
+          })
+        }
+      })
+      .catch(() => {}) // silently fail — WS will still work
+  }, [])
 
   const connect = useCallback(() => {
     if (!mountedRef.current) return
@@ -69,6 +110,9 @@ function useWebSocketConnection() {
       setConnected(true)
       setError(null)
       reconnectDelay.current = RECONNECT_DELAY_MS // Reset backoff on success
+      // Backfill what was published while the socket was down (#630).
+      if (hasConnected.current) loadHistory()
+      hasConnected.current = true
     }
 
     ws.onerror = () => {
@@ -121,42 +165,12 @@ function useWebSocketConnection() {
     }
 
     wsRef.current = ws
-  }, [])
+  }, [loadHistory])
 
   // Seed with recent history from JetStream on mount
   useEffect(() => {
     mountedRef.current = true
-
-    // Load historical events so there's always something to show
-    type HistoryResult = { type?: string; subject?: string; table?: string; data?: unknown; timestamp?: string }
-    apiGet<{ results?: HistoryResult[] }>('/api/tasks')
-      .then((data) => {
-        if (!mountedRef.current) return
-        const historical: NatsEvent[] = (data.results || [])
-          .map((r: HistoryResult) => ({
-            type: (r.type || 'result') as NatsEvent['type'],
-            subject: r.subject || '',
-            ...(r.table ? { table: r.table } : {}),
-            data: r.data,
-            timestamp: r.timestamp || new Date().toISOString(),
-          }))
-          .reverse() // newest first
-          .slice(0, MAX_EVENTS)
-        if (historical.length > 0) {
-          // Track historical event keys for dedup
-          for (const h of historical) {
-            seenEvents.current.add(eventKey(h))
-          }
-          setEvents((prev) => {
-            // Merge: live events take priority, dedup against history
-            const existingKeys = new Set(prev.map(eventKey))
-            const newHistory = historical.filter((h: NatsEvent) => !existingKeys.has(eventKey(h)))
-            const merged = [...prev, ...newHistory]
-            return merged.slice(0, MAX_EVENTS)
-          })
-        }
-      })
-      .catch(() => {}) // silently fail — WS will still work
+    loadHistory()
 
     connect()
     return () => {
@@ -167,7 +181,7 @@ function useWebSocketConnection() {
         wsRef.current.close()
       }
     }
-  }, [connect])
+  }, [connect, loadHistory])
 
   const clearEvents = useCallback(() => {
     setEvents([])

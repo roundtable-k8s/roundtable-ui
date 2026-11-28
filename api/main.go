@@ -1729,9 +1729,10 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// Done channel to clean up NATS subscriptions when WS closes
 		done := make(chan struct{})
 
-		// Subscribe to task and result events of every table (#239). Tables
-		// are resolved per connection; a table added later shows up on the
-		// next (re)connect.
+		// Subscribe to task and result events of every table (#239). The
+		// set is re-resolved every wsTableRefresh (#630) so tables added or
+		// removed while the socket is open are followed.
+		var subsMu sync.Mutex
 		tables := src.tables(r.Context())
 		forward := func(eventType string, critical bool) nats.MsgHandler {
 			return func(msg *nats.Msg) {
@@ -1746,29 +1747,59 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 					Data:      msg.Data,
 					Timestamp: eventTimestamp(msg.Data),
 				}
-				if t, ok := tableForSubject(tables, msg.Subject); ok {
+				subsMu.Lock()
+				t, ok := tableForSubject(tables, msg.Subject)
+				subsMu.Unlock()
+				if ok {
 					event.Table = t.Name
 				}
 				data, _ := json.Marshal(event)
 				safeWrite(critical, data)
 			}
 		}
-		var subs []*nats.Subscription
+		subs := map[string]*nats.Subscription{}
 		unsubscribeAll := func() {
-			for _, sub := range subs {
-				sub.Unsubscribe()
+			subsMu.Lock()
+			defer subsMu.Unlock()
+			for subj, sub := range subs {
+				wsUnsubscribe(sub)
+				delete(subs, subj)
 			}
 		}
-		for _, sub := range wsSubscriptions(tables) {
-			ns, err := wsSubscribe(sub.subject, forward(sub.eventType, sub.critical))
-			if err != nil {
-				slog.ErrorContext(r.Context(), "NATS subscribe error", "subject", sub.subject, "error", err)
-				unsubscribeAll()
-				ws.close() // stop the writer goroutine started above (#378)
-				conn.Close()
-				return
+		// syncSubs subscribes the subjects of tbls that are missing and
+		// unsubscribes those no longer wanted. Caller holds subsMu.
+		syncSubs := func(tbls []TableInfo) error {
+			want := wsSubscriptions(tbls)
+			wanted := make(map[string]bool, len(want))
+			for _, sub := range want {
+				wanted[sub.subject] = true
+				if _, ok := subs[sub.subject]; ok {
+					continue
+				}
+				ns, err := wsSubscribe(sub.subject, forward(sub.eventType, sub.critical))
+				if err != nil {
+					return fmt.Errorf("subscribe %s: %w", sub.subject, err)
+				}
+				subs[sub.subject] = ns
 			}
-			subs = append(subs, ns)
+			for subj, sub := range subs {
+				if !wanted[subj] {
+					wsUnsubscribe(sub)
+					delete(subs, subj)
+				}
+			}
+			tables = tbls
+			return nil
+		}
+		subsMu.Lock()
+		err = syncSubs(tables)
+		subsMu.Unlock()
+		if err != nil {
+			slog.ErrorContext(r.Context(), "NATS subscribe error", "error", err)
+			unsubscribeAll()
+			ws.close() // stop the writer goroutine started above (#378)
+			conn.Close()
+			return
 		}
 
 		// Chain changes (#228) come from a Kubernetes watch on Chain
@@ -1845,6 +1876,29 @@ func wsHandler(src *tableSource, running *runningRegistry, activity *activitySto
 		// Ping ticker to detect dead connections
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
+		// Follow RoundTables created or removed while connected (#630). The
+		// source caches, so this is cheap.
+		refresh := time.NewTicker(wsTableRefresh)
+		defer refresh.Stop()
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case <-refresh.C:
+					tbls := src.tables(r.Context())
+					subsMu.Lock()
+					select {
+					case <-done:
+					default:
+						if err := syncSubs(tbls); err != nil {
+							slog.WarnContext(r.Context(), "NATS table refresh error", "error", err)
+						}
+					}
+					subsMu.Unlock()
+				}
+			}
+		}()
 		go func() {
 			for {
 				select {
@@ -3012,7 +3066,11 @@ var (
 	wsSubscribe = func(subject string, cb nats.MsgHandler) (*nats.Subscription, error) {
 		return nc.Subscribe(subject, cb)
 	}
-	wsWriterHook func(*wsWriter)
+	wsUnsubscribe = func(sub *nats.Subscription) { sub.Unsubscribe() }
+	wsWriterHook  func(*wsWriter)
+
+	// wsTableRefresh is how often an open socket re-resolves the tables.
+	wsTableRefresh = tableCacheTTL
 )
 
 // wsMaxConnectionsFromEnv parses WS_MAX_CONNECTIONS; invalid or negative

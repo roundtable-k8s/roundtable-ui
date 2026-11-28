@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -175,4 +176,78 @@ func TestWSSubscribeFailureStopsWriter(t *testing.T) {
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(writers) == 1 })
 	waitExit(t, writers[0])
 	waitFor(t, func() bool { return wsOpenConns.Load() == 0 })
+}
+
+// A table added while a socket is open gets its two subscriptions on the next
+// refresh, a removed table's are unsubscribed, and nothing leaks on close (#630).
+func TestWSFollowsTableChanges(t *testing.T) {
+	conn, _ := startCardsNATS(t)
+	oldNC, oldMax := nc, wsMaxConnections
+	oldSub, oldUnsub, oldRefresh := wsSubscribe, wsUnsubscribe, wsTableRefresh
+	nc = conn
+	t.Cleanup(func() {
+		nc, wsMaxConnections = oldNC, oldMax
+		wsSubscribe, wsUnsubscribe, wsTableRefresh = oldSub, oldUnsub, oldRefresh
+	})
+	wsTableRefresh = 20 * time.Millisecond
+
+	var mu sync.Mutex
+	live := map[*nats.Subscription]string{}
+	subjects := func() map[string]int {
+		mu.Lock()
+		defer mu.Unlock()
+		out := map[string]int{}
+		for _, s := range live {
+			out[s]++
+		}
+		return out
+	}
+	wsSubscribe = func(subj string, _ nats.MsgHandler) (*nats.Subscription, error) {
+		s := &nats.Subscription{}
+		mu.Lock()
+		live[s] = subj
+		mu.Unlock()
+		return s, nil
+	}
+	wsUnsubscribe = func(s *nats.Subscription) {
+		mu.Lock()
+		delete(live, s)
+		mu.Unlock()
+	}
+
+	var tmu sync.Mutex
+	tables := []TableInfo{{Name: "a", Prefix: "fleet-a"}}
+	src := newTableSource("test", "", "")
+	src.ttl = 0 // every refresh re-discovers
+	src.discoverFn = func(context.Context) ([]TableInfo, error) {
+		tmu.Lock()
+		defer tmu.Unlock()
+		return append([]TableInfo(nil), tables...), nil
+	}
+	srv := httptest.NewServer(wsHandler(src, nil, nil, nil, nil, nil))
+	t.Cleanup(srv.Close)
+	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	has := func(subj string) bool { return subjects()[subj] == 1 }
+	waitFor(t, func() bool { return has("fleet-a.tasks.>") && has("fleet-a.results.>") })
+
+	tmu.Lock()
+	tables = []TableInfo{{Name: "a", Prefix: "fleet-a"}, {Name: "b", Prefix: "fleet-b"}}
+	tmu.Unlock()
+	waitFor(t, func() bool { return has("fleet-b.tasks.>") && has("fleet-b.results.>") })
+	if n := len(subjects()); n != 4 {
+		t.Fatalf("subscriptions = %d, want 4 (no duplicates)", n)
+	}
+
+	tmu.Lock()
+	tables = []TableInfo{{Name: "b", Prefix: "fleet-b"}}
+	tmu.Unlock()
+	waitFor(t, func() bool { s := subjects(); return len(s) == 2 && has("fleet-b.tasks.>") })
+
+	c.Close()
+	waitFor(t, func() bool { return len(subjects()) == 0 && wsOpenConns.Load() == 0 })
 }
