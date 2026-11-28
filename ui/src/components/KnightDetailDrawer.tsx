@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle, Copy, Check, Camera } from 'lucide-react'
+import { X, Activity, Cpu, DollarSign, MessageSquare, Wrench, Clock, ChevronRight, RefreshCw, FileCode, Terminal, ChevronDown, Settings, BarChart2, Tag, IdCard, Shield, AlertTriangle, Camera } from 'lucide-react'
 import { getKnightConfig } from '../lib/knights'
 import { useKnightSession } from '../hooks/useKnightSession'
 import { apiGet } from '../lib/api'
@@ -8,7 +8,7 @@ import { formatAge, formatCost, formatUptime, formatTimestamp, formatNumber } fr
 import { SnapshotButton } from './SnapshotButton'
 import { PodsPanel } from './PodsPanel'
 import { KnightEventsPanel } from './KnightEventsPanel'
-import { Drawer, StatCard, Spinner, ErrorBanner } from './ui'
+import { Drawer, StatCard, Spinner, ErrorBanner, CopyButton } from './ui'
 import type { Knight, KnightCondition, KnightIsolation } from '../hooks/useFleet'
 import { IsolationBadge } from './IsolationBadge'
 import { egressHostLabels, optOutSummary } from '../lib/isolation'
@@ -711,24 +711,14 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
 }
 
 function SnapshotCopyButton({ name }: { name: string }) {
-  const [copied, setCopied] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout>>()
-  useEffect(() => () => clearTimeout(timer.current), [])
   return (
-    <button
-      type="button"
-      aria-label={`Copy snapshot name ${name}`}
+    <CopyButton
+      text={name}
+      iconOnly
+      iconClassName="w-3 h-3"
+      resetMs={1500}
+      ariaLabel={`Copy snapshot name ${name}`}
       className="text-gray-500 hover:text-roundtable-gold"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(name)
-          setCopied(true)
-          clearTimeout(timer.current)
-          timer.current = setTimeout(() => setCopied(false), 1500)
-        } catch { /* clipboard denied */ }
-      }}
-    >
-      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-    </button>
+    />
   )
 }

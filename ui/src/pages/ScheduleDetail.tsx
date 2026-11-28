@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarClock, ArrowLeft, Play, Pause, PlayCircle, Trash2, Copy, Check, GitBranch, Link2, Shield, Target, X, Pencil } from 'lucide-react'
+import { CalendarClock, ArrowLeft, Play, Pause, PlayCircle, Trash2, GitBranch, Link2, Shield, Target, X, Pencil } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
 import { formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText, safeUrl } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { TraceLink } from '../components/TraceLink'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Badge, Button, LinkButton, ConfirmDialog } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Badge, Button, LinkButton, ConfirmDialog, CopyButton } from '../components/ui'
 import {
   RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, scheduleNextUrl, type ScheduleNextRuns, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeTone,
   runResultText, runResultOutcome, prLabel, describeTurns, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
@@ -347,15 +347,11 @@ export function RunResultViewer({ namespace, name, run, onClose }: {
 export function ScheduleYaml({ namespace, name }: { namespace: string; name: string }) {
   const [yaml, setYaml] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [copyError, setCopyError] = useState('')
 
   useEffect(() => {
     // Drop what belongs to the previous schedule before fetching this one.
     setYaml(null)
     setError('')
-    setCopied(false)
-    setCopyError('')
     let live = true
     apiGetText(scheduleApi(namespace, name, 'manifest'))
       .then((y) => { if (live) setYaml(y) })
@@ -363,33 +359,12 @@ export function ScheduleYaml({ namespace, name }: { namespace: string; name: str
     return () => { live = false }
   }, [namespace, name])
 
-  useEffect(() => {
-    if (!copied) return
-    const t = setTimeout(() => setCopied(false), 2000)
-    return () => clearTimeout(t)
-  }, [copied])
-
-  const copy = async () => {
-    if (yaml == null) return
-    setCopyError('')
-    try {
-      await navigator.clipboard.writeText(yaml)
-      setCopied(true)
-    } catch {
-      setCopyError('Copy failed: the browser denied clipboard access')
-    }
-  }
-
   if (error) return <ErrorBanner>Failed to load the manifest: {sanitizeText(error)}</ErrorBanner>
   if (yaml == null) return <div className="flex justify-center py-8"><Spinner /></div>
   return (
     <section aria-label="yaml" className="rounded-xl border border-roundtable-steel bg-roundtable-slate p-4">
       <div className="mb-2 flex items-center justify-end gap-2">
-        {copyError && <span className="text-xs text-red-400">{copyError}</span>}
-        <Button onClick={copy}>
-          {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />}
-          {copied ? 'Copied' : 'Copy YAML'}
-        </Button>
+        <CopyButton text={yaml} label="Copy YAML" />
       </div>
       <pre data-testid="schedule-yaml" className="overflow-auto whitespace-pre rounded-lg bg-black/30 p-3 text-xs text-gray-200">{yaml}</pre>
     </section>
