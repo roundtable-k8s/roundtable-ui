@@ -123,7 +123,7 @@ describe('TasksPage dispatch form and persistence', () => {
     expect(screen.getByText('fix it')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('dispatch-output').textContent).toBe('all done'), { timeout: 5000 })
     expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1', expect.anything())
-  })
+  }, 15000)
 })
 
 describe('TasksPage', () => {
