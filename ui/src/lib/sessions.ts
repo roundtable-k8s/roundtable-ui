@@ -5,6 +5,7 @@
 // here is total (ties broken by name/id) so a refresh never reorders the list
 // or moves a session to another pod.
 import type { SessionHistoryItem } from '../hooks/useKnightSession'
+import { ApiError } from './api'
 
 export interface PodSessionGroup {
   pod: string | null      // null: the API did not report a pod (older runtime)
@@ -133,4 +134,35 @@ export function pickTargetSession(items: SessionHistoryItem[], pod: string | nul
     if (hit) return hit
   }
   return pod ? sorted.find(s => match(s, false)) ?? null : null
+}
+
+export type IntrospectErrorKind = 'unsupported' | 'timeout' | 'unavailable' | 'failed'
+
+/** True for a caller-cancelled request (knight change, unmount): ignore it, do not report it. */
+export function isAbortError(e: unknown): boolean {
+  return (e as { name?: string } | null)?.name === 'AbortError'
+}
+
+/**
+ * Sorts a failed introspect call: 'unsupported' (404 — the route/knight has no
+ * introspection), 'timeout' (504 or the client's own timeout), 'unavailable'
+ * (429, 502, 503: rate limit or infrastructure) or 'failed' (anything else).
+ * An offline knight answers 200 `{}`, which is not an error.
+ */
+export function classifyIntrospectError(e: unknown): IntrospectErrorKind {
+  if (e instanceof ApiError) {
+    if (e.status === 404) return 'unsupported'
+    if (e.status === 504 || e.status === 0) return 'timeout'
+    if (e.status === 429 || e.status === 502 || e.status === 503) return 'unavailable'
+  }
+  return 'failed'
+}
+
+export function introspectErrorMessage(kind: IntrospectErrorKind): string {
+  switch (kind) {
+    case 'timeout': return 'The knight did not answer in time. Try again shortly.'
+    case 'unavailable': return 'Session data is temporarily unavailable. Try again shortly.'
+    case 'unsupported': return 'This knight does not support session introspection.'
+    default: return 'Failed to load session data.'
+  }
 }
