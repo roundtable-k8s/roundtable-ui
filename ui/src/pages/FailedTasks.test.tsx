@@ -197,4 +197,13 @@ describe('FailedTasksPage', () => {
     expect(box).toHaveAttribute('aria-busy', 'false')
     expect(box.className).not.toContain('opacity-50')
   })
+
+  it('labels the rows of the previous state when a state switch fails', async () => {
+    renderPage()
+    await screen.findAllByTestId('dead-letter-row')
+    apiGet.mockRejectedValueOnce(new Error('gateway down'))
+    await userEvent.selectOptions(screen.getByLabelText('State'), 'open')
+    expect(await screen.findByTestId('dead-letters-stale')).toHaveTextContent('Showing all states from the last successful load')
+    expect(screen.getByTestId('dead-letters-rows')).toHaveClass('opacity-50')
+  })
 })

@@ -272,6 +272,40 @@ describe('DeadLettersView', () => {
   })
 })
 
+describe('DeadLettersView races and errors', () => {
+  it('shows no empty state when the load failed with no entries', () => {
+    render(<MemoryRouter><DeadLettersView entries={[]} error="Failed to fetch" onRetry={vi.fn()} onLoadDetail={vi.fn()} onLoadEntry={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByText('Failed to fetch')).toBeInTheDocument()
+    expect(screen.queryByText('No failed or lost tasks')).toBeNull()
+  })
+
+  it('shows all rows when a refresh drops the selected knight', async () => {
+    const props = { onRetry: vi.fn(), onLoadDetail: vi.fn(), onLoadEntry: vi.fn() }
+    const { rerender } = render(<MemoryRouter><DeadLettersView entries={[lost, chain]} {...props} /></MemoryRouter>)
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(1)
+    rerender(<MemoryRouter><DeadLettersView entries={[lost]} {...props} /></MemoryRouter>)
+    expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(1)
+    expect(screen.getByLabelText('Knight')).toHaveValue('')
+  })
+
+  it('keeps the detail of the last clicked row when answers arrive out of order', async () => {
+    const other: DeadLetter = { ...chain, error: 'B error text' }
+    const resolvers: Record<string, (d: DeadLetter) => void> = {}
+    const onLoadDetail = vi.fn((e: DeadLetter) => new Promise<DeadLetter>((r) => { resolvers[e.taskId] = r }))
+    render(<MemoryRouter><DeadLettersView entries={[lost, other]} onRetry={vi.fn()} onLoadDetail={onLoadDetail} onLoadEntry={loaderFrom({})} /></MemoryRouter>)
+    const rows = screen.getAllByTestId('dead-letter-row')
+    await userEvent.click(rows[0])
+    await userEvent.click(rows[1])
+    resolvers['t2'](other)
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByText('B error text')).toBeInTheDocument())
+    resolvers['t1'](lost)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(within(screen.getByRole('dialog')).getByText('B error text')).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog')).queryByText('delivered 5 times')).toBeNull()
+  })
+})
+
 describe('DeadLettersView trace link', () => {
   const traceId = '0af7651916cd43dd8448eb211c80319c'
 

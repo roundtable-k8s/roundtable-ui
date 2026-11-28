@@ -33,8 +33,8 @@ const stateStyle: Record<string, string> = {
 const entryKey = (d: DeadLetter) => `${d.table ?? ''}/${d.taskId}`
 
 export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail, onLoadEntry }: Props) {
-  const [knight, setKnight] = useState('')
-  const [reason, setReason] = useState('')
+  const [knightSel, setKnight] = useState('')
+  const [reasonSel, setReason] = useState('')
   const [selected, setSelected] = useState<DeadLetter | null>(null)
   const [detail, setDetail] = useState<DeadLetter | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -97,6 +97,11 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
 
   const knights = useMemo(() => [...new Set(entries.map((e) => e.knight))].sort(), [entries])
   const reasons = useMemo(() => [...new Set(entries.map((e) => e.reason))].sort(), [entries])
+  // A selection whose option vanished (a refresh dropped its last row) counts as "All".
+  const knight = knights.includes(knightSel) ? knightSel : ''
+  const reason = reasons.includes(reasonSel) ? reasonSel : ''
+  useEffect(() => { if (knightSel !== knight) setKnight(knight) }, [knightSel, knight])
+  useEffect(() => { if (reasonSel !== reason) setReason(reason) }, [reasonSel, reason])
   const rows = entries.filter((e) => (!knight || e.knight === knight) && (!reason || e.reason === reason))
 
   const selectable = (e: DeadLetter) => e.state === 'open' && !isChainOwned(e) && !retried[entryKey(e)]
@@ -148,11 +153,16 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
     setBulk({ running: false, done, failed, total: batch.length })
   }
 
+  const openKey = useRef('')
   const open = (e: DeadLetter) => {
+    const key = entryKey(e)
+    openKey.current = key
     setSelected(e)
     setDetail(null)
     setDetailError(null)
-    onLoadDetail(e).then(setDetail).catch((err) => setDetailError(err instanceof Error ? err.message : 'failed to load'))
+    onLoadDetail(e)
+      .then((d) => { if (openKey.current === key) setDetail(d) })
+      .catch((err) => { if (openKey.current === key) setDetailError(err instanceof Error ? err.message : 'failed to load') })
   }
 
   const retry = async (e: DeadLetter, force: boolean) => {
@@ -232,7 +242,7 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
 
       {loading && entries.length === 0 ? (
         <div className="flex justify-center py-12"><Spinner /></div>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && error && entries.length === 0 ? null : rows.length === 0 ? (
         <EmptyState icon={Skull} title="No failed or lost tasks" sub="Tasks that fail or go missing show up here." />
       ) : (
         <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl overflow-x-auto">

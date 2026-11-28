@@ -25,7 +25,8 @@ export function FailedTasksPage() {
   const [error, setError] = useState<string | null>(null)
   // The state the rows on screen were loaded for; differs from `state` while a new response is pending.
   const [loadedState, setLoadedState] = useState<StateFilter>('all')
-  const stale = loading && loadedState !== state
+  // Rows of another state stay dimmed while loading and after a failed load.
+  const stale = loadedState !== state && (loading || error !== null)
   const controller = useRef<AbortController | null>(null)
 
   // The gateway list has no table filter, so narrow at render time from the raw list.
@@ -79,6 +80,9 @@ export function FailedTasksPage() {
         </select>
       </div>
       {capNote && <p data-testid="dead-letters-cap" className="mb-4 text-sm text-yellow-400">{capNote}</p>}
+      {loadedState !== state && error !== null && !loading && (
+        <p data-testid="dead-letters-stale" className="mb-2 text-sm text-yellow-400">Showing {loadedState === 'all' ? 'all states' : loadedState} from the last successful load.</p>
+      )}
       <div aria-busy={stale} className={stale ? 'opacity-50 transition-opacity' : undefined} data-testid="dead-letters-rows">
         <DeadLettersView
           entries={entries}
