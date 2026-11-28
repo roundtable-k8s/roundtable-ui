@@ -15,6 +15,7 @@ function Probe() {
     <div>
       <span data-testid="v">{JSON.stringify(v)}</span>
       <span data-testid="loc">{loc.search}</span>
+      <span data-testid="path">{loc.pathname}</span>
       <button onClick={() => set({ a: '1', b: 'x' })}>both</button>
       <button onClick={() => set({ a: null, b: 'all' })}>clear</button>
       <button onClick={() => nav(-1)}>back</button>
@@ -40,14 +41,15 @@ describe('useUrlParams', () => {
     renderAt('/p')
     await userEvent.click(screen.getByText('both'))
     expect(screen.getByTestId('loc')).toHaveTextContent('?a=1&b=x')
+    expect(screen.getByTestId('path').textContent).toBe('/p')
     await userEvent.click(screen.getByText('back'))
-    expect(screen.getByTestId('loc')).toHaveTextContent('')
+    // replace (not push): back skips past /p and lands on the entry before it
+    expect(screen.getByTestId('path').textContent).toBe('/start')
   })
 
   it('removes params set to the default, empty or null', async () => {
     renderAt('/p?a=1&b=x')
     await userEvent.click(screen.getByText('clear'))
-    expect(screen.getByTestId('loc')).toHaveTextContent('')
     expect(screen.getByTestId('loc').textContent).toBe('')
   })
 
