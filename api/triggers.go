@@ -230,7 +230,7 @@ func triggerDetailHandler(namespace string) http.HandlerFunc {
 		}
 		vars := mux.Vars(r)
 		ns, name := vars["namespace"], vars["name"]
-		if !validKnightName.MatchString(name) {
+		if !validResourceName.MatchString(name) {
 			jsonError(w, "Invalid trigger name", http.StatusBadRequest)
 			return
 		}

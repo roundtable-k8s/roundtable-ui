@@ -45,7 +45,7 @@ function sumCosts(perKnight: Record<string, number>): number {
 async function fetchSessionCosts(names: string[]): Promise<Record<string, number>> {
   const results = await Promise.allSettled(
     names.map(name =>
-      fetchWithTimeout(`/api/fleet/${name}/session?type=stats`).then(r => {
+      fetchWithTimeout(`/api/fleet/${encodeURIComponent(name)}/session?type=stats`).then(r => {
         if (!r || !r.ok) throw new Error('introspect unavailable')
         return r.json()
       })

@@ -53,7 +53,7 @@ func TestMissionResultsHandler(t *testing.T) {
 	if rec := kvRequest(missionResultsHandler(), pat, "/api/missions/nope/results"); rec.Code != 404 {
 		t.Errorf("missing key: status %d", rec.Code)
 	}
-	if rec := kvRequest(missionResultsHandler(), pat, "/api/missions/1bad/results"); rec.Code != 400 {
+	if rec := kvRequest(missionResultsHandler(), pat, "/api/missions/bad.name/results"); rec.Code != 400 {
 		t.Errorf("invalid name: status %d", rec.Code)
 	}
 }
@@ -78,8 +78,25 @@ func TestChainStepOutputHandler(t *testing.T) {
 	if rec := kvRequest(chainStepOutputHandler(), pat, "/api/chains/c1/steps/zz/output"); rec.Code != 404 {
 		t.Errorf("missing key: status %d", rec.Code)
 	}
-	if rec := kvRequest(chainStepOutputHandler(), pat, "/api/chains/c1/steps/9x/output"); rec.Code != 400 {
-		t.Errorf("invalid name: status %d", rec.Code)
+	if _, err := kv.Put(context.Background(), "7day-scan.threat_scan", []byte(`{"out":"ok"}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		path string
+		want int
+	}{
+		{"/api/chains/7day-scan/steps/threat_scan/output", 200},
+		{"/api/chains/c1/steps/9x/output", 404},
+		{"/api/chains/c1/steps/a.b/output", 400},
+		{"/api/chains/c1/steps/_x/output", 400},
+		{"/api/chains/c1/steps/" + strings.Repeat("a", 129) + "/output", 400},
+		{"/api/chains/" + strings.Repeat("a", 64) + "/steps/s1/output", 400},
+		{"/api/chains/c.1/steps/s1/output", 400},
+		{"/api/chains/c1/steps/a%20b/output", 400},
+	} {
+		if rec := kvRequest(chainStepOutputHandler(), pat, c.path); rec.Code != c.want {
+			t.Errorf("%s: status %d, want %d", c.path, rec.Code, c.want)
+		}
 	}
 }
 

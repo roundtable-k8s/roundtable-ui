@@ -105,7 +105,7 @@ export function BriefingsPage() {
 
     const date = selectedName.replace('.md', '')
     const query = selectedDir ? `?dir=${encodeURIComponent(selectedDir)}` : ''
-    apiGetText(`/api/briefings/${date}${query}`, { signal: ctl.signal })
+    apiGetText(`/api/briefings/${encodeURIComponent(date)}${query}`, { signal: ctl.signal })
       .then((text) => {
         // A late answer for a previous selection must not overwrite the current one.
         if (ctl.signal.aborted) return

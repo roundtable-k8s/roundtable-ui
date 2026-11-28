@@ -190,7 +190,7 @@ export function SessionsPage() {
     if (linkTarget.current && linkTarget.current.knight !== selectedKnight) linkTarget.current = null
     const target = linkTarget.current ?? { pod: null, runId: null }
     let cancelled = false
-    fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=history`)
+    fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=history`)
       .then(r => (r && r.ok ? r.json() : null))
       .then(async d => {
         if (cancelled) return
@@ -202,7 +202,7 @@ export function SessionsPage() {
         } else if (target.pod) {
           // The linked pod lists no session: ask it directly so a scaled-away
           // pod shows "pod gone" rather than an unrelated live view.
-          const probe = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=stats&pod=${encodeURIComponent(target.pod)}`)
+          const probe = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats&pod=${encodeURIComponent(target.pod)}`)
           const gone = await podGoneFrom(probe, target.pod)
           if (cancelled) return
           if (gone) setPodGone(gone)
@@ -224,7 +224,7 @@ export function SessionsPage() {
     try {
       // Stats reflect the live session only.
       if (!isArchived) {
-        fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=stats`)
+        fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats`)
           .then(r => r && r.ok ? r.json() : null)
           .then(d => {
             if (d) {
@@ -240,7 +240,7 @@ export function SessionsPage() {
 
       // Archived session: replay its persisted entries (timeline/tools views).
       if (isArchived) {
-        const res = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=session&${sessionQuery(selectedSession)}&limit=300`)
+        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=session&${sessionQuery(selectedSession)}&limit=300`)
         const gone = await podGoneFrom(res, sessionPod(selectedSession))
         if (gone) {
           setPodGone(gone)
@@ -262,7 +262,7 @@ export function SessionsPage() {
       }
 
       if (view === 'tree') {
-        const res = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=tree`)
+        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=tree`)
         if (!res || !res.ok) {
           setTreeNodes([])
           return
@@ -270,7 +270,7 @@ export function SessionsPage() {
         const data = await res.json()
         setTreeNodes(data.nodes || [])
       } else {
-        const res = await fetchWithTimeout(`/api/fleet/${selectedKnight}/session?type=recent&limit=100`)
+        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=recent&limit=100`)
         if (!res || !res.ok) {
           setEntries([])
           return
@@ -293,7 +293,7 @@ export function SessionsPage() {
     const results: Record<string, KnightSessionStats> = {}
     await Promise.all(knights.map(async k => {
       try {
-        const res = await fetchWithTimeout(`/api/fleet/${k.name}/session?type=stats`)
+        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(k.name)}/session?type=stats`)
         if (res && res.ok) {
           const data = await res.json()
           results[k.name] = { ...data, supported: true }
