@@ -2,11 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { Modal } from './ui'
-import { apiGet } from '../lib/api'
+import { fetchFresh } from '../lib/polledStore'
 import { withTable } from '../lib/tables'
 import { buildEntries, rank, type PaletteEntry, type PaletteSources } from '../lib/palette'
-import { CHAINS_LIST_URL } from '../pages/Chains'
 import type { ScheduleList } from '../lib/schedules'
+
+/** Palette lists are reused from the shared store when fetched less than this long ago. */
+const FRESH_MS = 30_000
+/** Names only are needed, so a short page of chains is enough. */
+const PALETTE_CHAINS_URL = '/api/chains?copies=exclude&limit=100'
 
 type Named = { name: string; namespace?: string }
 
@@ -32,16 +36,16 @@ export function CommandPalette({ onClose, pages, table }: {
   const [failed, setFailed] = useState<string[]>([])
   const listRef = useRef<HTMLUListElement>(null)
 
-  // Fetched once per open (the palette is unmounted when closed).
+  // Loaded on open (the palette is unmounted when closed); lists fetched in the last 30 s are reused.
   useEffect(() => {
     const controller = new AbortController()
     const signal = controller.signal
     const bad: string[] = []
     const get = <T,>(label: string, url: string): Promise<T | null> =>
-      apiGet<T>(withTable(url, table), { signal }).catch(() => { if (!signal.aborted) bad.push(label); return null })
+      fetchFresh<T>(withTable(url, table), FRESH_MS).catch(() => { if (!signal.aborted) bad.push(label); return null })
     Promise.all([
       get<Named[]>('knights', '/api/fleet'),
-      get<Named[]>('chains', CHAINS_LIST_URL),
+      get<Named[]>('chains', PALETTE_CHAINS_URL),
       get<ScheduleList>('schedules', '/api/schedules'),
       get<Named[]>('missions', '/api/missions'),
       get<Named[]>('triggers', '/api/triggers'),

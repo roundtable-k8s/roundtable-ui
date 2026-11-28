@@ -1,6 +1,5 @@
-import { useState } from 'react'
-import { useVisibleInterval } from './useVisibleInterval'
-import { apiGet } from '../lib/api'
+import { useMemo } from 'react'
+import { usePolledFetch } from './usePolledFetch'
 
 export interface Health {
   status?: string
@@ -11,19 +10,11 @@ export interface Health {
 }
 
 /**
- * /api/health at load and every minute. A failed request keeps the last known state but sets `error`
- * (a later success replaces the state and clears it). With no answer yet, the result is null.
+ * /api/health at load and every minute, shared by every component using it. A failed request keeps
+ * the last known state but sets `error` (a later success replaces the state and clears it).
+ * With no answer yet, the result is null.
  */
 export function useHealth(intervalMs = 60000): Health | null {
-  const [health, setHealth] = useState<Health | null>(null)
-  useVisibleInterval(
-    (signal) =>
-      apiGet<Health>('/api/health', { signal })
-        .then((h) => setHealth(h ?? null))
-        .catch(() => { if (!signal.aborted) setHealth((prev) => (prev ? { ...prev, error: true } : null)) }),
-    intervalMs,
-    true,
-    { immediate: true },
-  )
-  return health
+  const { data, error } = usePolledFetch<Health | null>('/api/health', intervalMs, null)
+  return useMemo(() => (error ? (data ? { ...data, error: true } : null) : data ?? null), [data, error])
 }

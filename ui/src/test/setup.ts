@@ -15,6 +15,9 @@ if (!global.React) {
 }
 
 // Cleanup after each test
-afterEach(() => {
+// The store keeps entries across tests; drop them. Imported lazily so a test file's vi.mock of
+// ../lib/api is registered before the store first loads.
+afterEach(async () => {
   cleanup()
+  ;(await import('../lib/polledStore')).resetPolledStore()
 })
