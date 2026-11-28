@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { useUrlParams } from '../hooks/useUrlParams'
 import { Zap, Crown, DollarSign, TrendingUp, ShieldOff, Search } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
@@ -41,6 +41,8 @@ const STATUS_OPTIONS = [
 const LOAD_OPTIONS = [['busy', 'Busy'], ['idle', 'Idle']] as const
 const SORT_OPTIONS = [['name', 'Name'], ['status', 'Status'], ['restarts', 'Restarts']] as const
 type SortKey = (typeof SORT_OPTIONS)[number][0]
+const FLEET_DEFAULTS = { q: '', status: '', load: '', sort: 'name', knight: '' }
+const FLEET_ALLOWED = { load: LOAD_OPTIONS.map(([v]) => v), sort: SORT_OPTIONS.map(([v]) => v) }
 const STATUS_RANK: Record<string, number> = { online: 0, busy: 1, starting: 2, 'scaled-to-zero': 3, offline: 4 }
 
 export function FleetPage() {
@@ -61,24 +63,12 @@ export function FleetPage() {
   const { cards } = useCards()
   const loads = useKnightLoad()
   const hasLoad = knights.some((k) => loads.has(knightLoadKey(k)))
-  const [params, setParams] = useSearchParams()
-  const q = params.get('q') ?? ''
-  const status = params.get('status') ?? ''
-  const loadParam = params.get('load') ?? ''
+  const [{ q, status, load: loadParam, sort: sortValue, knight: knightParam }, setParams] = useUrlParams(FLEET_DEFAULTS, FLEET_ALLOWED)
   // Busy: queued or running work (#579); Idle: none. Knights without counts match neither.
   // Ignored while no knight has counts: the select is hidden then, so the filter could not be cleared (#594).
-  const loadFilter = hasLoad && LOAD_OPTIONS.some(([v]) => v === loadParam) ? loadParam : ''
-  const sortParam = params.get('sort') ?? ''
-  const sort: SortKey = SORT_OPTIONS.some(([v]) => v === sortParam) ? (sortParam as SortKey) : 'name'
-  const knightParam = params.get('knight') ?? ''
-  const setParam = useCallback((key: string, value: string) => {
-    setParams((prev) => {
-      const p = new URLSearchParams(prev)
-      if (value) p.set(key, value)
-      else p.delete(key)
-      return p
-    }, { replace: true })
-  }, [setParams])
+  const sort = sortValue as SortKey
+  const loadFilter = hasLoad ? loadParam : ''
+  const setParam = (key: keyof typeof FLEET_DEFAULTS, value: string) => setParams({ [key]: value })
   const [limit, setLimit] = useState(PAGE_SIZE)
   const [skillFilter, setSkillFilter] = useState<SkillFilterValue>({})
   const [notIsolatedOnly, setNotIsolatedOnly] = useState(false)
@@ -299,7 +289,7 @@ export function FleetPage() {
           <select
             aria-label="Sort by"
             value={sort}
-            onChange={(e) => setParam('sort', e.target.value === 'name' ? '' : e.target.value)}
+            onChange={(e) => setParam('sort', e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-2 py-1.5 text-sm text-white"
           >
             {SORT_OPTIONS.map(([v, label]) => <option key={v} value={v}>Sort: {label}</option>)}
