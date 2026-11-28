@@ -109,14 +109,14 @@ export function ToolCallCard({ entry }: { entry: SessionEntry }) {
 }
 
 export function SessionsPage() {
-  const { knights, loading: fleetLoading } = useFleet()
+  const { knights, loading: fleetLoading, error: fleetError, refresh: refreshFleet } = useFleet()
   // ?knight= preselects a knight (e.g. the transcript link from Task activity, #214).
   const [searchParams] = useSearchParams()
   const linkKnight = (() => {
     const k = searchParams.get('knight')?.toLowerCase() || ''
     return /^[a-z0-9][a-z0-9-]{0,62}$/.test(k) ? k : ''
   })()
-  const [selectedKnight, setSelectedKnight] = useState(linkKnight)
+  const [selectedKnight, setSelectedKnightRaw] = useState(linkKnight)
   const [view, setView] = useState<'timeline' | 'tree' | 'tools'>('timeline')
   const [entries, setEntries] = useState<SessionEntry[]>([])
   const [treeNodes, setTreeNodes] = useState<SessionTreeNode[]>([])
@@ -146,6 +146,20 @@ export function SessionsPage() {
   const linkTarget = useRef<{ knight: string; pod: string | null; runId: string | null } | null>(null)
   // Set when a deep link names a pod on a live knight but no session was found.
   const [linkNotice, setLinkNotice] = useState<string | null>(null)
+  // Switch knight and drop everything that belongs to the previous one in the
+  // same batch, so no render or request mixes two knights' data.
+  const setSelectedKnight = useCallback((name: string) => {
+    setSelectedKnightRaw(name)
+    setStats(null)
+    setEntries([])
+    setTreeNodes([])
+    setArchivedMeta(null)
+    setSelectedSession('live')
+    setPodGone(null)
+    setError(null)
+  }, [])
+  // Id of the latest fetchData call; older answers are dropped.
+  const fetchSeq = useRef(0)
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
 
   // Build dynamic knight config from fleet
@@ -218,6 +232,8 @@ export function SessionsPage() {
   const fetchData = useCallback(async () => {
     if (!selectedKnight) return
 
+    const id = ++fetchSeq.current
+    const stale = () => id !== fetchSeq.current
     setLoading(true)
     setError(null)
 
@@ -227,6 +243,7 @@ export function SessionsPage() {
         fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats`)
           .then(r => r && r.ok ? r.json() : null)
           .then(d => {
+            if (stale()) return
             if (d) {
               setStats({ ...d, supported: true })
             } else {
@@ -234,6 +251,7 @@ export function SessionsPage() {
             }
           })
           .catch(() => {
+            if (stale()) return
             setStats({ knight: selectedKnight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
           })
       }
@@ -242,6 +260,7 @@ export function SessionsPage() {
       if (isArchived) {
         const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=session&${sessionQuery(selectedSession)}&limit=300`)
         const gone = await podGoneFrom(res, sessionPod(selectedSession))
+        if (stale()) return
         if (gone) {
           setPodGone(gone)
           setEntries([])
@@ -255,6 +274,7 @@ export function SessionsPage() {
           return
         }
         const data = await res.json()
+        if (stale()) return
         setEntries(data.entries || [])
         setTreeNodes([])
         setArchivedMeta({ total: data.total ?? 0, hasMore: !!data.hasMore, startedAt: data.startedAt ?? null })
@@ -263,25 +283,29 @@ export function SessionsPage() {
 
       if (view === 'tree') {
         const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=tree`)
+        if (stale()) return
         if (!res || !res.ok) {
           setTreeNodes([])
           return
         }
         const data = await res.json()
+        if (stale()) return
         setTreeNodes(data.nodes || [])
       } else {
         const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=recent&limit=100`)
+        if (stale()) return
         if (!res || !res.ok) {
           setEntries([])
           return
         }
         const data = await res.json()
+        if (stale()) return
         setEntries(data.entries || [])
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch session data')
+      if (!stale()) setError(e instanceof Error ? e.message : 'Failed to fetch session data')
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }, [selectedKnight, view, selectedSession, isArchived])
 
@@ -361,6 +385,15 @@ export function SessionsPage() {
     )
   }
 
+  if (knights.length === 0 && fleetError) {
+    return (
+      <div className="space-y-3">
+        <ErrorBanner>Could not load the fleet: {sanitizeText(fleetError)}</ErrorBanner>
+        <button onClick={refreshFleet} className="text-sm underline text-roundtable-gold hover:text-white">Retry</button>
+      </div>
+    )
+  }
+
   if (knights.length === 0) {
     return <EmptyState icon={TreePine} title="No knights available in the fleet" />
   }
@@ -377,7 +410,7 @@ export function SessionsPage() {
         <div className="relative">
           <select aria-label="Knight" value={selectedKnight} onChange={e => setSelectedKnight(e.target.value)}
             className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-4 py-2 text-white pr-8 appearance-none min-w-[200px]">
-            {filteredKnights.map(k => {
+            {(filteredKnights.some(k => k.name === selectedKnight) ? filteredKnights : [...knights.filter(k => k.name === selectedKnight), ...filteredKnights]).map(k => {
               const kc = knightConfig[k.name]
               const statusIcon = k.status === 'online' ? '🟢' : k.status === 'busy' ? '🟡' : '🔴'
               return <option key={k.name} value={k.name}>{kc?.emoji || '🤖'} {k.name} {statusIcon}</option>
