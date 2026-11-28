@@ -679,7 +679,7 @@ func main() {
 	d.middleware = []mux.MiddlewareFunc{tracingMiddleware, securityHeaders, metricsMiddleware, authMiddleware, rateLimiter.middleware}
 	r := buildRouter(d)
 
-	// CORS — defaults to same-origin (no origins = same-origin only) (#57)
+	// CORS — with no origins configured every origin is allowed, without credentials (#57)
 	handler := newCORSHandler(envOr("ALLOWED_ORIGINS", ""), r)
 
 	srv := newHTTPServer(":"+port, handler)
@@ -3377,13 +3377,13 @@ func (w *wsWriter) write(msgType int, data []byte) bool {
 func (w *wsWriter) isClosed() bool { return w.closed.Load() }
 func (w *wsWriter) markClosed()    { w.closed.Store(true) }
 
-// newCORSHandler wraps next with the API's CORS policy. Without origins only
-// same-origin requests are allowed.
+// newCORSHandler wraps next with the API's CORS policy. Without origins
+// every origin is allowed (rs/cors default), without credentials.
 func newCORSHandler(origins string, next http.Handler) http.Handler {
 	corsOpts := cors.Options{
-		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Idempotency-Key"},
-		ExposedHeaders:   []string{"Idempotent-Replay"},
+		ExposedHeaders:   []string{"Idempotent-Replay", "X-Total-Count", "X-Pod-Name", "X-Logs-Truncated", "X-Introspect-Scope", "Retry-After"},
 		AllowCredentials: false,
 	}
 	if origins != "" {

@@ -275,7 +275,7 @@ The dashboard API server is configured via environment variables:
 | `DISPATCH_RATE` / `DISPATCH_BURST` | Rate limit (requests/sec, bucket size) of dispatch and run-now; rate <= 0 disables it | `2` / `10` |
 | `KUBE_QPS` / `KUBE_BURST` | Client-side rate limit (requests/sec, bucket size) of the Kubernetes client, shared by all handlers, informers and watchers. `KUBE_QPS` may be fractional. Invalid or <= 0 values fall back. No client-wide timeout is set (it would cut watches); handlers bound their Kubernetes calls to 10s instead | `20` / `40` |
 | `DASHBOARD_API_KEY` | Optional API key for authentication. The `?api_key=` query form is accepted on `/api/ws` only; use the `Authorization` header elsewhere | _(none)_ |
-| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(same-origin only)_ |
+| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | _(unset: every origin gets `Access-Control-Allow-Origin: *`, no credentials)_ |
 | `LOG_LEVEL` | Only `debug` is special (debug logging); any other value, or unset, logs at info | _(unset = info)_ |
 | `LOG_REQUESTS` | `true` logs every API request at info (method, route template, status, `duration_ms`). Without it only 4xx and slow (>= 1s) requests log at warn and 5xx at error. `/api/health`, `/metrics` and `/api/ws` are never logged; query strings and headers are never logged | _(unset = off)_ |
 | `TRACE_URL_TEMPLATE` | Trace viewer URL for the "View trace" links: an http(s) URL containing `{traceId}`. Anything else is ignored with a warning. Returned as `traceUrlTemplate` by `GET /api/config`. See [Tracing](#tracing) | _(unset)_ |
@@ -355,6 +355,20 @@ For production deployments with separate frontend hosting:
 ```bash
 export ALLOWED_ORIGINS="https://dashboard.example.com,https://admin.example.com"
 ```
+
+With `ALLOWED_ORIGINS` unset, CORS is not restricted: every origin gets `Access-Control-Allow-Origin: *` and credentials are not allowed. Allowed methods are `GET, POST, PUT, DELETE, OPTIONS`.
+
+### List parameters
+
+| Route | `limit` | `offset` | Total returned |
+|-------|---------|----------|----------------|
+| `/api/chains` | positive integer, clamped to 500 | non-negative integer | `X-Total-Count` header |
+| `/api/gateway/tasks`, `/api/gateway/runs` | positive integer, clamped to 200 | no | no |
+| `/api/dead-letters` | positive integer, clamped to 100 | no | `total` in the body |
+| `/api/schedules/{namespace}/{name}/runs` | 1-200, 400 above | no | no |
+| `/api/fleet/{knight}/session` | 1-500, ignored otherwise | session type only | no |
+
+An invalid `limit` answers 400 `{"error": ...}`.
 
 ## API Endpoints
 
