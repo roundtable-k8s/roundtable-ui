@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/gorilla/mux"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
@@ -133,19 +135,24 @@ func TestKnightDetailCRFieldsNotFromSnapshot(t *testing.T) {
 	if w := getFleet(t, "/api/fleet/lamorak"); w.Code != 200 {
 		t.Fatalf("status %d", w.Code)
 	}
-	// Change the CR within the snapshot TTL: the detail shows it at once.
+	// Change a CR field the detail serves while the pod snapshot is still
+	// fresh: the detail must show the new value at once.
 	cr, err := dynClient.Resource(knightGVR).Namespace("snapns").Get(context.Background(), "lamorak", metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cr.SetLabels(map[string]string{"marker": "changed"})
+	if err := unstructured.SetNestedSlice(cr.Object, []interface{}{
+		map[string]interface{}{"name": "snap-new", "createdAt": "2026-01-01T00:00:00Z", "readyToUse": true},
+	}, "status", "workspace", "snapshots"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := dynClient.Resource(knightGVR).Namespace("snapns").Update(context.Background(), cr, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		items, _ := cachedList(context.Background(), dynClient, knightGVR, "snapns")
-		if len(items) == 1 && items[0].GetLabels()["marker"] == "changed" {
+		if len(items) == 1 && len(buildWorkspaceSnapshots(&items[0])) == 1 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -153,8 +160,16 @@ func TestKnightDetailCRFieldsNotFromSnapshot(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if w := getFleet(t, "/api/fleet/lamorak"); w.Code != 200 {
+	w := getFleet(t, "/api/fleet/lamorak")
+	if w.Code != 200 {
 		t.Fatalf("status %d", w.Code)
+	}
+	var detail KnightDetail
+	if err := json.Unmarshal(w.Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.WorkspaceSnapshots) != 1 || detail.WorkspaceSnapshots[0].Name != "snap-new" {
+		t.Fatalf("detail snapshots = %+v, want snap-new from the live CR", detail.WorkspaceSnapshots)
 	}
 }
 
