@@ -240,20 +240,11 @@ func (g *gatewayClient) relayKeyed(w http.ResponseWriter, r *http.Request, metho
 		return
 	}
 	status, b, hdr, err := g.doKeyed(r.Context(), routeLabel(r), method, path, query, body, idemKey)
-	if errors.Is(err, errGatewayBodyTooLarge) {
-		slog.WarnContext(r.Context(), "gateway response over relay limit", "path", path, "limit_bytes", gatewayMaxBody)
-		jsonError(w, "Gateway response too large", http.StatusBadGateway)
-		return
-	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), "gateway request failed", "path", path, "error", err)
-		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
+		g.fail(w, r, path, err)
 		return
 	}
-	if v := hdr.Get("Idempotent-Replay"); v != "" {
-		w.Header().Set("Idempotent-Replay", v)
-	}
-	writeGatewayResponse(w, status, b)
+	relayGatewayAnswer(w, r, path, status, b, hdr)
 }
 
 // deadLettersHandler proxies GET /v1/dead-letters (knight, reason, state, limit).

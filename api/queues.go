@@ -387,12 +387,7 @@ func queuesHandler(namespace string) http.HandlerFunc {
 			return out, nil
 		})
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				slog.DebugContext(r.Context(), "Knight list cancelled by client")
-			} else {
-				slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
-			}
-			jsonError(w, "Failed to list knights", http.StatusInternalServerError)
+			upstreamError(w, r, err, "knights")
 			return
 		}
 

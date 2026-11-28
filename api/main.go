@@ -903,8 +903,7 @@ func fleetHandler(namespace string) http.HandlerFunc {
 
 		crItems, err := cachedList(r.Context(), dynClient, knightGVR, namespace)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "K8s knight CR list error", "error", err)
-			jsonError(w, "Failed to list fleet", http.StatusInternalServerError)
+			upstreamError(w, r, err, "fleet")
 			return
 		}
 
@@ -2425,8 +2424,7 @@ func missionsHandler(namespace string) http.HandlerFunc {
 
 		items, err := cachedList(r.Context(), dynClient, missionGVR, namespace)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Mission list error", "error", err)
-			jsonError(w, "Failed to list missions", http.StatusInternalServerError)
+			upstreamError(w, r, err, "missions")
 			return
 		}
 
@@ -2775,8 +2773,7 @@ func roundTablesHandler(namespace string) http.HandlerFunc {
 		defer kcancel()
 		list, err := dynClient.Resource(roundTableGVR).Namespace(namespace).List(kctx, metav1.ListOptions{})
 		if err != nil {
-			slog.ErrorContext(r.Context(), "RoundTable list error", "error", err)
-			jsonError(w, "Failed to list roundtables", http.StatusInternalServerError)
+			upstreamError(w, r, err, "roundtables")
 			return
 		}
 
@@ -2904,8 +2901,7 @@ func missionResultsHandler() http.HandlerFunc {
 		}
 		kv, ok, err := lookupKVBucket(r.Context(), "mission-results")
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Look up mission results bucket failed", "mission", name, "error", err)
-			jsonError(w, "Failed to read results", http.StatusInternalServerError)
+			upstreamError(w, r, err, "results")
 			return
 		}
 		if !ok {
@@ -2918,8 +2914,7 @@ func missionResultsHandler() http.HandlerFunc {
 				jsonError(w, "Results not found", http.StatusNotFound)
 				return
 			}
-			slog.ErrorContext(r.Context(), "Get mission results failed", "mission", name, "error", err)
-			jsonError(w, "Failed to read results", http.StatusInternalServerError)
+			upstreamError(w, r, err, "results")
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
@@ -2937,8 +2932,7 @@ func chainStepOutputHandler() http.HandlerFunc {
 		}
 		kv, ok, err := lookupKVBucket(r.Context(), "chain-outputs")
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Look up chain outputs bucket failed", "chain", name, "step", step, "error", err)
-			jsonError(w, "Failed to read output", http.StatusInternalServerError)
+			upstreamError(w, r, err, "output")
 			return
 		}
 		if !ok {
@@ -2952,8 +2946,7 @@ func chainStepOutputHandler() http.HandlerFunc {
 				jsonError(w, "Output not found", http.StatusNotFound)
 				return
 			}
-			slog.ErrorContext(r.Context(), "Get chain step output failed", "chain", name, "step", step, "error", err)
-			jsonError(w, "Failed to read output", http.StatusInternalServerError)
+			upstreamError(w, r, err, "output")
 			return
 		}
 		writeRedactedJSON(w, entry.Value())
