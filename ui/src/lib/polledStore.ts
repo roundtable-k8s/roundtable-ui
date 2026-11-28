@@ -26,6 +26,8 @@ interface Entry {
   timerMs: number
   ctrl: AbortController | null
   inflight: Promise<void> | null
+  /** A forced refresh waiting for the running request to finish. */
+  queued: Promise<void> | null
   drop: ReturnType<typeof setTimeout> | null
 }
 
@@ -92,7 +94,7 @@ function scheduleDrop(en: Entry) {
 function entryFor(url: string): Entry {
   let en = entries.get(url)
   if (!en) {
-    en = { url, snap: EMPTY, subs: new Map(), waiters: 0, listeners: new Set(), timer: null, timerMs: 0, ctrl: null, inflight: null, drop: null }
+    en = { url, snap: EMPTY, subs: new Map(), waiters: 0, listeners: new Set(), timer: null, timerMs: 0, ctrl: null, inflight: null, queued: null, drop: null }
     entries.set(url, en)
   }
   if (en.drop) { clearTimeout(en.drop); en.drop = null }
@@ -130,15 +132,25 @@ export function getSnapshot(url: string): PolledSnapshot {
   return entries.get(url)?.snap ?? EMPTY
 }
 
-/** Force one shared fetch (joins the request already in flight). */
+/**
+ * Force a fetch that starts now. A request already running may predate the change the caller
+ * just made, so it is not reused: the new fetch starts when it ends, and callers refreshing
+ * meanwhile share that one.
+ */
 export function refresh(url: string): Promise<void> {
   const en = entries.get(url)
-  return en ? load(en) : Promise.resolve()
+  if (!en) return Promise.resolve()
+  if (!en.inflight) return load(en)
+  if (!en.queued) {
+    const q: Promise<void> = en.inflight.then(() => { en.queued = null; return load(en) })
+    en.queued = q
+  }
+  return en.queued
 }
 
 /**
  * The data of `url` when fetched less than `maxAgeMs` ago, else a (shared) fetch of it.
- * Rejects when the fetch fails and there is no data at all.
+ * Rejects when the last fetch failed or there is no data.
  */
 export async function fetchFresh<T>(url: string, maxAgeMs: number): Promise<T> {
   const en = entryFor(url)
@@ -158,7 +170,9 @@ export async function fetchFresh<T>(url: string, maxAgeMs: number): Promise<T> {
 document.addEventListener('visibilitychange', () => {
   for (const en of entries.values()) {
     if (document.hidden) {
-      abort(en)
+      // One-shot requests and fetchFresh() waiters are not tied to the poll, so they run on:
+      // nothing would reload them when the tab shows again.
+      if (wantedMs(en) > 0 && en.waiters === 0) abort(en)
       syncTimer(en)
     } else if (en.subs.size > 0) {
       syncTimer(en)

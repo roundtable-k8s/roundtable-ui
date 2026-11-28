@@ -105,4 +105,33 @@ describe('polledStore', () => {
     expect(calls('/api/health')).toBe(2)
     expect(calls('/api/dead-letters?state=open')).toBe(2)
   })
+
+  it('refresh() does not reuse a request that started before it', async () => {
+    let resolveOld!: (v: string[]) => void
+    mockGet.mockReturnValueOnce(new Promise((r) => { resolveOld = r }))
+    const a = renderHook(() => usePolledFetch<string[]>('/api/x', 60000, []))
+    expect(calls('/api/x')).toBe(1)
+    mockGet.mockResolvedValue(['new'])
+    let done = false
+    const p = a.result.current.refresh().then(() => { done = true })
+    await tick(0)
+    expect(done).toBe(false)
+    await act(async () => { resolveOld(['old']); await p })
+    expect(calls('/api/x')).toBe(2)
+    expect(a.result.current.data).toEqual(['new'])
+  })
+
+  it('a one-shot request survives the tab hiding', async () => {
+    let resolve!: (v: string[]) => void
+    mockGet.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+    const a = renderHook(() => usePolledFetch<string[]>('/api/x', 0, []))
+    const signal = (mockGet.mock.calls[0][1] as { signal: AbortSignal }).signal
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(signal.aborted).toBe(false)
+    await act(async () => { resolve(['late']); await vi.advanceTimersByTimeAsync(0) })
+    expect(a.result.current.data).toEqual(['late'])
+    expect(a.result.current.loading).toBe(false)
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+  })
 })

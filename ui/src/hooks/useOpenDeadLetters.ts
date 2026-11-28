@@ -28,16 +28,16 @@ export function useOpenDeadLetters(table = '', intervalMs = 60000): OpenDeadLett
   const { data, error, errorStatus, loading } = usePolledFetch<{ deadLetters?: DeadLetter[]; total?: number } | null>(
     `${DEAD_LETTERS_URL}?state=open`, intervalMs, null)
   return useMemo(() => {
+    // 503 means the API has no GATEWAY_URL: nothing to count, not a failure (an unreachable gateway is 502).
+    if (error && errorStatus === 503) return { count: 0, capped: false, loading: false }
     if (!data) {
-      // 503 means the API has no GATEWAY_URL: nothing to count, not a failure (an unreachable gateway is 502).
-      if (error && errorStatus === 503) return { count: 0, capped: false, loading: false }
       return error ? { count: 0, capped: false, loading: false, error: true } : { count: 0, capped: false, loading }
     }
     const all = data.deadLetters ?? []
     const count = all.filter((x) => inTable(table, x.table)).length
     const capped = all.length >= DEAD_LETTER_CAP || (typeof data.total === 'number' && data.total > all.length)
     const res: OpenDeadLetters = { count, capped, total: !table && typeof data.total === 'number' ? data.total : undefined, loading: false }
-    if (error && errorStatus !== 503) res.error = true
+    if (error) res.error = true
     return res
   }, [data, error, errorStatus, loading, table])
 }
