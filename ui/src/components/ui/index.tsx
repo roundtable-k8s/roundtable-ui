@@ -5,10 +5,13 @@
  * the one copy.
  */
 import { useEffect, useId, useRef, useState, type ReactNode, type ComponentType, type RefObject } from 'react'
-import { RefreshCw, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, X, Copy, Check } from 'lucide-react'
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard'
 import { phaseStyle } from '../../lib/status'
 import { toneClasses, type Tone, type ToneStrength } from '../../lib/tone'
 import { formatTimestamp } from '../../lib/format'
+import { buttonClass } from './Button'
+import { COPY_ERROR } from '../../hooks/useCopyToClipboard'
 
 /* ------------------------------------------------------------------ */
 /* Feedback                                                            */
@@ -416,6 +419,42 @@ export function TableBadge({ table }: { table?: string }) {
     <span data-testid="table-badge" className="text-xs bg-roundtable-gold/10 text-roundtable-gold px-2 py-0.5 rounded font-mono">
       {table}
     </span>
+  )
+}
+
+/**
+ * Copy-to-clipboard button: Copy/Check icon pair, a polite "Copied" flash and
+ * a short error when the browser denies the write. Pass `className` to replace
+ * the default look; `onError` takes over showing the error.
+ */
+export function CopyButton({ text, label = 'Copy', copiedLabel = 'Copied', ariaLabel, className, iconOnly = false, disabled, resetMs, onError }: {
+  text: string
+  label?: string
+  copiedLabel?: string
+  ariaLabel?: string
+  className?: string
+  iconOnly?: boolean
+  disabled?: boolean
+  resetMs?: number
+  onError?: (message: string) => void
+}) {
+  const { copy, copied, error } = useCopyToClipboard(resetMs)
+  const icon = copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />
+  const onClick = async () => {
+    const ok = await copy(text)
+    if (!ok) onError?.(COPY_ERROR)
+  }
+  return (
+    <>
+      {error && !onError && <span className="text-xs text-red-400">{error}</span>}
+      <button type="button" aria-label={ariaLabel} disabled={disabled} onClick={() => void onClick()}
+        className={className ?? buttonClass('gray', 'md')}>
+        {icon}
+        {iconOnly
+          ? <span className="sr-only" aria-live="polite">{copied ? copiedLabel : ''}</span>
+          : <span aria-live="polite">{copied ? copiedLabel : label}</span>}
+      </button>
+    </>
   )
 }
 

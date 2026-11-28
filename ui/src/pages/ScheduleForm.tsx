@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarClock, Check, Copy, GitBranch, Link2, Save, Shield, Target } from 'lucide-react'
+import { ArrowLeft, CalendarClock, GitBranch, Link2, Save, Shield, Target } from 'lucide-react'
 import { apiGet, apiPost, apiPut, ApiError } from '../lib/api'
 import { useCards } from '../hooks/useCards'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useConfig } from '../hooks/useConfig'
 import { useTables } from '../hooks/useTables'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { PageHeader, ErrorBanner, Spinner, Button, LinkButton, Field, TextInput, TextArea, SelectInput } from '../components/ui'
+import { PageHeader, ErrorBanner, Spinner, Button, LinkButton, CopyButton, Field, TextInput, TextArea, SelectInput } from '../components/ui'
 import { sanitizeText } from '../lib/untrusted'
 import { scheduleApi, schedulePreviewUrl, type Schedule, type ScheduleNextRuns } from '../lib/schedules'
 import { CRON_PRESETS, CronError, formatInZone, nextRuns } from '../lib/cron'
@@ -138,7 +138,6 @@ function ScheduleFormBody() {
   const chains = useMemo(() => (Array.isArray(chainsResp) ? chainsResp : []), [chainsResp])
   const [errors, setErrors] = useState<Errors>({})
   const [saving, setSaving] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(() => new Date())
   const zones = useMemo(timeZones, [])
 
@@ -201,16 +200,6 @@ function ScheduleFormBody() {
       return ''
     }
   }, [form, base])
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(yaml)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setErrors((e) => ({ ...e, '': 'Copying to the clipboard failed; select the YAML and copy it instead.' }))
-    }
-  }
 
   const save = async () => {
     setSaving(true)
@@ -395,9 +384,12 @@ function ScheduleFormBody() {
         <section aria-label="YAML preview" className="lg:sticky lg:top-4 self-start bg-roundtable-slate border border-roundtable-steel rounded-xl">
           <div className="flex items-center justify-between border-b border-roundtable-steel px-4 py-2">
             <h2 className="text-sm font-medium text-white">YAML</h2>
-            <Button onClick={() => void copy()} disabled={!yaml}>
-              {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} {copied ? 'Copied' : 'Copy YAML'}
-            </Button>
+            <CopyButton
+              text={yaml}
+              label="Copy YAML"
+              disabled={!yaml}
+              onError={() => setErrors((e) => ({ ...e, '': 'Copying to the clipboard failed; select the YAML and copy it instead.' }))}
+            />
           </div>
           <pre data-testid="schedule-yaml" className="max-h-[70vh] overflow-auto p-4 text-xs text-gray-200 font-mono whitespace-pre">{yaml}</pre>
           <p className="border-t border-roundtable-steel px-4 py-2 text-xs text-gray-500">
