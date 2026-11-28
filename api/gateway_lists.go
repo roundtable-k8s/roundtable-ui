@@ -14,9 +14,9 @@ var validStateWord = regexp.MustCompile(`^[A-Za-z]+$`)
 const gatewayListMax = 200
 
 // listLimit reads the optional limit query value. It must be a positive integer;
-// values above gatewayListMax are clamped to it. An absent value is left to the
+// values above maxLimit are clamped to it. An absent value is left to the
 // gateway's default.
-func listLimit(w http.ResponseWriter, r *http.Request, q url.Values) bool {
+func listLimit(w http.ResponseWriter, r *http.Request, q url.Values, maxLimit int) bool {
 	l := r.URL.Query().Get("limit")
 	if l == "" {
 		return true
@@ -26,10 +26,28 @@ func listLimit(w http.ResponseWriter, r *http.Request, q url.Values) bool {
 		jsonError(w, "limit must be a positive integer", http.StatusBadRequest)
 		return false
 	}
-	if n > gatewayListMax {
-		n = gatewayListMax
+	if n > maxLimit {
+		n = maxLimit
 	}
 	q.Set("limit", strconv.Itoa(n))
+	return true
+}
+
+// deadLetterListMax is the largest limit the gateway honours for /v1/dead-letters.
+const deadLetterListMax = 100
+
+// validTaskStateQuery checks the optional query value key against re and copies
+// it to q. It answers 400 with msg and returns false when the value is invalid.
+func validTaskStateQuery(w http.ResponseWriter, r *http.Request, q url.Values, key string, re *regexp.Regexp, msg string) bool {
+	v := r.URL.Query().Get(key)
+	if v == "" {
+		return true
+	}
+	if !re.MatchString(v) {
+		jsonError(w, msg, http.StatusBadRequest)
+		return false
+	}
+	q.Set(key, v)
 	return true
 }
 
@@ -59,7 +77,7 @@ func gatewayTasksHandler(g *gatewayClient) http.HandlerFunc {
 			}
 			q.Set("status", s)
 		}
-		if !listLimit(w, r, q) {
+		if !listLimit(w, r, q, gatewayListMax) {
 			return
 		}
 		g.relay(w, r, http.MethodGet, "/v1/tasks", q, nil)
@@ -119,7 +137,7 @@ func gatewayRunsHandler(g *gatewayClient) http.HandlerFunc {
 			}
 			q.Set("issue", is)
 		}
-		if !listLimit(w, r, q) {
+		if !listLimit(w, r, q, gatewayListMax) {
 			return
 		}
 		g.relay(w, r, http.MethodGet, "/v1/runs", q, nil)

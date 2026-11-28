@@ -251,10 +251,11 @@ func (g *gatewayClient) relayKeyed(w http.ResponseWriter, r *http.Request, metho
 func deadLettersHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := url.Values{}
-		for _, k := range []string{"knight", "reason", "state", "limit"} {
-			if v := r.URL.Query().Get(k); v != "" {
-				q.Set(k, v)
-			}
+		if !validTaskStateQuery(w, r, q, "knight", validKnightName, "Invalid knight name") ||
+			!validTaskStateQuery(w, r, q, "reason", validStateWord, "Invalid reason") ||
+			!validTaskStateQuery(w, r, q, "state", validStateWord, "Invalid state") ||
+			!listLimit(w, r, q, deadLetterListMax) {
+			return
 		}
 		g.relay(w, r, http.MethodGet, "/v1/dead-letters", q, nil)
 	}
@@ -270,8 +271,8 @@ func deadLetterDetailHandler(g *gatewayClient) http.HandlerFunc {
 			return
 		}
 		q := url.Values{}
-		if t := r.URL.Query().Get("table"); t != "" {
-			q.Set("table", t)
+		if !validTaskStateQuery(w, r, q, "table", validK8sName, "Invalid table name") {
+			return
 		}
 		g.relay(w, r, http.MethodGet, "/v1/dead-letters/"+url.PathEscape(id), q, nil)
 	}

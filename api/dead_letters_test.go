@@ -154,3 +154,33 @@ func TestDeadLetterGatewayBodyLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestDeadLetterQueryValidation(t *testing.T) {
+	for _, target := range []string{
+		"/api/dead-letters?limit=abc",
+		"/api/dead-letters?limit=0",
+		"/api/dead-letters?state=open%3Bx",
+		"/api/dead-letters?reason=a%20b",
+		"/api/dead-letters?knight=bad%20name",
+		"/api/dead-letters/t1?table=Bad_Table",
+	} {
+		r, calls := deadLetterRouter(t, 200, `{}`)
+		w := doReq(r, "GET", target, "")
+		if w.Code != 400 || !strings.Contains(w.Body.String(), `"error"`) {
+			t.Errorf("%s: got %d %s", target, w.Code, w.Body)
+		}
+		if len(*calls) != 0 {
+			t.Errorf("%s reached the gateway", target)
+		}
+	}
+}
+
+func TestDeadLettersLimitClamped(t *testing.T) {
+	r, calls := deadLetterRouter(t, 200, `{}`)
+	if w := doReq(r, "GET", "/api/dead-letters?limit=1000&state=open&knight=galahad", ""); w.Code != 200 {
+		t.Fatalf("got %d", w.Code)
+	}
+	if q := (*calls)[0].query; q != "knight=galahad&limit=100&state=open" {
+		t.Errorf("query = %q", q)
+	}
+}
