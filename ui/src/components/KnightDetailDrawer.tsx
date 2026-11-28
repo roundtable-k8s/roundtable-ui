@@ -715,6 +715,7 @@ function SnapshotCopyButton({ name }: { name: string }) {
     <CopyButton
       text={name}
       iconOnly
+      iconClassName="w-3 h-3"
       resetMs={1500}
       ariaLabel={`Copy snapshot name ${name}`}
       className="text-gray-500 hover:text-roundtable-gold"

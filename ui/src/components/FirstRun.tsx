@@ -33,6 +33,7 @@ export function FirstRun() {
         <CopyButton
           text={FIRST_RUN_COMMAND}
           label="Copy command"
+          iconClassName="w-3 h-3"
           className="shrink-0 inline-flex items-center gap-1 text-xs text-roundtable-gold hover:underline px-2 py-2"
         />
       </div>

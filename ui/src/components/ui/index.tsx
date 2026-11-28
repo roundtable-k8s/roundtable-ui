@@ -6,12 +6,11 @@
  */
 import { useEffect, useId, useRef, useState, type ReactNode, type ComponentType, type RefObject } from 'react'
 import { RefreshCw, ChevronDown, ChevronUp, X, Copy, Check } from 'lucide-react'
-import { useCopyToClipboard } from '../../hooks/useCopyToClipboard'
+import { useCopyToClipboard, COPY_ERROR } from '../../hooks/useCopyToClipboard'
 import { phaseStyle } from '../../lib/status'
 import { toneClasses, type Tone, type ToneStrength } from '../../lib/tone'
 import { formatTimestamp } from '../../lib/format'
 import { buttonClass } from './Button'
-import { COPY_ERROR } from '../../hooks/useCopyToClipboard'
 
 /* ------------------------------------------------------------------ */
 /* Feedback                                                            */
@@ -427,19 +426,21 @@ export function TableBadge({ table }: { table?: string }) {
  * a short error when the browser denies the write. Pass `className` to replace
  * the default look; `onError` takes over showing the error.
  */
-export function CopyButton({ text, label = 'Copy', copiedLabel = 'Copied', ariaLabel, className, iconOnly = false, disabled, resetMs, onError }: {
+export function CopyButton({ text, label = 'Copy', copiedLabel = 'Copied', ariaLabel, className, iconOnly = false, iconClassName = 'w-4 h-4', disabled, resetMs, onError }: {
   text: string
   label?: string
   copiedLabel?: string
   ariaLabel?: string
   className?: string
   iconOnly?: boolean
+  /** Size classes for the icon (default `w-4 h-4`). */
+  iconClassName?: string
   disabled?: boolean
   resetMs?: number
   onError?: (message: string) => void
 }) {
   const { copy, copied, error } = useCopyToClipboard(resetMs)
-  const icon = copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />
+  const icon = copied ? <Check className={iconClassName} aria-hidden /> : <Copy className={iconClassName} aria-hidden />
   const onClick = async () => {
     const ok = await copy(text)
     if (!ok) onError?.(COPY_ERROR)
@@ -447,7 +448,7 @@ export function CopyButton({ text, label = 'Copy', copiedLabel = 'Copied', ariaL
   return (
     <>
       {error && !onError && <span className="text-xs text-red-400">{error}</span>}
-      <button type="button" aria-label={ariaLabel} disabled={disabled} onClick={() => void onClick()}
+      <button type="button" aria-label={ariaLabel ?? (iconOnly ? label : undefined)} disabled={disabled} onClick={() => void onClick()}
         className={className ?? buttonClass('gray', 'md')}>
         {icon}
         {iconOnly

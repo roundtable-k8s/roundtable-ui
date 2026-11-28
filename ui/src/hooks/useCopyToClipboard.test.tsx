@@ -67,4 +67,10 @@ describe('CopyButton', () => {
     expect(onError).toHaveBeenCalledWith(COPY_ERROR)
     expect(screen.queryByText(COPY_ERROR)).toBeNull()
   })
+
+  it('sizes the icon and names an icon-only button from its label', () => {
+    const { container } = render(<CopyButton text="x" iconOnly iconClassName="w-3 h-3" />)
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+    expect(container.querySelector('svg')?.getAttribute('class')).toContain('w-3 h-3')
+  })
 })
