@@ -11,7 +11,7 @@
 import { knightNameForDomain } from './knights'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
-export interface ResultData {
+interface ResultData {
   task_id?: string
   knight?: string
   success?: boolean

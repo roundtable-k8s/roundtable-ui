@@ -4,7 +4,7 @@ import { Zap, Crown, DollarSign, TrendingUp, ShieldOff, Search } from 'lucide-re
 import { eventInTable } from '../lib/tables'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
-import { useKnightLoad, knightLoadKey, type KnightLoadMap } from '../hooks/useKnightLoad'
+import { useKnightLoad, type KnightLoadMap } from '../hooks/useKnightLoad'
 import type { Knight } from '../hooks/useFleet'
 import { KnightCard } from '../components/KnightCard'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
@@ -19,10 +19,11 @@ import { useCards } from '../hooks/useCards'
 import { SkillFilter } from '../components/SkillFilter'
 import { isNotIsolated } from '../lib/isolation'
 import { cardForKnight, cardSkillTags, matchesSkillFilter, type SkillFilter as SkillFilterValue } from '../lib/cards'
+import { namespacedKey } from '../lib/keys'
 
 /** Busy: pending + inFlight > 0; Idle: both 0. No counts for the knight: neither. */
 function matchesLoad(loads: KnightLoadMap, k: Knight, want: string): boolean {
-  const queue = loads.get(knightLoadKey(k))
+  const queue = loads.get(namespacedKey(k))
   if (!queue) return false
   const busy = queue.pending + queue.inFlight > 0
   return want === 'busy' ? busy : !busy
@@ -31,7 +32,6 @@ function matchesLoad(loads: KnightLoadMap, k: Knight, want: string): boolean {
 /** The knight's table for card lookup; undefined when unset or "none". */
 const tableOf = (k: { table?: string }) => (k.table && k.table !== 'none' ? k.table : undefined)
 
-const knightKey = (k: { namespace?: string; name: string }) => `${k.namespace ?? ''}/${k.name}`
 const PAGE_SIZE = 60
 const STATUS_OPTIONS = [
   ['online', 'Online'],
@@ -55,7 +55,7 @@ export function FleetPage() {
   // the open drawer follows the live fleet entry.
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const selectedKnight = useMemo(
-    () => (selectedKey ? knights.find((k) => knightKey(k) === selectedKey) ?? null : null),
+    () => (selectedKey ? knights.find((k) => namespacedKey(k) === selectedKey) ?? null : null),
     [knights, selectedKey],
   )
   // The selected knight vanished from the fleet: close the drawer.
@@ -66,7 +66,7 @@ export function FleetPage() {
   const events = useMemo(() => allEvents.filter((e) => eventInTable(table, e)), [allEvents, table])
   const { cards } = useCards()
   const loads = useKnightLoad()
-  const hasLoad = knights.some((k) => loads.has(knightLoadKey(k)))
+  const hasLoad = knights.some((k) => loads.has(namespacedKey(k)))
   const [{ q, status, load: loadParam, sort: sortValue, knight: knightParam }, setParams] = useUrlParams(FLEET_DEFAULTS, FLEET_ALLOWED)
   // Busy: queued or running work (#579); Idle: none. Knights without counts match neither.
   // Ignored while no knight has counts: the select is hidden then, so the filter could not be cleared (#594).
@@ -107,7 +107,7 @@ export function FleetPage() {
     const k = knights.find((x) => x.name === knightParam && (!table || tableOf(x) === table))
     if (!k) return
     openedFor.current = knightParam
-    setSelectedKey(knightKey(k))
+    setSelectedKey(namespacedKey(k))
   }, [knightParam, knights, table])
   const closeDrawer = () => {
     setSelectedKey(null)
@@ -331,10 +331,10 @@ export function FleetPage() {
             <KnightCard
               key={knight.name}
               knight={knight}
-              onClick={() => setSelectedKey(knightKey(knight))}
+              onClick={() => setSelectedKey(namespacedKey(knight))}
               activity={knightActivity[knight.name]}
               card={cardForKnight(cards, knight.name, tableOf(knight))}
-              queue={loads.get(knightLoadKey(knight))}
+              queue={loads.get(namespacedKey(knight))}
               showTable={!table}
             />
           ))}

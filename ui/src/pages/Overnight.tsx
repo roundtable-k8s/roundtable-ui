@@ -14,9 +14,9 @@ import { DEFAULT_SINCE, SINCE_PRESETS, resolveSince, summarise } from '../lib/ov
 import { outcomeTone, outcomeLabel, scheduleLink, type Schedule } from '../lib/schedules'
 import { sanitizeText } from '../lib/untrusted'
 import type { Chain } from '../lib/types'
+import { DEAD_LETTER_CAP } from '../hooks/useOpenDeadLetters'
 
 const CHAINS_URL = `/api/chains?copies=include&limit=${CHAIN_LIST_LIMIT}`
-const DEAD_LETTER_LIST_CAP = 100
 
 interface Panel<T> { data: T | null; error: string | null }
 
@@ -66,8 +66,8 @@ export function OvernightPage() {
   )
 
   const chainCut = truncationNote(chains.data?.length ?? 0, chains.total)
-  const deadCut = (dead.data?.length ?? 0) >= DEAD_LETTER_LIST_CAP
-    ? `showing the newest ${DEAD_LETTER_LIST_CAP} (the list is capped, there may be more)` : null
+  const deadCut = (dead.data?.length ?? 0) >= DEAD_LETTER_CAP
+    ? `showing the newest ${DEAD_LETTER_CAP} (the list is capped, there may be more)` : null
   const dash = (v: number | string, data: unknown) => (data === null ? '—' : v)
 
   return (

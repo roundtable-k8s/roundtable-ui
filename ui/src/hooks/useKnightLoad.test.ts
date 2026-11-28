@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useKnightLoad, parseKnightLoad, knightLoadKey } from './useKnightLoad'
+import { useKnightLoad, parseKnightLoad } from './useKnightLoad'
 import { apiGet, ApiError } from '../lib/api'
+import { namespacedKey } from '../lib/keys'
 
 vi.mock('../lib/api', async (orig) => ({ ...(await orig<typeof import('../lib/api')>()), apiGet: vi.fn() }))
 const mockGet = vi.mocked(apiGet)
@@ -21,7 +22,7 @@ describe('parseKnightLoad', () => {
     expect(map.get('prod/galahad')).toEqual({ pending: 2, inFlight: 1 })
     expect(parseKnightLoad([{ name: 'kay', queue: { pending: 1, inFlight: 0 } }]).get('/kay')).toEqual({ pending: 1, inFlight: 0 })
     expect(parseKnightLoad(null).size).toBe(0)
-    expect(knightLoadKey({ name: 'kay' })).toBe('/kay')
+    expect(namespacedKey({ name: 'kay' })).toBe('/kay')
   })
 })
 

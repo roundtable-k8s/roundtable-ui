@@ -10,6 +10,7 @@ import { apiGet } from '../lib/api'
 import { parseEvent } from '../lib/events'
 import { formatCost, formatTimestamp, formatNumber } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
+import { chainHref } from '../lib/links'
 import { sessionsLink } from '../lib/sessions'
 import {
   buildTimeline,
@@ -43,10 +44,6 @@ interface TaskActivityPanelProps {
 
 /** Distance from the bottom (px) within which the timeline counts as "at the bottom". */
 const BOTTOM_SLACK_PX = 32
-
-function chainHref(chainName: string): string {
-  return `/chains?chain=${encodeURIComponent(chainName)}`
-}
 
 function Header({ taskId, s, now, finished }: { taskId: string; s: ActivitySummary; now: number; finished: boolean }) {
   const rows: Array<[string, ReactNode]> = [

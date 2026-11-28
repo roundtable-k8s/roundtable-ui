@@ -12,6 +12,7 @@ import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge
 import { getKnightConfig } from '../lib/knights'
 import { formatCost, formatDateTime } from '../lib/format'
 import { tokensText } from '../lib/cost'
+import { chainHref } from '../lib/links'
 
 const sectionCls = 'mb-4 rounded-xl border border-roundtable-steel bg-roundtable-slate p-4'
 
@@ -92,7 +93,7 @@ function MissionBody({ m }: { m: Mission }) {
 
       <Section title="Chains">
         {chainStatuses.length > 0
-          ? <ChainStatusList statuses={chainStatuses} chainHref={c => `/chains?chain=${encodeURIComponent(c.chainCRName)}`} />
+          ? <ChainStatusList statuses={chainStatuses} chainHref={c => chainHref(c.chainCRName)} />
           : chains.length > 0 ? (
             <ul className="space-y-1 text-sm text-white">{chains.map(c => <li key={c}>{c}</li>)}</ul>
           ) : <p className="text-sm text-gray-500">No chains yet.</p>}
