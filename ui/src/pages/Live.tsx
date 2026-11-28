@@ -3,7 +3,7 @@ import { GitGraph, Wifi, WifiOff, Filter, Activity } from 'lucide-react'
 import { useWebSocket, type NatsEvent } from '../hooks/useWebSocket'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
-import { getKnightConfig, knightNameForDomain } from '../lib/knights'
+import { getKnightConfig, knightNameForDomain, domainIndex } from '../lib/knights'
 import { parseEvent, parseEventData, eventListKeys, displayText, resultFailureReason } from '../lib/events'
 import { FleetGraph } from '../components/FleetGraph'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
@@ -49,17 +49,19 @@ export function LivePage() {
     }
   }, [fleetKnights])
 
+  const fleetDomains = useMemo(() => domainIndex(fleetKnights), [fleetKnights])
+
   // Filter options: the real fleet plus any knight/domain seen in events
   const { knightNames, domains } = useMemo(() => {
     const names = new Set(fleetKnights.map(k => k.name))
     const doms = new Set(fleetKnights.map(k => k.domain).filter(Boolean))
     for (const event of events) {
-      const parsed = parseEvent(event)
+      const parsed = parseEvent(event, fleetDomains)
       if (parsed.knight) names.add(parsed.knight)
       if (parsed.domain) doms.add(parsed.domain)
     }
     return { knightNames: [...names].sort(), domains: [...doms].sort() }
-  }, [fleetKnights, events])
+  }, [fleetKnights, events, fleetDomains])
 
   // Knight online statuses from fleet API
   const knightStatuses = useMemo(() => {
@@ -71,16 +73,16 @@ export function LivePage() {
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
       if (filterType && event.type !== filterType) return false
-      const parsed = parseEvent(event)
+      const parsed = parseEvent(event, fleetDomains)
       if (filterDomain) {
         // Results carry no domain — fall back to the knight's configured domain
-        const domain = parsed.domain || (parsed.knight ? getKnightConfig(parsed.knight).domain : '')
+        const domain = parsed.domain || (parsed.knight ? (fleetKnights.find(k => k.name === parsed.knight)?.domain || getKnightConfig(parsed.knight).domain) : '')
         if (domain !== filterDomain) return false
       }
       if (filterKnight && parsed.knight !== filterKnight) return false
       return true
     })
-  }, [events, filterKnight, filterType, filterDomain])
+  }, [events, filterKnight, filterType, filterDomain, fleetDomains, fleetKnights])
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const recentEvents = filteredEvents.slice(0, 50)
@@ -138,7 +140,7 @@ export function LivePage() {
       {(() => {
         const comms: Record<string, number> = {}
         for (const event of filteredEvents.slice(0, 100)) {
-          const parsed = parseEvent(event)
+          const parsed = parseEvent(event, fleetDomains)
           const from = knightNameForDomain((parsed.data.from as string) || '')
           const to = parsed.knight
           if (from && to && from !== to) {

@@ -7,6 +7,7 @@ import { Spinner, ErrorBanner } from '../components/ui'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
 const events: NatsEvent[] = [
+  { type: 'task', subject: 'fleet.tasks.ui.t3', timestamp: '2026-11-24T10:03:00Z', data: { task: 'style the card' } },
   { type: 'task', subject: 'fleet.tasks.security.t1', timestamp: '2026-11-24T10:00:00Z', data: { task: 'scan the cluster' } },
   { type: 'task', subject: 'fleet.tasks.research.t2', timestamp: '2026-11-24T10:01:00Z', data: { task: 'fix the page' } },
   { type: 'result', subject: 'fleet.results.t1', timestamp: '2026-11-24T10:02:00Z', data: { task_id: 't1', knight: 'Galahad', success: true, result: 'scan clean' } },
@@ -14,6 +15,7 @@ const events: NatsEvent[] = [
 const knights = [
   { name: 'galahad', domain: 'security', status: 'online' },
   { name: 'kay', domain: 'research', status: 'online' },
+  { name: 'rt-ui', domain: 'ui', status: 'online' },
 ]
 
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events, connected: true }) }))
@@ -23,7 +25,7 @@ vi.mock('../components/KnightDetailDrawer', () => ({ KnightDetailDrawer: () => n
 vi.mock('../components/TaskActivityPanel', () => ({ TaskActivityPanel: () => null }))
 
 const renderPage = () => render(<MemoryRouter><LivePage /></MemoryRouter>)
-const cards = () => screen.queryAllByText(/^(scan the cluster|fix the page|scan clean)$/).map((e) => e.textContent)
+const cards = () => screen.queryAllByText(/^(scan the cluster|fix the page|scan clean|style the card)$/).map((e) => e.textContent)
 
 describe('LivePage filters', () => {
   it('labels the three filter selects', () => {
@@ -35,9 +37,9 @@ describe('LivePage filters', () => {
 
   it('shows every event and the connection state by default', () => {
     renderPage()
-    expect(cards()).toHaveLength(3)
+    expect(cards()).toHaveLength(4)
     expect(screen.getByText('Connected')).toBeInTheDocument()
-    expect(screen.getByText('(3 events)')).toBeInTheDocument()
+    expect(screen.getByText('(4 events)')).toBeInTheDocument()
   })
 
   it('narrows by type', async () => {
@@ -53,6 +55,12 @@ describe('LivePage filters', () => {
     expect(cards()).toEqual(['fix the page'])
   })
 
+  it('keeps task events of a knight outside the built-in table under the knight filter', async () => {
+    renderPage()
+    await userEvent.selectOptions(screen.getByDisplayValue('All Knights'), 'rt-ui')
+    expect(cards()).toEqual(['style the card'])
+  })
+
   it('narrows by domain, resolving a result through its knight', async () => {
     renderPage()
     await userEvent.selectOptions(screen.getByDisplayValue('All Domains'), 'security')
@@ -65,7 +73,7 @@ describe('LivePage filters', () => {
     await userEvent.selectOptions(screen.getByDisplayValue('All Types'), 'task')
     expect(cards()).toEqual(['scan the cluster'])
     await userEvent.click(screen.getByText('Clear'))
-    expect(cards()).toHaveLength(3)
+    expect(cards()).toHaveLength(4)
   })
 
   it('shows the waiting state when a filter matches nothing', async () => {

@@ -79,8 +79,12 @@ export interface ParsedEvent {
   data: Record<string, unknown>
 }
 
-/** Resolve knight/domain/taskId for an event, honoring the per-type subject format. */
-export function parseEvent(event: NatsEvent): ParsedEvent {
+/**
+ * Resolve knight/domain/taskId for an event, honoring the per-type subject format.
+ * Task events resolve their domain through `domains` (see domainIndex) when given,
+ * else through the built-in table; a domain shared by several knights gives null.
+ */
+export function parseEvent(event: NatsEvent, domains?: ReadonlyMap<string, string>): ParsedEvent {
   const parts = event.subject.split('.')
   const data = parseEventData(event.data)
 
@@ -97,7 +101,7 @@ export function parseEvent(event: NatsEvent): ParsedEvent {
   if (event.type === 'task') {
     const domain = parts[2] || null
     return {
-      knight: domain ? knightNameForDomain(domain) : null,
+      knight: !domain ? null : domains ? (domains.get(domain) ?? null) : knightNameForDomain(domain),
       domain,
       taskId: parts[3] || '',
       data,

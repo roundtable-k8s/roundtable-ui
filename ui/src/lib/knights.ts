@@ -60,6 +60,20 @@ export function getKnightConfig(name: string): KnightDisplayConfig {
   return KNIGHT_CONFIG[name] || { emoji: '🤖', color: 'text-gray-400', title: name, domain: name }
 }
 
+/** Domain -> knight name for the fleet; a domain is kept only when exactly one knight has it. */
+export function domainIndex(knights: ReadonlyArray<{ name: string; domain?: string | null }>): Map<string, string> {
+  const owners = new Map<string, string[]>()
+  for (const k of knights) {
+    if (!k.domain) continue
+    const list = owners.get(k.domain)
+    if (list) list.push(k.name)
+    else owners.set(k.domain, [k.name])
+  }
+  const index = new Map<string, string>()
+  for (const [domain, names] of owners) if (names.length === 1) index.set(domain, names[0])
+  return index
+}
+
 /** Map domain -> knight name */
 export function knightNameForDomain(domainOrName: string): string | null {
   // Direct knight name match first

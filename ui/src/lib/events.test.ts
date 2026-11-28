@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseEvent, parseEventData, resultFailureReason, uniqueKeys, displayText } from './events'
+import { domainIndex } from './knights'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
 function makeEvent(type: NatsEvent['type'], subject: string, data: unknown): NatsEvent {
@@ -100,5 +101,16 @@ describe('payload hardening', () => {
     expect(displayText({ a: 1 })).toBe('{"a":1}')
     expect(displayText('y'.repeat(400))).toHaveLength(301)
     expect(displayText(undefined)).toBe('')
+  })
+})
+
+describe('parseEvent with a fleet domain index', () => {
+  const task = (domain: string) => ({ type: 'task', subject: `fleet.tasks.${domain}.t1`, data: {}, timestamp: '2026-01-01T00:00:00Z' }) as NatsEvent
+  it('attributes a task to a knight outside the built-in table', () => {
+    expect(parseEvent(task('ui')).knight).toBeNull()
+    expect(parseEvent(task('ui'), new Map([['ui', 'rt-ui']])).knight).toBe('rt-ui')
+  })
+  it('gives no attribution for a domain shared by several knights', () => {
+    expect(parseEvent(task('coding'), domainIndex([{ name: 'a', domain: 'coding' }, { name: 'b', domain: 'coding' }])).knight).toBeNull()
   })
 })
