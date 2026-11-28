@@ -15,7 +15,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -105,16 +110,23 @@ func k8sCtx(r *http.Request) (context.Context, context.CancelFunc) {
 // by their app.kubernetes.io/instance label (the knight name). One list per
 // request cycle — never per knight.
 func knightPodsByName(ctx context.Context, namespace string) map[string][]*corev1.Pod {
+	podsByName, _ := listFleetPods(ctx, namespace)
+	return podsByName
+}
+
+// listFleetPods is knightPodsByName with the list error returned, so the
+// snapshot cache can tell a failed list from an empty namespace.
+func listFleetPods(ctx context.Context, namespace string) (map[string][]*corev1.Pod, error) {
 	podsByName := map[string][]*corev1.Pod{}
 	if k8sClient == nil {
-		return podsByName
+		return podsByName, nil
 	}
 	pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app.kubernetes.io/name=knight",
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "K8s pod list error", "error", err)
-		return podsByName
+		return podsByName, err
 	}
 	for i := range pods.Items {
 		pod := &pods.Items[i]
@@ -130,7 +142,7 @@ func knightPodsByName(ctx context.Context, namespace string) map[string][]*corev
 		}
 		podsByName[instName] = append(podsByName[instName], pod)
 	}
-	return podsByName
+	return podsByName, nil
 }
 
 // listPodMetrics reads metrics.k8s.io once per request cycle and returns
@@ -138,26 +150,55 @@ func knightPodsByName(ctx context.Context, namespace string) map[string][]*corev
 // (no metrics-server) — callers carry on without usage numbers.
 var metricsProbe = defaultMetricsProbe
 
+// metricsProbeTTL is how long the metrics.k8s.io discovery answer — positive
+// or negative — is remembered. A variable so tests can change it.
+var metricsProbeTTL = 60 * time.Second
+
+// cacheNow is the clock of the fleet read caches; tests replace it.
+var cacheNow = time.Now
+
+var probeCache struct {
+	mu     sync.Mutex
+	at     time.Time
+	client kubernetes.Interface
+	served bool
+}
+
 // defaultMetricsProbe reports whether metrics.k8s.io/v1beta1 is served —
-// i.e. whether metrics-server is installed.
+// i.e. whether metrics-server is installed. The answer is cached for
+// metricsProbeTTL.
 func defaultMetricsProbe() bool {
-	if k8sClient == nil {
+	c := k8sClient
+	if c == nil {
 		return false
 	}
-	_, err := k8sClient.Discovery().ServerResourcesForGroupVersion("metrics.k8s.io/v1beta1")
+	probeCache.mu.Lock()
+	defer probeCache.mu.Unlock()
+	if probeCache.client == c && !probeCache.at.IsZero() && cacheNow().Sub(probeCache.at) < metricsProbeTTL {
+		return probeCache.served
+	}
+	_, err := c.Discovery().ServerResourcesForGroupVersion("metrics.k8s.io/v1beta1")
+	probeCache.client, probeCache.at, probeCache.served = c, cacheNow(), err == nil
 	return err == nil
 }
 
 func listPodMetrics(ctx context.Context, namespace string) map[string]*KnightPod {
+	usage, _ := listPodMetricsErr(ctx, namespace)
+	return usage
+}
+
+// listPodMetricsErr is listPodMetrics with the list error returned. A nil map
+// with a nil error means the metrics API is not served.
+func listPodMetricsErr(ctx context.Context, namespace string) (map[string]*KnightPod, error) {
 	if dynClient == nil || !metricsProbe() {
-		return nil
+		return nil, nil
 	}
 	raw, err := dynClient.Resource(podMetricsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		// metrics.k8s.io simply not installed is the normal small-cluster
 		// case; anything else is worth a line in the log.
 		slog.DebugContext(ctx, "Pod metrics unavailable (metrics-server not installed?)", "error", err)
-		return nil
+		return nil, err
 	}
 	usage := map[string]*KnightPod{}
 	for i := range raw.Items {
@@ -168,7 +209,7 @@ func listPodMetrics(ctx context.Context, namespace string) map[string]*KnightPod
 		}
 		usage[item.GetName()] = &KnightPod{CPU: cpu.String(), Memory: mem.String()}
 	}
-	return usage
+	return usage, nil
 }
 
 // sumContainerQuantities adds up the named field (usage, requests, limits)
@@ -297,18 +338,14 @@ func buildKnightScaling(ctx context.Context, cr *unstructured.Unstructured, pods
 		}
 		scaling.LastScaleTime = getStr(sc, "lastScaleTime")
 	} else {
-		// Fallback: read the KEDA objects directly.
-		scaling.Autoscaled = scaledObjectExists(ctx, cr.GetNamespace(), cr.GetName())
-		if scaling.Autoscaled {
-			so := getScaledObject(ctx, cr.GetNamespace(), cr.GetName())
-			if so != nil {
-				spec := getNestedMap(so.Object, "spec")
-				scaling.MinReplicas = int32(getInt(spec, "minReplicaCount"))
-				scaling.MaxReplicas = int32(getInt(spec, "maxReplicaCount"))
-			}
-			if hpa := getHPADesired(ctx, cr.GetNamespace(), cr.GetName()); hpa != nil {
-				scaling.DesiredReplicas = hpa
-			}
+		// Fallback: read the KEDA objects, memoised per knight.
+		fb := kedaFallbackFor(ctx, cr.GetNamespace(), cr.GetName())
+		scaling.Autoscaled = fb.autoscaled
+		scaling.MinReplicas = fb.min
+		scaling.MaxReplicas = fb.max
+		if fb.desired != nil {
+			d := *fb.desired
+			scaling.DesiredReplicas = &d
 		}
 	}
 
@@ -353,6 +390,55 @@ func scaledToZero(scaling *KnightScaling) bool {
 	return scaling.CurrentReplicas == 0 && scaling.MinReplicas == 0
 }
 
+// kedaFallbackTTL is how long a knight's ScaledObject/HPA lookup (found or
+// not) is remembered. A variable so tests can change it.
+var kedaFallbackTTL = 30 * time.Second
+
+type kedaFallback struct {
+	at         time.Time
+	dyn        dynamic.Interface
+	kube       kubernetes.Interface
+	autoscaled bool
+	min, max   int32
+	desired    *int32
+}
+
+var kedaFallbackCache = struct {
+	mu sync.Mutex
+	m  map[string]kedaFallback
+}{m: map[string]kedaFallback{}}
+
+// kedaFallbackFor returns the ScaledObject bounds and HPA desired count of a
+// knight whose status.scaling is absent, at most one lookup per knight per
+// kedaFallbackTTL, negative results included.
+func kedaFallbackFor(ctx context.Context, namespace, name string) kedaFallback {
+	key := namespace + "/" + name
+	now := cacheNow()
+	kedaFallbackCache.mu.Lock()
+	e, ok := kedaFallbackCache.m[key]
+	kedaFallbackCache.mu.Unlock()
+	if ok && e.dyn == dynClient && e.kube == k8sClient && now.Sub(e.at) < kedaFallbackTTL {
+		return e
+	}
+	e = kedaFallback{at: now, dyn: dynClient, kube: k8sClient}
+	if so := getScaledObject(ctx, namespace, name); so != nil {
+		e.autoscaled = true
+		spec := getNestedMap(so.Object, "spec")
+		e.min = int32(getInt(spec, "minReplicaCount"))
+		e.max = int32(getInt(spec, "maxReplicaCount"))
+		e.desired = getHPADesired(ctx, namespace, name)
+	}
+	kedaFallbackCache.mu.Lock()
+	for k, v := range kedaFallbackCache.m { // drop expired entries
+		if now.Sub(v.at) >= kedaFallbackTTL {
+			delete(kedaFallbackCache.m, k)
+		}
+	}
+	kedaFallbackCache.m[key] = e
+	kedaFallbackCache.mu.Unlock()
+	return e
+}
+
 func scaledObjectExists(ctx context.Context, namespace, name string) bool {
 	return dynClient != nil && getScaledObject(ctx, namespace, name) != nil
 }
@@ -381,4 +467,75 @@ func getHPADesired(ctx context.Context, namespace, name string) *int32 {
 	}
 	d := hpa.Status.DesiredReplicas
 	return &d
+}
+
+// podSnapshotTTL is how long one read of the knight pods, pod metrics and
+// RoundTable defaults is shared between /api/fleet and /api/fleet/{knight}
+// requests. A variable so tests can change it.
+var podSnapshotTTL = 3 * time.Second
+
+// podSnapshot is one short-lived read of the Kubernetes objects the fleet view
+// needs besides the Knight CRs. Its maps are shared between requests and must
+// be treated as read-only.
+type podSnapshot struct {
+	pods          map[string][]*corev1.Pod
+	metrics       map[string]*KnightPod
+	tableDefaults map[string]map[string]interface{}
+}
+
+// podSnapshotCache collapses concurrent misses into one build and remembers
+// the result for podSnapshotTTL. Errors are never cached.
+type podSnapshotCache struct {
+	mu        sync.Mutex
+	at        time.Time
+	namespace string
+	dyn       dynamic.Interface
+	kube      kubernetes.Interface
+	snap      *podSnapshot
+	group     singleflight.Group
+}
+
+var fleetPodSnapshots = &podSnapshotCache{}
+
+func (c *podSnapshotCache) fresh(namespace string) (*podSnapshot, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.snap != nil && c.namespace == namespace && c.dyn == dynClient && c.kube == k8sClient &&
+		cacheNow().Sub(c.at) < podSnapshotTTL {
+		return c.snap, true
+	}
+	return nil, false
+}
+
+// get returns the shared snapshot. When a list fails the partial result is
+// returned (callers carry on without that data, as before) but not cached.
+func (c *podSnapshotCache) get(ctx context.Context, namespace string) *podSnapshot {
+	if s, ok := c.fresh(namespace); ok {
+		return s
+	}
+	ch := c.group.DoChan(namespace, func() (any, error) {
+		if s, ok := c.fresh(namespace); ok {
+			return s, nil
+		}
+		bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), k8sRequestTimeout)
+		defer cancel()
+		dyn, kube := dynClient, k8sClient
+		snap := &podSnapshot{}
+		var errs [3]error
+		snap.pods, errs[0] = listFleetPods(bctx, namespace)
+		snap.metrics, errs[1] = listPodMetricsErr(bctx, namespace)
+		snap.tableDefaults, errs[2] = tableDefaultsErr(bctx, namespace)
+		if errs[0] == nil && errs[1] == nil && errs[2] == nil {
+			c.mu.Lock()
+			c.snap, c.at, c.namespace, c.dyn, c.kube = snap, cacheNow(), namespace, dyn, kube
+			c.mu.Unlock()
+		}
+		return snap, nil
+	})
+	select {
+	case res := <-ch:
+		return res.Val.(*podSnapshot)
+	case <-ctx.Done():
+		return &podSnapshot{pods: map[string][]*corev1.Pod{}}
+	}
 }

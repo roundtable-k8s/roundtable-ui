@@ -36,6 +36,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -911,9 +912,8 @@ func fleetHandler(namespace string) http.HandlerFunc {
 		// knight instance name — never per knight (#182).
 		kctx, kcancel := k8sCtx(r)
 		defer kcancel()
-		podsByName := knightPodsByName(kctx, namespace)
-		metrics := listPodMetrics(kctx, namespace)
-		tableDefaults := tableDefaultsByName(kctx, namespace)
+		snap := fleetPodSnapshots.get(kctx, namespace)
+		podsByName, metrics, tableDefaults := snap.pods, snap.metrics, snap.tableDefaults
 		filter := tableFilter(r)
 
 		knights := make([]KnightStatus, 0, len(crItems))
@@ -1037,7 +1037,22 @@ func knightHandler(namespace string) http.HandlerFunc {
 		// Fetch Knight CR first — it is the authoritative source
 		kctx, kcancel := k8sCtx(r)
 		defer kcancel()
-		crObj, err := dynClient.Resource(knightGVR).Namespace(namespace).Get(kctx, name, metav1.GetOptions{})
+		// The CR comes from the informer cache, never the pod snapshot, so
+		// a fresh snapshot shows at once. The pods, metrics and RoundTable
+		// defaults come from the snapshot shared with /api/fleet.
+		crItems, err := cachedList(kctx, dynClient, knightGVR, namespace)
+		var crObj *unstructured.Unstructured
+		if err == nil {
+			for i := range crItems {
+				if crItems[i].GetName() == name {
+					crObj = crItems[i].DeepCopy()
+					break
+				}
+			}
+			if crObj == nil {
+				err = apierrors.NewNotFound(knightGVR.GroupResource(), name)
+			}
+		}
 		if err != nil {
 			writeK8sError(w, r, err, "read", "Knight")
 			return
@@ -1045,23 +1060,8 @@ func knightHandler(namespace string) http.HandlerFunc {
 
 		// Find matching pods (best-effort; knight may not have any yet).
 		// Prefer the ready pod so rollouts show the new pod, matching fleetHandler.
-		var pods []*corev1.Pod
-		if k8sClient != nil {
-			podList, podErr := k8sClient.CoreV1().Pods(namespace).List(kctx, metav1.ListOptions{
-				LabelSelector: fmt.Sprintf("app.kubernetes.io/name=knight,app.kubernetes.io/instance=%s", name),
-			})
-			if podErr == nil {
-				for i := range podList.Items {
-					if _, ok := podList.Items[i].Labels["job-name"]; ok {
-						continue // skip CronJob pods
-					}
-					if len(podList.Items[i].Spec.Containers) == 0 {
-						continue
-					}
-					pods = append(pods, &podList.Items[i])
-				}
-			}
-		}
+		snap := fleetPodSnapshots.get(kctx, namespace)
+		pods := snap.pods[name]
 		var podPtr *corev1.Pod
 		for _, p := range pods {
 			if podPtr == nil || (!podIsReady(podPtr) && podIsReady(p)) {
@@ -1076,11 +1076,11 @@ func knightHandler(namespace string) http.HandlerFunc {
 		detail := KnightDetail{
 			KnightStatus: buildKnightStatus(crObj, podPtr, scaling),
 		}
-		detail.Pods = buildKnightPods(pods, listPodMetrics(kctx, namespace))
+		detail.Pods = buildKnightPods(pods, snap.metrics)
 		detail.Scaling = scaling
 		detail.WorkspaceSnapshots = buildWorkspaceSnapshots(crObj)
 		detail.WorkspaceSnapshotsCondition = buildWorkspaceSnapshotsCondition(crObj)
-		detail.Isolation = buildKnightIsolation(crObj, podPtr, tableDefaultsFor(kctx, namespace, knightTableName(crObj)))
+		detail.Isolation = buildKnightIsolation(crObj, podPtr, snap.tableDefaults[knightTableName(crObj)])
 		if podPtr != nil {
 			pod := podPtr
 			detail.Node = pod.Spec.NodeName
