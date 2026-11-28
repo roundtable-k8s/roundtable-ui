@@ -3,7 +3,7 @@ import {
   applyRunningDelta,
   countByStatus,
   filterRunning,
-  formatAge,
+  formatRunningAge,
   parseRunningDelta,
   parseRunningResponse,
   type RunningTask,
@@ -81,15 +81,15 @@ describe('filterRunning / countByStatus', () => {
   })
 })
 
-describe('formatAge', () => {
+describe('formatRunningAge', () => {
   const now = Date.parse('2026-11-24T12:00:00Z')
   it('formats seconds, minutes and hours', () => {
-    expect(formatAge('2026-11-24T11:59:48Z', now)).toBe('12s')
-    expect(formatAge('2026-11-24T11:55:57Z', now)).toBe('4m 3s')
-    expect(formatAge('2026-11-24T09:55:00Z', now)).toBe('2h 5m')
-    expect(formatAge(undefined, now)).toBe('—')
-    expect(formatAge('garbage', now)).toBe('—')
-    expect(formatAge('2026-11-24T12:00:05Z', now)).toBe('0s')
+    expect(formatRunningAge('2026-11-24T11:59:48Z', now)).toBe('12s')
+    expect(formatRunningAge('2026-11-24T11:55:57Z', now)).toBe('4m 3s')
+    expect(formatRunningAge('2026-11-24T09:55:00Z', now)).toBe('2h 5m')
+    expect(formatRunningAge(undefined, now)).toBe('—')
+    expect(formatRunningAge('garbage', now)).toBe('—')
+    expect(formatRunningAge('2026-11-24T12:00:05Z', now)).toBe('0s')
   })
 })
 

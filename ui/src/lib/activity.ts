@@ -18,7 +18,7 @@
  */
 import { formatMsLadder } from './format'
 
-export type ActivityType =
+type ActivityType =
   | 'task.started'
   | 'task.heartbeat'
   | 'tool.started'

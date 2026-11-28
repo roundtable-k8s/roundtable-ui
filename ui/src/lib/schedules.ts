@@ -5,6 +5,7 @@
  */
 import { formatCost, formatSecondsLadder } from './format'
 import type { Tone } from './tone'
+import { namespacedKey } from './keys'
 
 /** Who owns a schedule. Git-managed schedules cannot be edited or deleted here. */
 export type ManagedBy = 'git' | 'api' | 'other'
@@ -324,9 +325,7 @@ export interface ScheduleList {
 
 export const SCHEDULE_DOCS_URL = 'https://github.com/roundtable-k8s/roundtable/blob/main/docs/gateway.md#schedules'
 
-export function scheduleKey(s: { namespace: string; name: string }): string {
-  return `${s.namespace}/${s.name}`
-}
+export const scheduleKey = namespacedKey
 
 /** The dashboard route of the edit form (#302). Git-managed schedules have none. */
 export function scheduleEditPath(s: { namespace: string; name: string }): string {

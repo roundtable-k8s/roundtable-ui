@@ -25,7 +25,7 @@ export function runRows(data: unknown): GatewayRun[] {
   return list.filter((r): r is GatewayRun => !!r && typeof r === 'object' && typeof (r as GatewayRun).run === 'string')
 }
 
-/** Seconds → "45s" / "12m" / "5h 12m" / "44d 3h"; "—" when missing or invalid. */
+/** Like `formatAge` in lib/format.ts, from seconds, never a seconds part past 1 min. Seconds → "45s" / "12m" / "5h 12m" / "44d 3h"; "—" when missing or invalid. */
 export function ageLabel(seconds: number | undefined): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return '—'
   const sec = Math.max(0, Math.floor(seconds))

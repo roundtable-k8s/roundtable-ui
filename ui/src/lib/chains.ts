@@ -4,6 +4,8 @@
  */
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopRound, ChainRunGroup, ChainStep, ChainTaskLive } from './types'
 import { formatRelativeTime, formatSecondsLadder } from './format'
+import { namespacedKey } from './keys'
+import { runningHref } from './links'
 
 export interface FanOutCounts {
   total: number
@@ -98,10 +100,7 @@ export function heartbeatLabel(t: ChainTaskLive): string {
   return ms !== undefined ? `${shortDuration(ms / 1000)} ago` : '—'
 }
 
-/** Deep link to a task's live activity on the Running page. */
-export function runningHref(taskId: string): string {
-  return `/running?task=${encodeURIComponent(taskId)}`
-}
+export { runningHref }
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -123,7 +122,7 @@ export function parseChainUpdate(data: unknown, msg?: Record<string, unknown>): 
   return { op: 'upsert', chain: { ...(c as Chain), namespace } }
 }
 
-const chainKey = (c: { name: string; namespace: string }) => `${c.namespace}/${c.name}`
+const chainKey = namespacedKey
 
 /** Apply a live update to the list, keeping order (new chains append). */
 export function applyChainUpdate(chains: Chain[], u: ChainUpdate): Chain[] {

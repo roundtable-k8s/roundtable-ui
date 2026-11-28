@@ -154,8 +154,8 @@ export function countByStatus(tasks: Iterable<RunningTask>): Record<RunningStatu
   return counts
 }
 
-/** "12s" / "4m 3s" / "2h 5m" from an ISO timestamp to `now`. */
-export function formatAge(iso: string | undefined, now: number): string {
+/** Seconds ladder ("12s" / "4m 3s" / "2h 5m"), unlike `formatAge` in lib/format.ts, from an ISO timestamp to `now`. */
+export function formatRunningAge(iso: string | undefined, now: number): string {
   if (!iso) return '—'
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return '—'

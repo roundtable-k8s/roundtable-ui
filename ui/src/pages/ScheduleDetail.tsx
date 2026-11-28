@@ -15,10 +15,6 @@ import {
 
 const POLL_MS = 15000
 
-function absolute(iso?: string): string {
-  return iso ? formatDateTime(iso) : ''
-}
-
 function OutcomeBadge({ outcome }: { outcome: string }) {
   return <Badge tone={outcomeTone(outcome)}>{outcomeLabel(outcome)}</Badge>
 }
@@ -57,11 +53,11 @@ function ScheduleSummary({ s }: { s: Schedule }) {
         </div>
         <div>
           <dt className="text-gray-500">Next run</dt>
-          <dd className="text-white" title={absolute(s.nextRunAt)}>{s.suspended ? '—' : until(s.nextRunAt)}</dd>
+          <dd className="text-white" title={s.nextRunAt ? formatDateTime(s.nextRunAt) : ''}>{s.suspended ? '—' : until(s.nextRunAt)}</dd>
         </div>
         <div>
           <dt className="text-gray-500">Last run</dt>
-          <dd className="flex items-center gap-2 text-white" title={absolute(s.lastRunAt)}>
+          <dd className="flex items-center gap-2 text-white" title={s.lastRunAt ? formatDateTime(s.lastRunAt) : ''}>
             {s.lastRunAt ? formatRelativeTime(s.lastRunAt) : '—'}
             {s.lastResult && <OutcomeBadge outcome={s.lastResult.outcome} />}
           </dd>
@@ -248,7 +244,7 @@ export function RunHistory({ namespace, name, selected, onSelect }: {
           {runs.map((r, i) => (
             <tr key={`${r.time}-${r.run ?? r.key ?? i}`}
               className={`border-t border-roundtable-steel/50 ${r.run && r.run === selected ? 'bg-roundtable-gold/5' : ''}`}>
-              <td className="px-3 py-2 text-white" title={absolute(r.time)}>{absolute(r.time)} <span className="text-gray-500">({formatRelativeTime(r.time)})</span></td>
+              <td className="px-3 py-2 text-white" title={r.time ? formatDateTime(r.time) : ''}>{r.time ? formatDateTime(r.time) : ''} <span className="text-gray-500">({formatRelativeTime(r.time)})</span></td>
               <td className="px-3 py-2">
                 <OutcomeBadge outcome={r.outcome} />
                 {r.reason && <span className="ml-2 text-xs text-gray-400">{sanitizeText(r.reason)}</span>}

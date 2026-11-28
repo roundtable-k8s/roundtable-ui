@@ -12,10 +12,11 @@ import type { Tone } from '../lib/tone'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost, formatNumber } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
+import { chainHref } from '../lib/links'
 import {
   countByStatus,
   filterRunning,
-  formatAge,
+  formatRunningAge,
   type RunningStatus,
   type RunningTask,
 } from '../lib/running'
@@ -30,10 +31,6 @@ function StatusBadge({ status }: { status: RunningStatus }) {
   return (
     <Badge tone={STATUS_STYLES[status].tone} strength="strong" className="font-medium">{status}</Badge>
   )
-}
-
-function chainHref(chainName: string): string {
-  return `/chains?chain=${encodeURIComponent(chainName)}`
 }
 
 function ChainCell({ task }: { task: RunningTask }) {
@@ -61,7 +58,7 @@ function RunningExtra({ task, now }: { task: RunningTask; now: number }) {
     ['Status', <StatusBadge key="s" status={task.status} />],
     ['Node', task.node || '—'],
     ['Slot', task.slot != null ? `${task.slot}${task.concurrency != null ? ` of ${task.concurrency}` : ''}` : '—'],
-    ['Heartbeat age', formatAge(task.lastHeartbeat, now)],
+    ['Heartbeat age', formatRunningAge(task.lastHeartbeat, now)],
     ['Turns', task.turns ?? '—'],
     ['Tokens', task.inputTokens != null || task.outputTokens != null
       ? `${formatNumber(task.inputTokens ?? 0)} in / ${formatNumber(task.outputTokens ?? 0)} out`
@@ -205,9 +202,9 @@ export function RunningPage() {
                   <td className="px-3 py-2 text-gray-400 font-mono text-xs" title={t.runId}>{t.runId ? t.runId.slice(0, 12) : '—'}</td>
                   <td className="px-3 py-2"><ChainCell task={t} /></td>
                   <td className="px-3 py-2 text-gray-400">{t.model || '—'}</td>
-                  <td className="px-3 py-2 text-gray-300 tabular-nums">{formatAge(t.startedAt, now)}</td>
+                  <td className="px-3 py-2 text-gray-300 tabular-nums">{formatRunningAge(t.startedAt, now)}</td>
                   <td className={`px-3 py-2 tabular-nums ${STATUS_STYLES[t.status].text}`}>
-                    {formatAge(t.lastHeartbeat, now)}
+                    {formatRunningAge(t.lastHeartbeat, now)}
                   </td>
                   <td className="px-3 py-2 text-gray-400 max-w-[12rem] truncate">{lastToolLabel(t) || '—'}</td>
                   <td className="px-3 py-2 text-right text-roundtable-gold tabular-nums">{t.costUsd != null ? formatCost(t.costUsd) : '—'}</td>

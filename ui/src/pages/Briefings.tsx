@@ -6,11 +6,6 @@ import { Spinner, EmptyState, PageHeader, ErrorBanner } from '../components/ui'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 
-// Helper to format date in human-friendly format
-function formatDate(dateStr: string): string {
-  return formatDay(dateStr, 'long')
-}
-
 // Helper to calculate reading time (assuming ~200 words per minute)
 function calculateReadingTime(text: string): string {
   const words = text.trim().split(/\s+/).length
@@ -197,7 +192,7 @@ export function BriefingsPage() {
                 <div className="flex items-center gap-3 flex-1">
                   <Calendar className="w-5 h-5 text-roundtable-gold" />
                   <h2 className="text-lg font-semibold text-white">
-                    {formatDate(selectedDate)}
+                    {formatDay(selectedDate, 'long')}
                   </h2>
                 </div>
                 

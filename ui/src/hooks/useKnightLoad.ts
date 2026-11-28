@@ -1,14 +1,14 @@
 import { useMemo } from 'react'
 import { usePolledFetch } from './usePolledFetch'
+import { namespacedKey } from '../lib/keys'
 
 /** Queued (waiting) and in-flight (running) task counts of one knight. */
 export interface KnightQueue { pending: number; inFlight: number }
 
-/** Queue counts keyed by `namespace/name` (see knightLoadKey). */
+/** Queue counts keyed by `namespace/name` (see namespacedKey). */
 export type KnightLoadMap = Map<string, KnightQueue>
 
 /** Map key for a knight: `namespace/name`, the namespace empty when unset. */
-export const knightLoadKey = (k: { namespace?: string; name: string }) => `${k.namespace ?? ''}/${k.name}`
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0
 
@@ -26,7 +26,7 @@ export function parseKnightLoad(data: unknown): KnightLoadMap {
     if (typeof name !== 'string' || name === '' || !queue) continue
     if (!isCount(queue.pending) || !isCount(queue.inFlight)) continue
     const ns = typeof namespace === 'string' ? namespace : undefined
-    out.set(knightLoadKey({ name, namespace: ns }), { pending: queue.pending, inFlight: queue.inFlight })
+    out.set(namespacedKey({ name, namespace: ns }), { pending: queue.pending, inFlight: queue.inFlight })
   }
   return out
 }
