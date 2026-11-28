@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/singleflight"
 	"log/slog"
 	"net/http"
 	"os"
@@ -323,17 +324,77 @@ func jsReadResults(ctx context.Context, streamName, filter string, limit int) ([
 	if err != nil {
 		return nil, 0, err
 	}
+	return readNewestResults(ctx, stream, filter, limit)
+}
+
+// resultStream is the part of jetstream.Stream the history read uses, so
+// tests can stand in for a stream.
+type resultStream interface {
+	Info(ctx context.Context, opts ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error)
+	GetMsg(ctx context.Context, seq uint64, opts ...jetstream.GetMsgOpt) (*jetstream.RawStreamMsg, error)
+	CreateOrUpdateConsumer(ctx context.Context, cfg jetstream.ConsumerConfig) (jetstream.Consumer, error)
+	DeleteConsumer(ctx context.Context, name string) error
+}
+
+// filterMatchesSubject reports whether subject matches a NATS filter (with * and
+// a trailing > wildcard).
+func filterMatchesSubject(filter, subject string) bool {
+	ft, st := strings.Split(filter, "."), strings.Split(subject, ".")
+	for i, f := range ft {
+		if f == ">" {
+			return len(st) > i
+		}
+		if i >= len(st) || (f != "*" && f != st[i]) {
+			return false
+		}
+	}
+	return len(ft) == len(st)
+}
+
+// readNewestResults returns the newest limit messages matching filter, oldest
+// first, without creating a consumer: it walks back from the stream tail with
+// GetMsg (a direct get when the stream allows it). If the stream rejects
+// those reads it falls back to a short-lived consumer that is deleted again.
+func readNewestResults(ctx context.Context, stream resultStream, filter string, limit int) ([]TaskEvent, uint64, error) {
 	info, err := stream.Info(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	// Result subjects are unique per task, so start limit messages back from
-	// the stream tail and read forward.
+	last := info.State.LastSeq
+	first := info.State.FirstSeq
+	var rev []TaskEvent
+	lookups := 0
+	for seq := last; seq >= 1 && seq >= first && len(rev) < limit && lookups < 2*limit; seq-- {
+		lookups++
+		m, err := stream.GetMsg(ctx, seq)
+		if err != nil {
+			if errors.Is(err, jetstream.ErrMsgNotFound) {
+				continue // deleted or expired
+			}
+			if lookups == 1 {
+				return consumerReadResults(ctx, stream, info, filter, limit)
+			}
+			return nil, 0, err
+		}
+		if !filterMatchesSubject(filter, m.Subject) {
+			continue
+		}
+		rev = append(rev, TaskEvent{Type: "result", Subject: m.Subject, Data: m.Data, Timestamp: eventTimestamp(m.Data)})
+	}
+	events := make([]TaskEvent, 0, len(rev))
+	for i := len(rev) - 1; i >= 0; i-- {
+		events = append(events, rev[i])
+	}
+	return events, info.State.Msgs, nil
+}
+
+// consumerReadResults is the fallback for streams that refuse GetMsg. The
+// ephemeral consumer is always deleted.
+func consumerReadResults(ctx context.Context, stream resultStream, info *jetstream.StreamInfo, filter string, limit int) ([]TaskEvent, uint64, error) {
 	startSeq := uint64(1)
 	if info.State.LastSeq > uint64(limit) {
 		startSeq = info.State.LastSeq - uint64(limit) + 1
 	}
-	// Ephemeral consumer with InactiveThreshold for auto-cleanup (#54)
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 		DeliverPolicy:     jetstream.DeliverByStartSequencePolicy,
 		OptStartSeq:       startSeq,
@@ -345,18 +406,85 @@ func jsReadResults(ctx context.Context, streamName, filter string, limit int) ([
 		// Stream info only, as before.
 		return nil, info.State.Msgs, nil
 	}
+	defer func() {
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = stream.DeleteConsumer(dctx, cons.CachedInfo().Name)
+	}()
 	var events []TaskEvent
-	if msgs, _ := cons.FetchNoWait(limit); msgs != nil {
-		for msg := range msgs.Messages() {
-			events = append(events, TaskEvent{
-				Type:      "result",
-				Subject:   msg.Subject(),
-				Data:      msg.Data(),
-				Timestamp: eventTimestamp(msg.Data()),
-			})
-		}
+	msgs, err := cons.Fetch(limit, jetstream.FetchMaxWait(2*time.Second))
+	if err != nil {
+		return nil, 0, err
+	}
+	for msg := range msgs.Messages() {
+		events = append(events, TaskEvent{
+			Type:      "result",
+			Subject:   msg.Subject(),
+			Data:      msg.Data(),
+			Timestamp: eventTimestamp(msg.Data()),
+		})
 	}
 	return events, info.State.Msgs, nil
+}
+
+// taskHistoryCacheTTL is how long one stream read is shared between
+// /api/tasks calls. A variable so tests can change it.
+var taskHistoryCacheTTL = 5 * time.Second
+
+type historyEntry struct {
+	at     time.Time
+	events []TaskEvent
+	msgs   uint64
+}
+
+// historyCache caches readResults per stream+filter and collapses concurrent
+// misses into one read. Errors are never cached.
+type historyCache struct {
+	mu      sync.Mutex
+	entries map[string]historyEntry
+	group   singleflight.Group
+}
+
+var taskHistory = &historyCache{entries: map[string]historyEntry{}}
+
+func (c *historyCache) fresh(key string) (historyEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	return e, ok && time.Since(e.at) < taskHistoryCacheTTL
+}
+
+func (c *historyCache) get(ctx context.Context, stream, filter string, limit int) ([]TaskEvent, uint64, error) {
+	key := fmt.Sprintf("%s\x00%s\x00%d", stream, filter, limit)
+	if e, ok := c.fresh(key); ok {
+		return e.events, e.msgs, nil
+	}
+	ch := c.group.DoChan(key, func() (any, error) {
+		if e, ok := c.fresh(key); ok {
+			return e, nil
+		}
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		events, msgs, err := readResults(rctx, stream, filter, limit)
+		if err != nil {
+			return nil, err
+		}
+		e := historyEntry{at: time.Now(), events: events, msgs: msgs}
+		c.mu.Lock()
+		c.entries[key] = e
+		c.mu.Unlock()
+		return e, nil
+	})
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, 0, res.Err
+		}
+		e := res.Val.(historyEntry)
+		return e.events, e.msgs, nil
+	case <-ctx.Done():
+		return nil, 0, ctx.Err()
+	}
 }
 
 var errNATSUnavailable = errors.New("NATS not available")
