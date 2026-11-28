@@ -136,9 +136,9 @@ export function BriefingsPage() {
     <div>
       <PageHeader icon={BookOpen} title="Chronicles" />
 
-      <div className="flex gap-6">
+      <div className="flex flex-col md:flex-row gap-6">
         {/* Archive sidebar */}
-        <div className="w-64 shrink-0">
+        <div className="w-full md:w-64 md:shrink-0">
           <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-4">
             <h2 className="text-sm font-medium text-gray-400 mb-3">Archives</h2>
             {loading && <p className="text-gray-500 text-sm">Loading...</p>}

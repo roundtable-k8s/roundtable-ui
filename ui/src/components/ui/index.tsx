@@ -115,15 +115,15 @@ export function PageHeader({ icon: Icon, title, subtitle, children }: {
   children?: ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between mb-6">
-      <div>
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="min-w-0">
         <h1 className="text-3xl font-bold text-white flex items-center gap-3">
           <Icon className="w-8 h-8 text-roundtable-gold" />
           {title}
         </h1>
         {subtitle && <p className="text-gray-400 mt-2">{subtitle}</p>}
       </div>
-      {children && <div className="flex items-center gap-3">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-3">{children}</div>}
     </div>
   )
 }

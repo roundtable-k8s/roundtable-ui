@@ -112,3 +112,12 @@ describe('MissionWizard knights error', () => {
     expect(input.getAttribute('aria-describedby')).toContain('wiz-err-knights')
   })
 })
+
+describe('MissionWizard mobile layout', () => {
+  it('stacks the budget, TTL and timeout fields on one column by default', async () => {
+    render(<MissionWizard onClose={() => {}} onCreated={() => {}} />)
+    const grid = screen.getByLabelText(/Cost Budget/).closest('.grid')!
+    expect(grid.className).toContain('grid-cols-1')
+    expect(grid.className).toContain('sm:grid-cols-3')
+  })
+})

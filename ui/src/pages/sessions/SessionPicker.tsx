@@ -18,7 +18,7 @@ interface Props {
 export function SessionPicker({ sessions, groupedSessions, selectedSession, onSelectSession, isArchived }: Props) {
   if (sessions.length === 0) return null
   return (
-    <div className="flex items-center gap-3 mb-4 text-sm">
+    <div className="flex flex-wrap items-center gap-3 mb-4 text-sm">
       <span className="text-gray-500 flex items-center gap-1.5"><History className="w-4 h-4" /> Session</span>
       <select
         value={selectedSession}

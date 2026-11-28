@@ -29,6 +29,13 @@ beforeEach(() => {
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
 describe('KnightDetailDrawer', () => {
+  it('never grows wider than the screen', () => {
+    render(<MemoryRouter><KnightDetailDrawer knight={k('galahad')} onClose={() => {}} /></MemoryRouter>)
+    const drawer = screen.getByRole('dialog', { name: 'galahad details' })
+    expect(drawer.className).toContain('w-full')
+    expect(drawer.className).toContain('max-w-[520px]')
+  })
+
   it('follows the live knight object without refetching', async () => {
     const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('galahad', { restarts: 1 })} onClose={() => {}} /></MemoryRouter>)
     expect(screen.getByText('1 restarts')).toBeInTheDocument()

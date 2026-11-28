@@ -23,7 +23,7 @@ interface Props {
 export function KnightPicker(p: Props) {
   const { knights, filteredKnights, knightConfig, selectedKnight, view } = p
   return (
-    <div className="flex items-center gap-4 mb-6">
+    <div className="flex flex-wrap items-center gap-4 mb-6">
       <div className="relative">
         <select aria-label="Knight" value={selectedKnight} onChange={e => p.onSelectKnight(e.target.value)}
           className="bg-roundtable-navy border border-roundtable-steel rounded-lg px-4 py-2 text-white pr-8 appearance-none min-w-[200px]">
