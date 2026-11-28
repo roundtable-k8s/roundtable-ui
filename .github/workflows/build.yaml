@@ -51,6 +51,10 @@ jobs:
         working-directory: ui
         run: npm run build
 
+      - name: Build Storybook
+        working-directory: ui
+        run: npm run build-storybook
+
       - name: Go fmt
         working-directory: api
         run: |
