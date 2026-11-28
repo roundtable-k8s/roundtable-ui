@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 import type { NatsEvent } from './hooks/useWebSocket'
@@ -21,7 +21,13 @@ vi.mock('./hooks/useOpenDeadLetters', async (orig) => ({
 let versionResult: { version: string; commit: string } | null = null
 vi.mock('./hooks/useVersion', () => ({ useVersion: () => versionResult }))
 vi.mock('./pages/Dashboard', () => ({ DashboardPage: () => <h2>Dashboard stub</h2> }))
-vi.mock('./pages/Fleet', () => ({ FleetPage: () => <h2>Fleet stub</h2> }))
+const fleet = vi.hoisted(() => ({ throws: false }))
+vi.mock('./pages/Fleet', () => ({
+  FleetPage: () => {
+    if (fleet.throws) throw new Error('Fleet exploded')
+    return <h2>Fleet stub</h2>
+  },
+}))
 vi.mock('./pages/ScheduleDetail', () => ({ ScheduleDetailPage: () => <h2>Schedule detail stub</h2> }))
 
 function renderAt(path: string) {
@@ -104,6 +110,23 @@ describe('App shell accessibility', { timeout: 15000 }, () => {
     ]
     rerender(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>)
     expect(document.title).toBe('(2, 1 failed) Command Center - Round Table')
+  })
+
+  it('renders another page after a page threw, without a reload', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fleet.throws = true
+    try {
+      renderAt('/fleet')
+      expect(await screen.findByRole('alert')).toBeTruthy()
+      expect(screen.getByText('Something went wrong')).toBeTruthy()
+      fleet.throws = false
+      fireEvent.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /Command Center/ }))
+      expect(await screen.findByText('Dashboard stub')).toBeTruthy()
+      expect(screen.queryByText('Something went wrong')).toBeNull()
+    } finally {
+      fleet.throws = false
+      consoleError.mockRestore()
+    }
   })
 
   it('shows a not-found page for unknown paths', () => {

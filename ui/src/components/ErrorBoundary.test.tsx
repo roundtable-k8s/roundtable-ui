@@ -75,6 +75,53 @@ describe('ErrorBoundary', () => {
     consoleError.mockRestore()
   })
 
+  it('announces the error UI as an alert with a link back to the Command Center', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ErrorBoundary>
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>
+    )
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to Command Center' }).getAttribute('href')).toBe('/')
+    consoleError.mockRestore()
+  })
+
+  it('renders children again when resetKeys change after an error', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { rerender } = render(
+      <ErrorBoundary resetKeys={['/a']}>
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>
+    )
+    expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
+
+    rerender(
+      <ErrorBoundary resetKeys={['/b']}>
+        <ThrowError shouldThrow={false} />
+      </ErrorBoundary>
+    )
+    expect(screen.getByText('Normal content')).toBeInTheDocument()
+    expect(screen.queryByText(/Something went wrong/i)).not.toBeInTheDocument()
+    consoleError.mockRestore()
+  })
+
+  it('stays on the error UI when resetKeys are unchanged', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { rerender } = render(
+      <ErrorBoundary resetKeys={['/a']}>
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>
+    )
+    rerender(
+      <ErrorBoundary resetKeys={['/a']}>
+        <ThrowError shouldThrow={false} />
+      </ErrorBoundary>
+    )
+    expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
+    consoleError.mockRestore()
+  })
+
   it('handles multiple children', () => {
     render(
       <ErrorBoundary>
