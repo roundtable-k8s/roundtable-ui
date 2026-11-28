@@ -306,13 +306,13 @@ func scheduleManifestHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Gateway not configured (set GATEWAY_URL)", http.StatusServiceUnavailable)
 			return
 		}
-		status, b, err := g.do(r.Context(), routeLabel(r), http.MethodGet, p+"/manifest", nil, nil)
+		status, b, hdr, err := g.doKeyed(r.Context(), routeLabel(r), http.MethodGet, p+"/manifest", nil, nil, "")
 		if err != nil {
 			g.fail(w, r, p+"/manifest", err)
 			return
 		}
 		if status != http.StatusOK {
-			writeGatewayResponse(w, status, b)
+			relayGatewayAnswer(w, r, p+"/manifest", status, b, hdr)
 			return
 		}
 		if format == "json" {

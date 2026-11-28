@@ -53,10 +53,20 @@ func k8sErrorStatus(err error, verb, noun string) (int, string) {
 		}
 		return http.StatusUnprocessableEntity, "Invalid " + lower
 	case apierrors.IsTimeout(err), apierrors.IsServerTimeout(err), apierrors.IsServiceUnavailable(err),
-		errors.Is(err, context.DeadlineExceeded):
+		errors.Is(err, context.DeadlineExceeded), isNetworkError(err):
 		return http.StatusBadGateway, "Kubernetes API unavailable, try again"
 	}
 	return http.StatusInternalServerError, "Failed to " + verb + " " + lower
+}
+
+// isNetworkError reports a transport failure (connection refused, name not
+// resolved, reset): client-go returns it as a *url.Error wrapping a
+// *net.OpError, never as an API status.
+func isNetworkError(err error) bool {
+	var ne net.Error
+	var op *net.OpError
+	var dns *net.DNSError
+	return errors.As(err, &ne) || errors.As(err, &op) || errors.As(err, &dns)
 }
 
 func upperFirst(s string) string {
@@ -99,8 +109,13 @@ func upstreamError(w http.ResponseWriter, r *http.Request, err error, noun strin
 	}
 	slog.ErrorContext(r.Context(), "read "+noun+" failed", "error", err)
 	if errors.Is(err, nats.ErrTimeout) || errors.Is(err, nats.ErrNoResponders) ||
-		errors.Is(err, nats.ErrConnectionClosed) || errors.Is(err, context.DeadlineExceeded) {
+		errors.Is(err, nats.ErrConnectionClosed) {
 		jsonError(w, "NATS unavailable, try again", http.StatusBadGateway)
+		return
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		// A bare deadline could be Kubernetes or NATS: do not blame either.
+		jsonError(w, "Upstream timed out, try again", http.StatusBadGateway)
 		return
 	}
 	code, msg := k8sErrorStatus(err, "read", noun)
@@ -151,7 +166,34 @@ func isGatewayAuthRejection(status int, body []byte) bool {
 	if json.Unmarshal(body, &b) == nil && b.Error != "" {
 		msg = b.Error
 	}
-	return strings.HasPrefix(msg, "forbidden:")
+	return isGatewayAuthMessage(status, msg)
+}
+
+// isGatewayAuthMessage is isGatewayAuthRejection for an already extracted
+// error message.
+func isGatewayAuthMessage(status int, msg string) bool {
+	return status == http.StatusUnauthorized ||
+		(status == http.StatusForbidden && strings.HasPrefix(msg, "forbidden:"))
+}
+
+// relayGatewayAnswer writes a gateway HTTP answer to the browser: the
+// dashboard's own rejected credentials become 502, Retry-After of a 429/503 is
+// copied, everything else is relayed as is. Shared by every gateway route.
+func relayGatewayAnswer(w http.ResponseWriter, r *http.Request, path string, status int, b []byte, hdr http.Header) {
+	if isGatewayAuthRejection(status, b) {
+		warnGatewayCredentials(r, path, status)
+		jsonError(w, gatewayCredentialsMsg, http.StatusBadGateway)
+		return
+	}
+	if v := hdr.Get("Idempotent-Replay"); v != "" {
+		w.Header().Set("Idempotent-Replay", v)
+	}
+	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+		if v := hdr.Get("Retry-After"); v != "" && validHeaderToken(v) {
+			w.Header().Set("Retry-After", v)
+		}
+	}
+	writeGatewayResponse(w, status, b)
 }
 
 // fail answers a failed gateway call (no HTTP answer): a too-large body is

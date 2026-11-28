@@ -150,7 +150,11 @@ func sseMaxStreamsFromEnv() int {
 }
 
 // validLastEventID accepts at most 128 printable ASCII characters.
-func validLastEventID(id string) bool {
+func validLastEventID(id string) bool { return validHeaderToken(id) }
+
+// validHeaderToken accepts at most 128 printable ASCII characters; used for
+// Last-Event-ID and Retry-After values.
+func validHeaderToken(id string) bool {
 	if len(id) == 0 || len(id) > 128 {
 		return false
 	}
@@ -233,12 +237,12 @@ func (g *gatewayClient) relaySSE(w http.ResponseWriter, r *http.Request, path st
 		} else if resp.StatusCode == http.StatusNotFound {
 			msg = "Task events not available"
 		}
-		if isGatewayAuthRejection(resp.StatusCode, []byte(`{"error":`+strconv.Quote(msg)+`}`)) {
+		if isGatewayAuthMessage(resp.StatusCode, msg) {
 			warnGatewayCredentials(r, path, resp.StatusCode)
 			jsonError(w, gatewayCredentialsMsg, http.StatusBadGateway)
 			return
 		}
-		if ra := resp.Header.Get("Retry-After"); ra != "" && validLastEventID(ra) {
+		if ra := resp.Header.Get("Retry-After"); ra != "" && validHeaderToken(ra) {
 			w.Header().Set("Retry-After", ra)
 		}
 		jsonError(w, msg, resp.StatusCode)
