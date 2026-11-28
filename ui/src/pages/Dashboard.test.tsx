@@ -327,6 +327,69 @@ describe('DashboardPage session cost refresh (#152)', () => {
   })
 })
 
+describe('DashboardPage session cost follows the fleet (#645)', () => {
+  const fleet = (names: string[]) => ({
+    knights: names.map(name => ({
+      name, domain: 'x', status: 'online', ready: true, restarts: 0, age: '1h',
+      image: '', skills: 0, nixTools: 0, labels: {}, phase: 'Ready',
+    })),
+    loading: false,
+    error: null,
+  }) as unknown as ReturnType<typeof useFleet>
+  const sessionCalls = () => vi.mocked(apiFetch).mock.calls.filter(c => /session/.test(String(c[0])))
+  const costs: Record<string, number> = { a: 1, b: 2 }
+  beforeEach(() => {
+    vi.mocked(apiFetch).mockImplementation(((url: string) => {
+      const m = /fleet\/(\w+)\/session/.exec(url)
+      const c = m ? costs[m[1]] : undefined
+      return Promise.resolve({ ok: !!c, json: () => Promise.resolve({ session: { cost: c } }) })
+    }) as unknown as typeof apiFetch)
+  })
+
+  it('fetches and counts a knight that appears after the first poll', async () => {
+    vi.mocked(useFleet).mockImplementation(() => fleet(['a']))
+    const view = renderDashboard()
+    await waitFor(() => expect(screen.getAllByText('$1.00').length).toBeGreaterThan(0))
+    expect(sessionCalls().length).toBe(1)
+    vi.mocked(useFleet).mockImplementation(() => fleet(['a', 'b']))
+    view.rerender(<BrowserRouter><DashboardPage /></BrowserRouter>)
+    await waitFor(() => expect(screen.getAllByText('$3.00').length).toBeGreaterThan(0))
+    expect(sessionCalls().length).toBe(2)
+  })
+
+  it('drops knights of another table when the fleet list changes', async () => {
+    vi.mocked(useFleet).mockImplementation(() => fleet(['a', 'b']))
+    const view = renderDashboard()
+    await waitFor(() => expect(screen.getAllByText('$3.00').length).toBeGreaterThan(0))
+    vi.mocked(useFleet).mockImplementation(() => fleet(['b']))
+    view.rerender(<BrowserRouter><DashboardPage /></BrowserRouter>)
+    await waitFor(() => expect(screen.queryByText('$3.00')).not.toBeInTheDocument())
+    expect(screen.getAllByText('$2.00').length).toBeGreaterThan(0)
+    expect(sessionCalls().length).toBe(2)
+  })
+})
+
+describe('DashboardPage daily trend order (#645)', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('is chronological across New Year', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 0, 2, 12) })
+    const at = (y: number, m: number, d: number, cost: number) => {
+      const ts = new Date(y, m, d, 12).toISOString()
+      return { type: 'result' as const, subject: `fleet.results.${ts}`, timestamp: ts, live: false, data: { knight: 'galahad', cost, success: true, task_id: ts } }
+    }
+    // newest first, as the gateway delivers them
+    vi.mocked(useWebSocket).mockReturnValue({
+      events: [at(2026, 0, 1, 3), at(2025, 11, 31, 2), at(2025, 11, 30, 1)], connected: true,
+    } as unknown as ReturnType<typeof useWebSocket>)
+    renderDashboard({ defaultCostExpanded: true })
+    const heading = await screen.findByText(/Daily Cost Trend/i)
+    const panel = heading.closest('div')!.parentElement!
+    const costs = [...panel.querySelectorAll('.text-roundtable-gold.font-medium')].map(e => e.textContent)
+    expect(costs.slice(-3)).toEqual(['$1.00', '$2.00', '$3.00'])
+  })
+})
+
 describe('DashboardPage truncated chain list', () => {
   async function withChains(n: number, total: number | null) {
     vi.mocked(apiGetWithTotal).mockImplementation((async (url: string) =>

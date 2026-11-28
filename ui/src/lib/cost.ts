@@ -48,7 +48,7 @@ export function notionalShare(costUSD: string | null | undefined, notionalUSD: s
 /** The cost panel's data, as Dashboard computes it for the selected range. */
 export interface CostPanelCsvInput {
   costByKnight: { knight: string; cost: number; tasks: number; failures: number }[]
-  dailyCosts: { date: string; cost: number }[]
+  dailyCosts: { day: string; date: string; cost: number }[]
   topTasks: { knight: string; cost: number; taskId: string; timestamp: string; success: boolean }[]
 }
 
@@ -67,7 +67,7 @@ export function costPanelCsv(data: CostPanelCsvInput): (string | number)[][] {
     [],
     ['By day'],
     ['Day', 'Cost (USD)'],
-    ...data.dailyCosts.map(d => [d.date, csvMoney(d.cost)]),
+    ...data.dailyCosts.map(d => [d.day, csvMoney(d.cost)]),
     [],
     ['Top tasks'],
     ['Task', 'Knight', 'Cost (USD)', 'Time', 'Status'],

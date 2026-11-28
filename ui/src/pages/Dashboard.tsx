@@ -31,15 +31,13 @@ interface CostEntry {
   success: boolean
 }
 
-function formatDate(date: Date): string {
-  return formatDay(date)
+/** The reader's local calendar day as YYYY-MM-DD: sortable and locale-independent. */
+function localDayKey(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 export const SESSION_COST_REFRESH_MS = 2000
-
-function sumCosts(perKnight: Record<string, number>): number {
-  return Object.values(perKnight).reduce((a, b) => a + b, 0)
-}
 
 /** Fetch session introspection cost for each knight; knights without session stats are omitted. */
 async function fetchSessionCosts(names: string[]): Promise<Record<string, number>> {
@@ -76,7 +74,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   const [chainsError, setChainsError] = useState<string | null>(null)
   const [storedTotal, setStoredTotal] = useState<KeyedTotal | null>(null)
   const chainTotal = totalFor(storedTotal, withTable(DASHBOARD_CHAINS_URL, table))
-  const [sessionCosts, setSessionCosts] = useState<{ total: number; perKnight: Record<string, number> }>({ total: 0, perKnight: {} })
+  const [sessionCosts, setSessionCosts] = useState<{ perKnight: Record<string, number> }>({ perKnight: {} })
   const [costExpanded, setCostExpanded] = useState(defaultCostExpanded)
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week')
 
@@ -99,14 +97,16 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     return () => { alive = false }
   }, [table])
 
-  // Fetch cumulative session costs once the fleet list arrives (reuses the
-  // useFleet poll instead of issuing a second /api/fleet request)
-  const sessionCostsFetched = useRef(false)
+  // Fetch cumulative session costs for every listed knight that has not been
+  // asked yet, so knights that appear later (scale-up, new table) are counted.
+  const sessionCostsRequested = useRef<Set<string>>(new Set())
   useEffect(() => {
-    if (sessionCostsFetched.current || knights.length === 0) return
-    sessionCostsFetched.current = true
-    fetchSessionCosts(knights.map((k) => k.name)).then((perKnight) => {
-      setSessionCosts({ total: sumCosts(perKnight), perKnight })
+    const fresh = knights.map((k) => k.name).filter((n) => !sessionCostsRequested.current.has(n))
+    if (fresh.length === 0) return
+    fresh.forEach((n) => sessionCostsRequested.current.add(n))
+    fetchSessionCosts(fresh).then((got) => {
+      if (Object.keys(got).length === 0) return
+      setSessionCosts((prev) => ({ perKnight: { ...prev.perKnight, ...got } }))
     })
   }, [knights])
 
@@ -116,7 +116,13 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
   // live result arrives for such a knight, re-fetch just that knight's session
   // cost, debounced so a burst of results coalesces into one fetch per knight.
   const sessionKnightsRef = useRef<Set<string>>(new Set())
-  sessionKnightsRef.current = new Set(Object.keys(sessionCosts.perKnight))
+  const fleetNames = useMemo(() => new Set(knights.map((k) => k.name)), [knights])
+  // Only knights in the current fleet list (the selected table) count.
+  const listedSessionCosts = useMemo(
+    () => Object.fromEntries(Object.entries(sessionCosts.perKnight).filter(([n]) => fleetNames.has(n))),
+    [sessionCosts, fleetNames],
+  )
+  sessionKnightsRef.current = new Set(Object.keys(listedSessionCosts))
   const seenResults = useRef<Set<string>>(new Set())
   const pendingRefresh = useRef<Set<string>>(new Set())
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -137,8 +143,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
       fetchSessionCosts(names).then((fresh) => {
         if (Object.keys(fresh).length === 0) return
         setSessionCosts((prev) => {
-          const perKnight = { ...prev.perKnight, ...fresh }
-          return { total: sumCosts(perKnight), perKnight }
+          return { perKnight: { ...prev.perKnight, ...fresh } }
         })
       })
     }, SESSION_COST_REFRESH_MS)
@@ -170,8 +175,8 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
     // that also arrived as a live result event — adding both double-counts.
     // Session cost is authoritative per knight; live WS costs only fill in
     // for knights that didn't report session stats.
-    const mergedCosts: Record<string, number> = { ...sessionCosts.perKnight }
-    let mergedTotal = sessionCosts.total
+    const mergedCosts: Record<string, number> = { ...listedSessionCosts }
+    let mergedTotal = Object.values(mergedCosts).reduce((a, b) => a + b, 0)
     for (const [name, cost] of Object.entries(knightCosts)) {
       if (!(name in mergedCosts)) {
         mergedCosts[name] = cost
@@ -184,7 +189,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
       .slice(0, 5)
 
     return { totalCost: mergedTotal, totalTasks, totalResults, failures, topKnights }
-  }, [events, sessionCosts])
+  }, [events, listedSessionCosts])
 
   // Cost breakdown data for collapsible panel
   const costEntries = useMemo((): CostEntry[] => {
@@ -228,12 +233,12 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
 
     const days: Record<string, number> = {}
     for (const entry of filteredCostEntries) {
-      const date = formatDate(new Date(entry.timestamp))
-      days[date] = (days[date] || 0) + entry.cost
+      const day = localDayKey(new Date(entry.timestamp))
+      days[day] = (days[day] || 0) + entry.cost
     }
     const dailyCosts = Object.entries(days)
-      .map(([date, cost]) => ({ date, cost }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(([day, cost]) => ({ day, date: formatDay(day), cost }))
+      .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
       .slice(-7)
 
     const topTasks = [...filteredCostEntries].sort((a, b) => b.cost - a.cost).slice(0, 10)
@@ -537,10 +542,10 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                   <EmptyState title="No trend data available" />
                 ) : (
                   <div className="space-y-2">
-                    {costPanelData.dailyCosts.map(({ date, cost }) => {
+                    {costPanelData.dailyCosts.map(({ day, date, cost }) => {
                       const maxCost = Math.max(...costPanelData.dailyCosts.map(d => d.cost), 1)
                       return (
-                        <div key={date} className="space-y-1">
+                        <div key={day} className="space-y-1">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-400">{date}</span>
                             <span className="text-roundtable-gold font-medium">{formatCost(cost)}</span>
