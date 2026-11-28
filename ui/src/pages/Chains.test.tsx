@@ -678,3 +678,68 @@ describe('ChainsPage step KV output', () => {
     expect(await screen.findByText('Full output not available')).toBeInTheDocument()
   })
 })
+
+// #644: data states, real links, step output race, dependency cycles.
+describe('ChainsPage states, links and races (#644)', () => {
+  const step = (name: string, dependsOn: string[] | null = null) => ({
+    name, knight: 'galahad', domain: 'docs', phase: 'Succeeded', startTime: null, completionTime: null,
+    result: null, dependsOn, retryCount: 0,
+  }) as unknown as NonNullable<Chain['steps']>[number]
+
+  it('shows a loading status during the first load', async () => {
+    mockApiGet.mockImplementation(() => new Promise(() => {}))
+    renderPage('/chains')
+    expect(await screen.findByRole('status')).toHaveTextContent('Loading chains')
+    expect(screen.queryByText('No chain executions found.')).toBeNull()
+  })
+
+  it('shows the error, not the empty state, when the first load fails', async () => {
+    mockApiGet.mockImplementation(() => Promise.reject(new Error('boom')))
+    renderPage('/chains')
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed to load chains: boom')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByText('No chain executions found.')).toBeNull()
+    expect(screen.queryByText(/showing last known state/)).toBeNull()
+  })
+
+  it('shows the empty state after a successful empty answer', async () => {
+    mockApiGet.mockImplementation((url: string) => url === CHAINS_LIST_URL ? Promise.resolve([]) : Promise.resolve([]))
+    renderPage('/chains')
+    expect(await screen.findByText('No chain executions found.')).toBeInTheDocument()
+  })
+
+  it('links mission and round table to existing routes', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([{ ...fanOutChain(), missionRef: 'm 1', roundTableRef: 'rt/a' }]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=doc-sweep')
+    const m = await screen.findByRole('link', { name: 'm 1' })
+    expect(m.getAttribute('href')).toBe('/missions/m%201')
+    expect(screen.getByRole('link', { name: 'rt/a' }).getAttribute('href')).toBe('/roundtables?table=rt%2Fa')
+  })
+
+  it('does not show step A output on step B when A answers late', async () => {
+    const chain = { ...fanOutChain(), steps: [step('a'), step('b')] }
+    let resolveA: (v: unknown) => void = () => {}
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === CHAINS_LIST_URL) return Promise.resolve([chain])
+      if (url.endsWith('/steps/a/output')) return new Promise(r => { resolveA = r })
+      if (url.endsWith('/steps/b/output')) return new Promise(() => {})
+      return Promise.reject(new Error('no KV'))
+    })
+    renderPage('/chains?chain=doc-sweep')
+    await userEvent.click(await screen.findByRole('button', { name: / a$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: / b$/ }))
+    await act(async () => { resolveA({ output: 'OUTPUT-OF-A' }) })
+    expect(screen.queryByText('OUTPUT-OF-A')).toBeNull()
+    expect(screen.getByText(/Loading full output/)).toBeInTheDocument()
+  })
+
+  it('renders a chain whose steps depend on each other', async () => {
+    const chain = { ...fanOutChain(), steps: [step('a', ['b']), step('b', ['a'])] }
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([chain]) : Promise.reject(new Error('no KV')))
+    renderPage('/chains?chain=doc-sweep')
+    expect(await screen.findByRole('button', { name: / a$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: / b$/ })).toBeInTheDocument()
+  })
+})
