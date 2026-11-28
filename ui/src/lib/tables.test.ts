@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tableForSubject, eventTable, taskRows, type TableInfo } from './tables'
+import { tableForSubject, eventTable, eventInTable, taskRows, type TableInfo } from './tables'
 import type { NatsEvent } from '../hooks/useWebSocket'
 
 const tables: TableInfo[] = [
@@ -42,5 +42,14 @@ describe('tables', () => {
 
   it('filters rows to one table', () => {
     expect(taskRows(events, tables, 'fleet-a').map((r) => r.taskId)).toEqual(['t1'])
+  })
+})
+
+describe('eventInTable', () => {
+  it('keeps everything for all tables, untagged events, and the matching table only', () => {
+    expect(eventInTable('', { table: 'b' })).toBe(true)
+    expect(eventInTable('a', {})).toBe(true)
+    expect(eventInTable('a', { table: 'a' })).toBe(true)
+    expect(eventInTable('a', { table: 'b' })).toBe(false)
   })
 })

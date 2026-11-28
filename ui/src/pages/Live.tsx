@@ -8,11 +8,13 @@ import { parseEvent, parseEventData, eventListKeys, displayText, resultFailureRe
 import { FleetGraph } from '../components/FleetGraph'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { eventInTable } from '../lib/tables'
 import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 
 export function LivePage() {
-  const { events, connected, error: wsError, historyError } = useWebSocket()
+  const { events: allEvents, connected, error: wsError, historyError } = useWebSocket()
   const { knights: fleetKnights, error: fleetError } = useFleet()
   const [filterKnight, setFilterKnight] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
@@ -49,6 +51,8 @@ export function LivePage() {
     }
   }, [fleetKnights])
 
+  const { table } = useTableFilter()
+  const events = useMemo(() => allEvents.filter((e) => eventInTable(table, e)), [allEvents, table])
   const fleetDomains = useMemo(() => domainIndex(fleetKnights), [fleetKnights])
 
   // Filter options: the real fleet plus any knight/domain seen in events

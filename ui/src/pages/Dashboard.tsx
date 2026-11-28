@@ -4,6 +4,7 @@ import { CHAIN_LIST_LIMIT, type KeyedTotal, totalFor, truncationNote } from '../
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Crown, Activity, DollarSign, Zap, AlertTriangle, Link2, ArrowRight, TrendingUp, Calendar, ChevronDown, ChevronRight, Loader, Download } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { eventInTable } from '../lib/tables'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { useFleet } from '../hooks/useFleet'
@@ -60,7 +61,8 @@ const FLEET_PANEL_MAX = 12
 export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpanded?: boolean } = {}) {
   const { table } = useTableFilter()
   const { knights, loading: fleetLoading, error: fleetError } = useFleet()
-  const { events, connected } = useWebSocket()
+  const { events: allEvents, connected } = useWebSocket()
+  const events = useMemo(() => allEvents.filter((e) => eventInTable(table, e)), [allEvents, table])
   const runningAll = useRunning()
   const running = useMemo(
     () => ({ ...runningAll, tasks: new Map([...runningAll.tasks].filter(([, t]) => inTable(table, t.table))) }),

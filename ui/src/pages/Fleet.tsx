@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useUrlParams } from '../hooks/useUrlParams'
 import { Zap, Crown, DollarSign, TrendingUp, ShieldOff, Search } from 'lucide-react'
+import { eventInTable } from '../lib/tables'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { useFleet } from '../hooks/useFleet'
 import { useKnightLoad, knightLoadKey, type KnightLoadMap } from '../hooks/useKnightLoad'
@@ -59,7 +60,8 @@ export function FleetPage() {
   useEffect(() => {
     if (selectedKey && !loading && !selectedKnight) setSelectedKey(null)
   }, [selectedKey, selectedKnight, loading])
-  const { events } = useWebSocket()
+  const { events: allEvents } = useWebSocket()
+  const events = useMemo(() => allEvents.filter((e) => eventInTable(table, e)), [allEvents, table])
   const { cards } = useCards()
   const loads = useKnightLoad()
   const hasLoad = knights.some((k) => loads.has(knightLoadKey(k)))

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { Moon } from 'lucide-react'
 import { apiGet, apiGetWithTotal } from '../lib/api'
 import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner, Badge } from '../components/ui'
+import { useTableFilter } from '../hooks/useTableFilter'
+import { inTable, withTable } from '../lib/tables'
 import { useUrlParam } from '../hooks/useUrlParam'
 import { CHAIN_LIST_LIMIT, truncationNote } from '../lib/chainTotal'
 import { DEAD_LETTERS_URL, deadLetterTime, errorExcerpt, type DeadLetter } from '../lib/deadLetters'
@@ -29,6 +31,7 @@ function toLocalInput(ms: number): string {
 
 export function OvernightPage() {
   const [since, setSince] = useUrlParam('since', DEFAULT_SINCE)
+  const { table } = useTableFilter()
   const [chains, setChains] = useState<Panel<Chain[]> & { total: number | null }>({ data: null, error: null, total: null })
   const [dead, setDead] = useState<Panel<DeadLetter[]>>({ data: null, error: null })
   const [schedules, setSchedules] = useState<Panel<Schedule[]>>({ data: null, error: null })
@@ -38,21 +41,21 @@ export function OvernightPage() {
   const load = useCallback(async () => {
     setLoading(true)
     await Promise.all([
-      apiGetWithTotal<Chain[]>(CHAINS_URL).then(({ items, total }) => {
+      apiGetWithTotal<Chain[]>(withTable(CHAINS_URL, table)).then(({ items, total }) => {
         setChains({ data: items ?? [], error: null, total })
       }, (e) => setChains((p) => ({ ...p, error: errMsg(e, 'chains') }))),
       apiGet<{ deadLetters?: DeadLetter[] }>(DEAD_LETTERS_URL).then(
-        (d) => setDead({ data: d.deadLetters ?? [], error: null }),
+        (d) => setDead({ data: (d.deadLetters ?? []).filter((x) => inTable(table, x.table)), error: null }),
         (e) => setDead((p) => ({ ...p, error: errMsg(e, 'dead letters') })),
       ),
-      apiGet<{ schedules?: Schedule[] }>('/api/schedules').then(
+      apiGet<{ schedules?: Schedule[] }>(withTable('/api/schedules', table)).then(
         (d) => setSchedules({ data: d.schedules ?? [], error: null }),
         (e) => setSchedules((p) => ({ ...p, error: errMsg(e, 'schedules') })),
       ),
     ])
     setLoadedAt(Date.now())
     setLoading(false)
-  }, [])
+  }, [table])
   useEffect(() => { load() }, [load])
 
   const sinceMs = useMemo(() => resolveSince(since, loadedAt), [since, loadedAt])
