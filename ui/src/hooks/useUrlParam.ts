@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useCallback, useMemo } from 'react'
+import { useUrlParams } from './useUrlParams'
 
 /**
  * One filter kept in the URL (?name=value). The param is removed when the value
@@ -11,16 +11,9 @@ export function useUrlParam(
   defaultValue: string,
   allowed?: readonly string[],
 ): [string, (next: string) => void] {
-  const [params, setParams] = useSearchParams()
-  const raw = params.get(name)
-  const value = raw === null || (allowed && !allowed.includes(raw)) ? defaultValue : raw
-  const set = useCallback((next: string) => {
-    setParams((prev) => {
-      const p = new URLSearchParams(prev)
-      if (next === defaultValue || next === '') p.delete(name)
-      else p.set(name, next)
-      return p
-    }, { replace: true })
-  }, [setParams, name, defaultValue])
-  return [value, set]
+  const defaults = useMemo(() => ({ [name]: defaultValue }), [name, defaultValue])
+  const allow = useMemo(() => (allowed ? { [name]: allowed } : undefined), [name, allowed])
+  const [values, setValues] = useUrlParams(defaults, allow)
+  const set = useCallback((next: string) => setValues({ [name]: next }), [setValues, name])
+  return [values[name], set]
 }

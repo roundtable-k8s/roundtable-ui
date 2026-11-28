@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useUrlParams } from '../hooks/useUrlParams'
 import { Activity } from 'lucide-react'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable } from '../lib/tables'
@@ -80,26 +81,17 @@ function RunningExtra({ task, now }: { task: RunningTask; now: number }) {
   )
 }
 
+const RUNNING_DEFAULTS = { knight: '', chain: '', status: '', task: '' }
+const RUNNING_ALLOWED = { status: ['running', 'stale', 'lost'] }
+
 export function RunningPage() {
   const rowsHintId = useId()
   const { tasks, loading, error, unavailable, refresh } = useRunning()
   const { connected } = useWebSocket()
   const now = useNow()
-  const [params, setParams] = useSearchParams()
-  const knight = params.get('knight') || ''
-  const chain = params.get('chain') || ''
-  const statusParam = params.get('status') || ''
-  const status = (['running', 'stale', 'lost'].includes(statusParam) ? statusParam : '') as RunningStatus | ''
-  const selectedId = params.get('task')
-
-  const setParam = (key: string, value: string) => {
-    setParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (value) next.set(key, value)
-      else next.delete(key)
-      return next
-    }, { replace: true })
-  }
+  const [{ knight, chain, status: statusValue, task: selectedId }, setParams] = useUrlParams(RUNNING_DEFAULTS, RUNNING_ALLOWED)
+  const status = statusValue as RunningStatus | ''
+  const setParam = (key: keyof typeof RUNNING_DEFAULTS, value: string) => setParams({ [key]: value })
 
   const { table } = useTableFilter()
   const all = useMemo(() => [...tasks.values()].filter((t) => inTable(table, t.table)), [tasks, table])

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useUrlParams } from '../hooks/useUrlParams'
 import { MessageSquare, Send, Activity } from 'lucide-react'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { apiGet, apiPost, ApiError } from '../lib/api'
@@ -18,11 +19,10 @@ const POLL_MS = 2000
 /** After this long without a result the turn is flagged and Send is re-enabled. */
 export const STALE_TURN_MS = 2 * 60 * 1000
 
+const CHAT_DEFAULTS = { knight: '', ns: '', run: '' }
+
 export function ChatPage() {
-  const [params, setParams] = useSearchParams()
-  const knight = params.get('knight') ?? ''
-  const namespace = params.get('ns') ?? ''
-  const runId = params.get('run') ?? ''
+  const [{ knight, ns: namespace, run: runId }, update] = useUrlParams(CHAT_DEFAULTS)
   const [knights, setKnights] = useState<ChatKnight[]>([])
   const [knightsError, setKnightsError] = useState<string | null>(null)
   const [turns, setTurns] = useState<ChatTurn[]>([])
@@ -67,17 +67,6 @@ export function ChatPage() {
       }, STALE_TURN_MS))
     }
   }, [turns])
-
-  const update = useCallback((next: Record<string, string | null>) => {
-    setParams((prev) => {
-      const p = new URLSearchParams(prev)
-      for (const [k, v] of Object.entries(next)) {
-        if (v) p.set(k, v)
-        else p.delete(k)
-      }
-      return p
-    }, { replace: true })
-  }, [setParams])
 
   // Poll every pending turn until the gateway reports a final status.
   const pendingIds = turns.filter((t) => t.taskId && !isFinalStatus(t.status)).map((t) => t.taskId).join(',')
