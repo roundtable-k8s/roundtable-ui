@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { apiGet } from '../lib/api'
 import { useVisibleInterval } from './useVisibleInterval'
 
@@ -14,8 +14,12 @@ interface PolledState<T> { url: string; data: T; error: string | null; errorStat
  * Poll a JSON endpoint on an interval, pausing while the tab is hidden (#22).
  * A tick is skipped while a request is pending; it is aborted on url change and unmount.
  * Errors surface as a message string; the last good data is kept.
+ * A null url means "do not fetch" (returns `initial`, loading: false); intervalMs <= 0
+ * fetches once per url (refresh() still refetches).
  */
-export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
+export function usePolledFetch<T>(rawUrl: string | null, intervalMs: number, initial: T) {
+  const enabled = rawUrl !== null
+  const url = rawUrl ?? ''
   // State is keyed by the url it was fetched for, so a url change (e.g. the
   // table filter) never renders the previous url's data, even for one frame.
   const [state, setState] = useState<PolledState<T>>({ url, data: initial, error: null, loading: true, updatedAt: null })
@@ -49,8 +53,18 @@ export function usePolledFetch<T>(url: string, intervalMs: number, initial: T) {
   }, [url, update])
   const refresh = useCallback(() => refreshWith(), [refreshWith])
 
-  useVisibleInterval(refreshWith, intervalMs, true, { immediate: true, key: url })
+  const polling = enabled && intervalMs > 0
+  useVisibleInterval(refreshWith, intervalMs, polling, { immediate: true, key: url })
 
+  const once = enabled && !(intervalMs > 0)
+  useEffect(() => {
+    if (!once) return
+    const ctrl = new AbortController()
+    void refreshWith(ctrl.signal)
+    return () => ctrl.abort()
+  }, [once, refreshWith])
+
+  if (!enabled) return { data: initialRef.current, loading: false, error: null, errorStatus: undefined, updatedAt: null, refresh }
   if (state.url !== url) return { data: initialRef.current, loading: true, error: null, errorStatus: undefined, updatedAt: null, refresh }
   return { data: state.data, loading: state.loading, error: state.error, errorStatus: state.errorStatus, updatedAt: state.updatedAt, refresh }
 }
