@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { useFleet } from '../hooks/useFleet'
-import { fetchWithTimeout } from '../hooks/useKnightSession'
+import { SESSION_TIMEOUT_MS } from '../hooks/useKnightSession'
 import { useWebSocket, eventKey } from '../hooks/useWebSocket'
 import { useRunning } from '../hooks/useRunning'
 import { countByStatus } from '../lib/running'
@@ -43,10 +43,7 @@ export const SESSION_COST_REFRESH_MS = 2000
 async function fetchSessionCosts(names: string[]): Promise<Record<string, number>> {
   const results = await Promise.allSettled(
     names.map(name =>
-      fetchWithTimeout(`/api/fleet/${encodeURIComponent(name)}/session?type=stats`).then(r => {
-        if (!r || !r.ok) throw new Error('introspect unavailable')
-        return r.json()
-      })
+      apiGet<{ session?: { cost?: number } }>(`/api/fleet/${encodeURIComponent(name)}/session?type=stats`, { timeoutMs: SESSION_TIMEOUT_MS })
     )
   )
   const perKnight: Record<string, number> = {}

@@ -9,8 +9,9 @@ const fleet = vi.hoisted(() => ({
 vi.mock('../hooks/useFleet', () => ({ useFleet: () => fleet.state }))
 
 const pending: Record<string, (r: Response) => void> = {}
-vi.mock('../lib/api', () => ({
-  apiFetch: (url: string) => {
+vi.mock('../lib/api', async () => {
+  const { ApiError } = await vi.importActual<typeof import('../lib/api')>('../lib/api')
+  const apiFetch = (url: string) => {
     const m = url.match(/fleet\/([^/]+)\/session\?type=(\w+)/)
     if (m && m[2] === 'recent') return new Promise<Response>(res => { pending[m[1]] = res })
     if (m && m[2] === 'stats') {
@@ -18,8 +19,15 @@ vi.mock('../lib/api', () => ({
       return Promise.resolve(new Response(JSON.stringify({ knight: m[1], session: { sessionId: 's', userMessages: 1, assistantMessages: 1, totalMessages: n, toolCalls: 1, tokens: { input: 1, output: 1, total: 2 }, cost: 0 }, runtime: { uptime: 1, activeTasks: 0, model: 'm' } }), { status: 200 }))
     }
     return Promise.resolve(new Response('{}', { status: 200 }))
-  },
-}))
+  }
+  // Same contract as the real apiGet: parse JSON, throw ApiError on non-2xx.
+  const apiGet = async (url: string) => {
+    const res = await apiFetch(url) as Response
+    if (!res.ok) throw new ApiError(res.status, `${res.status}`)
+    return res.json()
+  }
+  return { apiFetch, apiGet, ApiError }
+})
 
 const answer = (text: string) => new Response(JSON.stringify({ entries: [{ id: text, parentId: null, type: 'message', role: 'user', text, timestamp: '2026-11-24T10:00:00Z' }] }), { status: 200 })
 

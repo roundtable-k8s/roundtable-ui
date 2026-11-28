@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { TreePine, ChevronRight, ChevronDown, Wrench, MessageSquare, Search, BarChart3, History, ServerOff } from 'lucide-react'
 import { getKnightConfig, buildKnightConfigFromFleet } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
-import { fetchWithTimeout } from '../hooks/useKnightSession'
+import { SESSION_TIMEOUT_MS } from '../hooks/useKnightSession'
+import { apiGet, apiFetch, ApiError } from '../lib/api'
 import type { SessionEntry, SessionTreeNode, SessionHistoryItem, KnightSessionStats } from '../hooks/useKnightSession'
 import { Spinner, ErrorBanner, EmptyState, PageHeader, RefreshButton, StatCard, ProgressBar } from '../components/ui'
 import { formatCost, formatDateTime, formatTimestampOrDate, formatNumber } from '../lib/format'
@@ -11,7 +12,7 @@ import { UntrustedText } from '../components/UntrustedText'
 import { SessionEntryCard } from '../components/SessionEntryCard'
 import { entryTypeIcons } from '../lib/sessionEntries'
 import { sanitizeText } from '../lib/untrusted'
-import { groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession } from '../lib/sessions'
+import { groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession, classifyIntrospectError, introspectErrorMessage, isAbortError } from '../lib/sessions'
 
 // Cap the visual indent so a long, near-linear parent→child chain doesn't
 // march the content off the right edge (and squeeze the timestamp into a wrap).
@@ -160,6 +161,8 @@ export function SessionsPage() {
   }, [])
   // Id of the latest fetchData call; older answers are dropped.
   const fetchSeq = useRef(0)
+  const fetchAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => fetchAbort.current?.abort(), [])
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
 
   // Build dynamic knight config from fleet
@@ -204,8 +207,10 @@ export function SessionsPage() {
     if (linkTarget.current && linkTarget.current.knight !== selectedKnight) linkTarget.current = null
     const target = linkTarget.current ?? { pod: null, runId: null }
     let cancelled = false
-    fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=history`)
-      .then(r => (r && r.ok ? r.json() : null))
+    const controller = new AbortController()
+    const opts = { timeoutMs: SESSION_TIMEOUT_MS, signal: controller.signal }
+    apiGet<{ sessions?: SessionHistoryItem[] }>(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=history`, opts)
+      .catch(e => { if (isAbortError(e)) throw e; return null })
       .then(async d => {
         if (cancelled) return
         const list: SessionHistoryItem[] = d?.sessions || []
@@ -216,7 +221,10 @@ export function SessionsPage() {
         } else if (target.pod) {
           // The linked pod lists no session: ask it directly so a scaled-away
           // pod shows "pod gone" rather than an unrelated live view.
-          const probe = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats&pod=${encodeURIComponent(target.pod)}`)
+          const probe = await apiFetch(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats&pod=${encodeURIComponent(target.pod)}`, opts).catch(e => {
+            if (isAbortError(e)) throw e
+            return null
+          })
           const gone = await podGoneFrom(probe, target.pod)
           if (cancelled) return
           if (gone) setPodGone(gone)
@@ -224,8 +232,8 @@ export function SessionsPage() {
           else setLinkNotice(`No session found for pod ${target.pod}${target.runId ? ` in run ${target.runId}` : ''}; showing the live session.`)
         }
       })
-      .catch(() => { if (!cancelled) setSessions([]) })
-    return () => { cancelled = true }
+      .catch(e => { if (!cancelled && !isAbortError(e)) setSessions([]) })
+    return () => { cancelled = true; controller.abort() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKnight, linkKey])
 
@@ -234,14 +242,17 @@ export function SessionsPage() {
 
     const id = ++fetchSeq.current
     const stale = () => id !== fetchSeq.current
+    fetchAbort.current?.abort()
+    const controller = new AbortController()
+    fetchAbort.current = controller
+    const opts = { timeoutMs: SESSION_TIMEOUT_MS, signal: controller.signal }
     setLoading(true)
     setError(null)
 
     try {
       // Stats reflect the live session only.
       if (!isArchived) {
-        fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats`)
-          .then(r => r && r.ok ? r.json() : null)
+        apiGet<KnightSessionStats>(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=stats`, opts)
           .then(d => {
             if (stale()) return
             if (d) {
@@ -250,15 +261,22 @@ export function SessionsPage() {
               setStats({ knight: selectedKnight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
             }
           })
-          .catch(() => {
-            if (stale()) return
-            setStats({ knight: selectedKnight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
+          .catch(e => {
+            if (stale() || isAbortError(e)) return
+            const kind = classifyIntrospectError(e)
+            if (kind === 'unsupported') {
+              setStats({ knight: selectedKnight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
+            } else {
+              // A transient failure is not "unsupported": show the error instead.
+              setStats(null)
+              setError(introspectErrorMessage(kind))
+            }
           })
       }
 
       // Archived session: replay its persisted entries (timeline/tools views).
       if (isArchived) {
-        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=session&${sessionQuery(selectedSession)}&limit=300`)
+        const res = await apiFetch(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=session&${sessionQuery(selectedSession)}&limit=300`, opts)
         const gone = await podGoneFrom(res, sessionPod(selectedSession))
         if (stale()) return
         if (gone) {
@@ -268,9 +286,11 @@ export function SessionsPage() {
           return
         }
         setPodGone(null)
-        if (!res || !res.ok) {
+        if (!res.ok) {
           setEntries([])
           setArchivedMeta(null)
+          const kind = classifyIntrospectError(new ApiError(res.status, ''))
+          if (kind !== 'unsupported') setError(introspectErrorMessage(kind))
           return
         }
         const data = await res.json()
@@ -282,28 +302,22 @@ export function SessionsPage() {
       }
 
       if (view === 'tree') {
-        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=tree`)
-        if (stale()) return
-        if (!res || !res.ok) {
-          setTreeNodes([])
-          return
-        }
-        const data = await res.json()
+        const data = await apiGet<{ nodes?: SessionTreeNode[] }>(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=tree`, opts)
         if (stale()) return
         setTreeNodes(data.nodes || [])
       } else {
-        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=recent&limit=100`)
-        if (stale()) return
-        if (!res || !res.ok) {
-          setEntries([])
-          return
-        }
-        const data = await res.json()
+        const data = await apiGet<{ entries?: SessionEntry[] }>(`/api/fleet/${encodeURIComponent(selectedKnight)}/session?type=recent&limit=100`, opts)
         if (stale()) return
         setEntries(data.entries || [])
       }
     } catch (e) {
-      if (!stale()) setError(e instanceof Error ? e.message : 'Failed to fetch session data')
+      if (stale() || isAbortError(e)) return
+      const kind = classifyIntrospectError(e)
+      if (kind === 'unsupported') {
+        if (view === 'tree') setTreeNodes([]); else setEntries([])
+      } else {
+        setError(introspectErrorMessage(kind))
+      }
     } finally {
       if (!stale()) setLoading(false)
     }
@@ -317,11 +331,8 @@ export function SessionsPage() {
     const results: Record<string, KnightSessionStats> = {}
     await Promise.all(knights.map(async k => {
       try {
-        const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(k.name)}/session?type=stats`)
-        if (res && res.ok) {
-          const data = await res.json()
-          results[k.name] = { ...data, supported: true }
-        }
+        const data = await apiGet<KnightSessionStats>(`/api/fleet/${encodeURIComponent(k.name)}/session?type=stats`, { timeoutMs: SESSION_TIMEOUT_MS })
+        results[k.name] = { ...data, supported: true }
       } catch {}
     }))
     setAllKnightStats(results)

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession, sessionsLink } from './sessions'
+import { ApiError } from './api'
+import { classifyIntrospectError, isAbortError, groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession, sessionsLink } from './sessions'
 import type { SessionHistoryItem } from '../hooks/useKnightSession'
 
 const item = (id: string, over: Partial<SessionHistoryItem> = {}): SessionHistoryItem =>
@@ -108,5 +109,22 @@ describe('deep links', () => {
     expect(pickTargetSession(list, 'p1', 'r3')?.id).toBe('other')
     expect(pickTargetSession(list, 'p3', 'r1')).toBeNull()
     expect(pickTargetSession(list, null, null)).toBeNull()
+  })
+})
+
+describe('classifyIntrospectError', () => {
+  it.each([
+    [404, 'unsupported'], [504, 'timeout'], [0, 'timeout'],
+    [429, 'unavailable'], [502, 'unavailable'], [503, 'unavailable'],
+    [500, 'failed'], [400, 'failed'],
+  ])('maps status %i to %s', (status, kind) => {
+    expect(classifyIntrospectError(new ApiError(status, 'x'))).toBe(kind)
+  })
+  it('maps a non-API error to failed', () => {
+    expect(classifyIntrospectError(new TypeError('network down'))).toBe('failed')
+  })
+  it('recognises an abort', () => {
+    expect(isAbortError(Object.assign(new Error('a'), { name: 'AbortError' }))).toBe(true)
+    expect(isAbortError(new ApiError(0, 'timeout'))).toBe(false)
   })
 })

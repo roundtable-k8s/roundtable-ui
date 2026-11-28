@@ -16,8 +16,9 @@ let routes: Record<string, () => Response>
 // When set, history requests for galahad wait for it (to simulate a slow first fetch).
 let historyGate: Promise<void> | null = null
 const calls: string[] = []
-vi.mock('../lib/api', () => ({
-  apiFetch: (url: string) => {
+vi.mock('../lib/api', async () => {
+  const { ApiError } = await vi.importActual<typeof import('../lib/api')>('../lib/api')
+  const apiFetch = (url: string) => {
     calls.push(url)
     if (historyGate && url.includes('/galahad/session?type=history')) {
       return historyGate.then(() => new Response(JSON.stringify(history), { status: 200 }))
@@ -26,8 +27,15 @@ vi.mock('../lib/api', () => ({
       if (url.includes(prefix)) return Promise.resolve(make())
     }
     return Promise.resolve(new Response('{}', { status: 200 }))
-  },
-}))
+  }
+  // Same contract as the real apiGet: parse JSON, throw ApiError on non-2xx.
+  const apiGet = async (url: string) => {
+    const res = await apiFetch(url) as Response
+    if (!res.ok) throw new ApiError(res.status, `${res.status}`)
+    return res.json()
+  }
+  return { apiFetch, apiGet, ApiError }
+})
 
 const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status })
 const history = {
@@ -113,6 +121,19 @@ describe('Sessions page: run → pod grouping and pod-gone state (#220)', () => 
     const notice = await screen.findByRole('status', { name: /^(?!Loading)/ })
     expect(notice).toHaveTextContent('Could not reach pod galahad-z to check; showing the live session.')
     expect(screen.queryByText(/No session found/)).toBeNull()
+  })
+
+  it('shows an error, not "unsupported", when stats answer 503', async () => {
+    routes['type=stats'] = () => new Response('upstream down', { status: 503 })
+    renderPage()
+    expect(await screen.findByText(/temporarily unavailable/)).toBeInTheDocument()
+    expect(screen.queryByText(/does not support/i)).toBeNull()
+  })
+
+  it('shows a timeout error when stats answer 504', async () => {
+    routes['type=stats'] = () => new Response('slow', { status: 504 })
+    renderPage()
+    expect(await screen.findByText(/did not answer in time/)).toBeInTheDocument()
   })
 
   it('keeps the user\'s knight choice when switching before the first deep-link fetch resolves', async () => {

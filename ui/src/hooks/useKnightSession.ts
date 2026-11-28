@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from 'react'
-import { apiFetch } from '../lib/api'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { apiGet } from '../lib/api'
+import { classifyIntrospectError, introspectErrorMessage, isAbortError } from '../lib/sessions'
 
 // Matches pi-knight's introspect stats response (src/introspect.ts buildStats)
 export interface KnightSessionStats {
@@ -74,25 +75,6 @@ export interface SessionTreeNode {
 // otherwise the client aborts first and a slow knight looks "unsupported"
 export const SESSION_TIMEOUT_MS = 8000
 
-// Helper to add timeout to fetch requests
-export async function fetchWithTimeout(url: string, timeoutMs = SESSION_TIMEOUT_MS): Promise<Response | null> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  
-  try {
-    // timeoutMs: 0 — this helper's own timer decides, so an AbortError here means "no answer in time"
-    const res = await apiFetch(url, { signal: controller.signal, timeoutMs: 0 })
-    clearTimeout(timeout)
-    return res
-  } catch (e) {
-    clearTimeout(timeout)
-    if ((e as Error).name === 'AbortError') {
-      return null  // timeout - knight doesn't support introspect
-    }
-    throw e
-  }
-}
-
 export function useKnightSession() {
   const [stats, setStats] = useState<KnightSessionStats | null>(null)
   const [recent, setRecent] = useState<SessionEntry[]>([])
@@ -103,79 +85,78 @@ export function useKnightSession() {
   // knight, or a superseded refresh) must not overwrite newer state.
   const latest = useRef({ stats: 0, recent: 0, tree: 0 })
 
+  // In-flight request per kind, so a newer request or a knight change cancels
+  // the older one (the API then stops its NATS fan-out for it).
+  const controllers = useRef<Partial<Record<'stats' | 'recent' | 'tree', AbortController>>>({})
+  const begin = useCallback((kind: 'stats' | 'recent' | 'tree') => {
+    controllers.current[kind]?.abort()
+    const c = new AbortController()
+    controllers.current[kind] = c
+    return c.signal
+  }, [])
+  useEffect(() => () => {
+    for (const c of Object.values(controllers.current)) c?.abort()
+  }, [])
+
   const fetchStats = useCallback(async (knight: string, timeoutMs = SESSION_TIMEOUT_MS) => {
     const id = ++latest.current.stats
     const stale = () => id !== latest.current.stats
+    const signal = begin('stats')
     setLoading(true)
     setError(null)
     try {
-      const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(knight)}/session?type=stats`, timeoutMs)
-      if (!res) {
-        // Knight doesn't support introspect - not an error
-        if (stale()) return
-        setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
-        return
-      }
-      if (!res.ok) {
-        if (stale()) return
-        setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
-        return
-      }
-      const data = await res.json()
+      const data = await apiGet<KnightSessionStats>(`/api/fleet/${encodeURIComponent(knight)}/session?type=stats`, { timeoutMs, signal })
       if (stale()) return
       setStats({ ...data, supported: true })
     } catch (e) {
-      // Graceful failure - return null instead of throwing
-      if (stale()) return
-      setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
-      setError(null)  // Don't show error for unsupported knights
+      if (stale() || isAbortError(e)) return
+      const kind = classifyIntrospectError(e)
+      if (kind === 'unsupported') {
+        setStats({ knight, supported: false, session: null, runtime: { uptime: 0, activeTasks: 0, model: '' } })
+      } else {
+        // A transient failure is not "unsupported": keep supported unset and show the error.
+        setError(introspectErrorMessage(kind))
+      }
     } finally {
       if (!stale()) setLoading(false)
     }
-  }, [])
+  }, [begin])
 
   const fetchRecent = useCallback(async (knight: string, limit = 20, timeoutMs = SESSION_TIMEOUT_MS) => {
     const id = ++latest.current.recent
     const stale = () => id !== latest.current.recent
+    const signal = begin('recent')
     try {
-      const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(knight)}/session?type=recent&limit=${limit}`, timeoutMs)
-      if (!res || !res.ok) {
-        if (stale()) return
-        setRecent([])
-        return
-      }
-      const data = await res.json()
+      const data = await apiGet<{ entries?: SessionEntry[] }>(`/api/fleet/${encodeURIComponent(knight)}/session?type=recent&limit=${limit}`, { timeoutMs, signal })
       if (stale()) return
-      setRecent(data.entries || [])
+      setRecent(data?.entries || [])
     } catch (e) {
-      if (stale()) return
+      if (stale() || isAbortError(e)) return
       setRecent([])
-      setError(null)
+      const kind = classifyIntrospectError(e)
+      if (kind !== 'unsupported') setError(introspectErrorMessage(kind))
     }
-  }, [])
+  }, [begin])
 
   const fetchTree = useCallback(async (knight: string, timeoutMs = SESSION_TIMEOUT_MS) => {
     const id = ++latest.current.tree
     const stale = () => id !== latest.current.tree
+    const signal = begin('tree')
     try {
-      const res = await fetchWithTimeout(`/api/fleet/${encodeURIComponent(knight)}/session?type=tree`, timeoutMs)
-      if (!res || !res.ok) {
-        if (stale()) return
-        setTree([])
-        return
-      }
-      const data = await res.json()
+      const data = await apiGet<{ nodes?: SessionTreeNode[] }>(`/api/fleet/${encodeURIComponent(knight)}/session?type=tree`, { timeoutMs, signal })
       if (stale()) return
-      setTree(data.nodes || [])
+      setTree(data?.nodes || [])
     } catch (e) {
-      if (stale()) return
+      if (stale() || isAbortError(e)) return
       setTree([])
-      setError(null)
+      const kind = classifyIntrospectError(e)
+      if (kind !== 'unsupported') setError(introspectErrorMessage(kind))
     }
-  }, [])
+  }, [begin])
 
   // Drop the current knight's data (and invalidate in-flight requests) when the knight changes.
   const reset = useCallback(() => {
+    for (const c of Object.values(controllers.current)) c?.abort()
     latest.current.stats++
     latest.current.recent++
     latest.current.tree++
