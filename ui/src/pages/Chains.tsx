@@ -377,18 +377,24 @@ function StepKVOutput({ chainName, stepName }: { chainName: string; stepName: st
   const [data, setData] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
     setLoading(true)
     setError('')
-    apiGet<Record<string, unknown>>(`/api/chains/${chainName}/steps/${stepName}/output`)
+    setNotFound(false)
+    apiGet<Record<string, unknown>>(`/api/chains/${encodeURIComponent(chainName)}/steps/${encodeURIComponent(stepName)}/output`)
       .then(d => setData(d))
-      .catch(e => setError(e.message))
+      .catch(e => {
+        if ((e as { status?: number })?.status === 404) setNotFound(true)
+        else setError(e instanceof Error ? e.message : String(e))
+      })
       .finally(() => setLoading(false))
   }, [chainName, stepName])
 
   if (loading) return <p className="text-xs text-gray-500 mt-2">Loading full output from KV...</p>
-  if (error) return null // No KV data yet, that's fine
+  if (notFound) return <p className="text-xs text-gray-500 mt-2">Full output not available</p>
+  if (error) return <p role="alert" className="text-xs text-red-400 mt-2">Could not load full output: {error}</p>
   if (!data) return null
 
   const output = (data.output as string) || ''

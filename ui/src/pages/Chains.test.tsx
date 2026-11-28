@@ -646,3 +646,35 @@ describe('ChainsPage truncated list', () => {
     expect(screen.queryByTestId('chains-truncated')).toBeNull()
   })
 })
+
+describe('ChainsPage step KV output', () => {
+  const kvChain = () => {
+    const c = JSON.parse(JSON.stringify(apiCost))
+    c.name = '7day-scan'
+    c.steps[0].name = 'threat_scan'
+    return c
+  }
+
+  it('requests the output of a step with an underscore under an encoded URL', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([kvChain()]) : Promise.resolve({ output: 'full text', duration: '1s' }))
+    renderPage('/chains?chain=7day-scan')
+    fireEvent.click(await screen.findByRole('button', { name: /threat_scan/ }))
+    expect(await screen.findByText('full text')).toBeInTheDocument()
+    expect(mockApiGet.mock.calls.map(c => c[0])).toContain('/api/chains/7day-scan/steps/threat_scan/output')
+  })
+
+  it('shows a message for non-404 errors and "not available" for 404', async () => {
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([kvChain()]) : Promise.reject(Object.assign(new Error('400 Bad Request'), { status: 400 })))
+    const { unmount } = renderPage('/chains?chain=7day-scan')
+    fireEvent.click(await screen.findByRole('button', { name: /threat_scan/ }))
+    expect(await screen.findByText(/Could not load full output: 400 Bad Request/)).toBeInTheDocument()
+    unmount()
+    mockApiGet.mockImplementation((url: string) =>
+      url === CHAINS_LIST_URL ? Promise.resolve([kvChain()]) : Promise.reject(Object.assign(new Error('404'), { status: 404 })))
+    renderPage('/chains?chain=7day-scan')
+    fireEvent.click(await screen.findByRole('button', { name: /threat_scan/ }))
+    expect(await screen.findByText('Full output not available')).toBeInTheDocument()
+  })
+})

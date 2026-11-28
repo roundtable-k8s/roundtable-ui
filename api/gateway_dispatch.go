@@ -52,7 +52,7 @@ func taskDispatchHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid model", http.StatusBadRequest)
 			return
 		}
-		if req.Namespace != "" && !validKnightName.MatchString(req.Namespace) {
+		if req.Namespace != "" && !validResourceName.MatchString(req.Namespace) {
 			jsonError(w, "Invalid namespace", http.StatusBadRequest)
 			return
 		}
@@ -101,7 +101,7 @@ func chainRunHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		if req.Namespace != "" && !validKnightName.MatchString(req.Namespace) {
+		if req.Namespace != "" && !validResourceName.MatchString(req.Namespace) {
 			jsonError(w, "Invalid namespace", http.StatusBadRequest)
 			return
 		}
@@ -122,7 +122,7 @@ func chainRunHandler(g *gatewayClient) http.HandlerFunc {
 func chainRunStatusHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		v := mux.Vars(r)
-		if !validKnightName.MatchString(v["namespace"]) || !validTaskID.MatchString(v["run"]) {
+		if !validResourceName.MatchString(v["namespace"]) || !validTaskID.MatchString(v["run"]) {
 			jsonError(w, "Invalid namespace or run", http.StatusBadRequest)
 			return
 		}
@@ -138,7 +138,7 @@ const maxCancelReasonLen = 500
 func chainRunCancelHandler(g *gatewayClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		v := mux.Vars(r)
-		if !validKnightName.MatchString(v["namespace"]) || !validTaskID.MatchString(v["run"]) {
+		if !validResourceName.MatchString(v["namespace"]) || !validTaskID.MatchString(v["run"]) {
 			jsonError(w, "Invalid namespace or run", http.StatusBadRequest)
 			return
 		}

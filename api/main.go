@@ -48,6 +48,15 @@ import (
 // validKnightName matches alphanumeric knight names (prevents NATS injection)
 var validKnightName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]{0,62}$`)
 
+// validResourceName matches names of Kubernetes-backed resources (chains,
+// missions, triggers, RoundTables, namespaces) used as path parameters. It is
+// a case-insensitive DNS-1123 label, so a leading digit is allowed.
+var validResourceName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$`)
+
+// validStepName matches chain step names (free text in the CRD, commonly with
+// underscores). No dots, so the KV key "<chain>.<step>" stays unambiguous.
+var validStepName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$`)
+
 var (
 	nc        *nats.Conn
 	js        jetstream.JetStream
@@ -2031,7 +2040,7 @@ func chainDetailHandler(namespace string, running *runningRegistry) http.Handler
 
 		vars := mux.Vars(r)
 		name := vars["name"]
-		if !validKnightName.MatchString(name) {
+		if !validResourceName.MatchString(name) {
 			jsonError(w, "Invalid chain name", http.StatusBadRequest)
 			return
 		}
@@ -2381,7 +2390,7 @@ func missionDetailHandler(namespace string) http.HandlerFunc {
 
 		vars := mux.Vars(r)
 		name := vars["name"]
-		if !validKnightName.MatchString(name) {
+		if !validResourceName.MatchString(name) {
 			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
@@ -2515,7 +2524,7 @@ func missionDeleteHandler(namespace string) http.HandlerFunc {
 
 		vars := mux.Vars(r)
 		name := vars["name"]
-		if !validKnightName.MatchString(name) {
+		if !validResourceName.MatchString(name) {
 			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
@@ -2718,7 +2727,7 @@ func roundTableDetailHandler(namespace string) http.HandlerFunc {
 
 		vars := mux.Vars(r)
 		name := vars["name"]
-		if !validKnightName.MatchString(name) {
+		if !validResourceName.MatchString(name) {
 			jsonError(w, "Invalid roundtable name", http.StatusBadRequest)
 			return
 		}
@@ -2815,7 +2824,7 @@ func lookupKVBucket(ctx context.Context, bucket string) (kv jetstream.KeyValue, 
 func missionResultsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["name"]
-		if !validKnightName.MatchString(name) {
+		if !validResourceName.MatchString(name) {
 			jsonError(w, "Invalid mission name", http.StatusBadRequest)
 			return
 		}
@@ -2848,7 +2857,7 @@ func chainStepOutputHandler() http.HandlerFunc {
 		vars := mux.Vars(r)
 		name := vars["name"]
 		step := vars["step"]
-		if !validKnightName.MatchString(name) || !validKnightName.MatchString(step) {
+		if !validResourceName.MatchString(name) || !validStepName.MatchString(step) {
 			jsonError(w, "Invalid name", http.StatusBadRequest)
 			return
 		}

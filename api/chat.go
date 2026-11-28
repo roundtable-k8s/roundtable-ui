@@ -53,7 +53,7 @@ func chatSendHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid model", http.StatusBadRequest)
 			return
 		}
-		if req.Namespace != "" && !validKnightName.MatchString(req.Namespace) {
+		if req.Namespace != "" && !validResourceName.MatchString(req.Namespace) {
 			jsonError(w, "Invalid namespace", http.StatusBadRequest)
 			return
 		}
