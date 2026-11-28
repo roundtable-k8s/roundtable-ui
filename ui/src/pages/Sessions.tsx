@@ -8,26 +8,10 @@ import type { SessionEntry, SessionTreeNode, SessionHistoryItem, KnightSessionSt
 import { Spinner, ErrorBanner, EmptyState, PageHeader, RefreshButton, StatCard, ProgressBar } from '../components/ui'
 import { formatCost, formatDateTime, formatTimestampOrDate, formatNumber } from '../lib/format'
 import { UntrustedText } from '../components/UntrustedText'
+import { SessionEntryCard } from '../components/SessionEntryCard'
+import { entryTypeIcons } from '../lib/sessionEntries'
 import { sanitizeText } from '../lib/untrusted'
 import { groupSessions, groupLabel, podGoneFrom, parseSessionTarget, pickTargetSession } from '../lib/sessions'
-
-const entryTypeIcons: Record<string, string> = {
-  user: '📨',
-  assistant: '🤖',
-  tool_use: '🔧',
-  tool_result: '📋',
-  thinking: '🧠',
-  compaction: '📦',
-}
-
-const entryTypeColors: Record<string, string> = {
-  user: 'border-blue-500/30 bg-blue-500/5',
-  assistant: 'border-green-500/30 bg-green-500/5',
-  tool_use: 'border-purple-500/30 bg-purple-500/5',
-  tool_result: 'border-amber-500/30 bg-amber-500/5',
-  thinking: 'border-gray-500/30 bg-gray-500/5',
-  compaction: 'border-red-500/30 bg-red-500/5',
-}
 
 // Cap the visual indent so a long, near-linear parent→child chain doesn't
 // march the content off the right edge (and squeeze the timestamp into a wrap).
@@ -120,83 +104,8 @@ export function TreeNodeView({ node, depth = 0 }: { node: SessionTreeNode & { ch
   )
 }
 
-// Message entries carry a `role` but a shared `type` of "message"; resolve a
-// legible icon/color/label from the role so they don't all render as "message".
-function roleIcon(role?: string): string {
-  return role === 'user' ? '📨' : role === 'assistant' ? '🤖' : '💬'
-}
-
-function entryIcon(entry: SessionEntry): string {
-  if (entry.type === 'message') return roleIcon(entry.role)
-  return entryTypeIcons[entry.type] || '●'
-}
-
-function entryColor(entry: SessionEntry): string {
-  if (entry.type === 'message') {
-    return entry.role === 'user' ? entryTypeColors.user
-      : entry.role === 'assistant' ? entryTypeColors.assistant
-      : 'border-gray-500/30 bg-gray-500/5'
-  }
-  return entryTypeColors[entry.type] || 'border-gray-500/30 bg-gray-500/5'
-}
-
-// Never collapse to the bare wire type ("message"); prefer real text, then a
-// role/tool descriptor. Returns whether the label is a placeholder so the UI
-// can render it muted.
-function entryLabel(entry: SessionEntry): { text: string; placeholder: boolean } {
-  const text = entry.text?.trim()
-  if (text) return { text, placeholder: false }
-  if (entry.type === 'message' && entry.role) {
-    return { text: `${entry.role} message`, placeholder: true }
-  }
-  if (entry.toolName) return { text: entry.toolName, placeholder: false }
-  return { text: entry.type, placeholder: true }
-}
-
 export function ToolCallCard({ entry }: { entry: SessionEntry }) {
-  const [expanded, setExpanded] = useState(false)
-  const label = entryLabel(entry)
-
-  return (
-    <div
-      className={`border rounded-lg p-3 cursor-pointer transition-colors ${entryColor(entry)}`}
-      onClick={() => setExpanded(e => !e)}
-    >
-      <div className="flex items-center gap-2 text-sm">
-        <span className="shrink-0">{entryIcon(entry)}</span>
-        {entry.toolName && (
-          <span className="font-mono text-purple-400 text-xs bg-purple-500/10 px-1.5 py-0.5 rounded shrink-0">{entry.toolName}</span>
-        )}
-        <span className={`truncate flex-1 min-w-0 ${label.placeholder ? 'text-gray-500 italic' : 'text-gray-400'}`}>{sanitizeText(label.text)}</span>
-        {entry.cost != null && entry.cost > 0 && (
-          <span className="text-roundtable-gold text-xs shrink-0">{formatCost(entry.cost)}</span>
-        )}
-        {entry.tokens && (
-          <span className="text-gray-600 text-xs shrink-0">{entry.tokens.input + entry.tokens.output}t</span>
-        )}
-        <span className="text-gray-600 text-xs shrink-0 whitespace-nowrap tabular-nums">{formatTimestampOrDate(entry.timestamp)}</span>
-      </div>
-      {expanded && (
-        <div className="mt-2 space-y-2 border-t border-roundtable-steel/30 pt-2">
-          {entry.input && (
-            <div>
-              <span className="text-[10px] text-gray-500 uppercase">Input</span>
-              <UntrustedText text={entry.input} className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-auto mt-0.5" />
-            </div>
-          )}
-          {entry.output && (
-            <div>
-              <span className="text-[10px] text-gray-500 uppercase">Output</span>
-              <UntrustedText text={entry.output} className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-auto mt-0.5" />
-            </div>
-          )}
-          {entry.text && !entry.input && !entry.output && (
-            <UntrustedText text={entry.text} className="text-xs text-gray-400 whitespace-pre-wrap max-h-64 overflow-auto" />
-          )}
-        </div>
-      )}
-    </div>
-  )
+  return <SessionEntryCard entry={entry} density="page" />
 }
 
 export function SessionsPage() {
