@@ -12,7 +12,7 @@ import { useWebSocket, eventKey } from '../hooks/useWebSocket'
 import { useRunning } from '../hooks/useRunning'
 import { countByStatus } from '../lib/running'
 import { getKnightConfig } from '../lib/knights'
-import { parseEvent } from '../lib/events'
+import { parseEvent, eventListKeys, uniqueKeys } from '../lib/events'
 import { PageHeader, StatCard, PhaseBadge, ProgressBar, EmptyState, ErrorBanner, Spinner } from '../components/ui'
 import { FirstRun } from '../components/FirstRun'
 import { formatCost, formatDay, formatTimestamp, until } from '../lib/format'
@@ -422,18 +422,18 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
             </Link>
           </div>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
-            {events.slice(0, 10).map((e, i) => {
+            {(() => { const recent = events.slice(0, 10); const keys = eventListKeys(recent); return recent.map((e, i) => {
               const { knight, domain } = parseEvent(e)
               const cfg = knight ? getKnightConfig(knight) : null
               return (
-                <div key={i} className="flex items-center gap-2 text-xs py-1">
+                <div key={keys[i]} className="flex items-center gap-2 text-xs py-1">
                   <span>{e.type === 'task' ? '📤' : '📥'}</span>
                   <span>{cfg?.emoji || '🤖'}</span>
                   <span className="text-gray-400 truncate flex-1">{knight || domain || e.type}</span>
                   <span className="text-gray-600">{formatTimestamp(e.timestamp)}</span>
                 </div>
               )
-            })}
+            }) })()}
             {events.length === 0 && (
               <EmptyState title="Waiting for activity..." />
             )}
@@ -625,10 +625,10 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                       </tr>
                     </thead>
                     <tbody>
-                      {costPanelData.topTasks.map((task, i) => {
+                      {(() => { const taskKeys = uniqueKeys(costPanelData.topTasks.map(t => `${t.knight}:${t.taskId}`)); return costPanelData.topTasks.map((task, i) => {
                         const cfg = getKnightConfig(task.knight)
                         return (
-                          <tr key={i} className="border-b border-roundtable-steel/30 last:border-0">
+                          <tr key={taskKeys[i]} className="border-b border-roundtable-steel/30 last:border-0">
                             <td className="py-2">
                               <div className="flex items-center gap-2">
                                 <span className={cfg.color}>{cfg.emoji}</span>
@@ -651,7 +651,7 @@ export function DashboardPage({ defaultCostExpanded = false }: { defaultCostExpa
                             </td>
                           </tr>
                         )
-                      })}
+                      }) })()}
                     </tbody>
                   </table>
                 </div>

@@ -45,6 +45,7 @@ function useWebSocketConnection() {
   const [events, setEvents] = useState<NatsEvent[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectDelay = useRef(RECONNECT_DELAY_MS)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -63,6 +64,7 @@ function useWebSocketConnection() {
     apiGet<{ results?: HistoryResult[] }>('/api/tasks')
       .then((data) => {
         if (!mountedRef.current) return
+        setHistoryError(null)
         const historical: NatsEvent[] = (data.results || [])
           .map((r: HistoryResult) => ({
             type: (r.type || 'result') as NatsEvent['type'],
@@ -90,7 +92,10 @@ function useWebSocketConnection() {
           })
         }
       })
-      .catch(() => {}) // silently fail — WS will still work
+      .catch((e: unknown) => {
+        // The WS still works; surface the failure so an empty feed isn't read as idle.
+        if (mountedRef.current) setHistoryError(e instanceof Error ? e.message : 'request failed')
+      })
   }, [])
 
   const connect = useCallback(() => {
@@ -207,7 +212,7 @@ function useWebSocketConnection() {
     return true
   }, [])
 
-  return { events, connected, error, clearEvents, subscribeTopic, send }
+  return { events, connected, error, historyError, clearEvents, subscribeTopic, send }
 }
 
 type WebSocketState = ReturnType<typeof useWebSocketConnection>

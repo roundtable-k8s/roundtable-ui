@@ -4,7 +4,7 @@ import { useWebSocket, type NatsEvent } from '../hooks/useWebSocket'
 import { useFleet } from '../hooks/useFleet'
 import type { Knight } from '../hooks/useFleet'
 import { getKnightConfig, knightNameForDomain } from '../lib/knights'
-import { parseEvent, parseEventData } from '../lib/events'
+import { parseEvent, parseEventData, eventListKeys, displayText, resultFailureReason } from '../lib/events'
 import { FleetGraph } from '../components/FleetGraph'
 import { KnightDetailDrawer } from '../components/KnightDetailDrawer'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
@@ -12,7 +12,7 @@ import { PageHeader, StatCard, EmptyState, ErrorBanner } from '../components/ui'
 import { formatCost, formatTimestamp } from '../lib/format'
 
 export function LivePage() {
-  const { events, connected } = useWebSocket()
+  const { events, connected, error: wsError, historyError } = useWebSocket()
   const { knights: fleetKnights, error: fleetError } = useFleet()
   const [filterKnight, setFilterKnight] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
@@ -82,8 +82,9 @@ export function LivePage() {
     })
   }, [events, filterKnight, filterType, filterDomain])
 
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const recentEvents = filteredEvents.slice(0, 50)
+  const recentKeys = eventListKeys(recentEvents)
 
   return (
     <div>
@@ -97,7 +98,7 @@ export function LivePage() {
         {connected ? (
           <><Wifi className="w-4 h-4 text-green-400" /><span className="text-green-400 text-sm">Connected</span></>
         ) : (
-          <><WifiOff className="w-4 h-4 text-red-400" /><span className="text-red-400 text-sm">Disconnected</span></>
+          <><WifiOff className="w-4 h-4 text-red-400" /><span className="text-red-400 text-sm">Disconnected</span>{wsError && <span className="text-red-400/80 text-xs">({wsError})</span>}</>
         )}
         <span className="text-gray-500 text-sm">({filteredEvents.length} events)</span>
       </PageHeader>
@@ -175,7 +176,7 @@ export function LivePage() {
           const failures = filteredEvents.filter(e => {
             if (e.type !== 'result') return false
             const d = parseEventData(e.data)
-            return d.success === false
+            return resultFailureReason(d) !== null
           }).length
           const totalCost = filteredEvents.reduce((sum, e) => {
             if (e.type !== 'result') return sum
@@ -194,13 +195,18 @@ export function LivePage() {
       {/* Recent messages log */}
       <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-4">
         <h3 className="text-sm font-medium text-gray-400 mb-3">Recent Messages</h3>
+        {historyError && (
+          <div className="mb-3">
+            <ErrorBanner>Could not load message history: {historyError}</ErrorBanner>
+          </div>
+        )}
         {recentEvents.length === 0 ? (
-          <EmptyState title="Waiting for messages…" />
+          <EmptyState title={historyError ? 'No messages loaded' : 'Waiting for messages…'} />
         ) : (
           <div className="space-y-2">
             {recentEvents.map((event, i) => (
-              <EventCard key={i} event={event} index={i}
-                expanded={expandedId === i} onToggle={() => setExpandedId(expandedId === i ? null : i)}
+              <EventCard key={recentKeys[i]} event={event} index={i}
+                expanded={expandedId === recentKeys[i]} onToggle={() => setExpandedId(expandedId === recentKeys[i] ? null : recentKeys[i])}
                 onOpenActivity={(taskId, knight) => setActivityTask({ taskId, knight })} />
             ))}
           </div>
@@ -229,7 +235,7 @@ function EventCard({ event, expanded, onToggle, onOpenActivity }: {
   const { knight, data, taskId } = parseEvent(event)
   const cfg = knight ? getKnightConfig(knight) : null
   const isTask = event.type === 'task'
-  const taskText = (data.task as string) || (data.result as string) || (data.summary as string) || ''
+  const taskText = displayText(data.task || data.result || data.summary)
   const success = data.success as boolean | undefined
   const cost = typeof data.cost === 'number' ? data.cost : undefined
   // pi-knight publishes duration_ms and tool_calls

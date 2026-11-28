@@ -25,10 +25,49 @@ export interface ResultData {
 
 /** Parse event payload, which may arrive as a JSON string or an object. */
 export function parseEventData(data: unknown): Record<string, unknown> {
+  let v: unknown = data
   if (typeof data === 'string') {
-    try { return JSON.parse(data) } catch { return { raw: data } }
+    try { v = JSON.parse(data) } catch { return { raw: data } }
+    // A string that parses to a non-object ("null", "12", '"x"') is not a payload.
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return { raw: data }
   }
-  return (data as Record<string, unknown>) || {}
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return {}
+  return v as Record<string, unknown>
+}
+
+/** Stable identity of an event (subject + timestamp), same as the feed's dedup key. */
+function identity(e: NatsEvent): string {
+  return `${e.subject}:${e.timestamp}`
+}
+
+/**
+ * React keys for a list: the given base keys, suffixed with the occurrence
+ * number when two entries share one, so a key follows its item when new
+ * entries are prepended.
+ */
+export function uniqueKeys(bases: string[]): string[] {
+  const seen = new Map<string, number>()
+  return bases.map((b) => {
+    const n = seen.get(b) ?? 0
+    seen.set(b, n + 1)
+    return n === 0 ? b : `${b}#${n}`
+  })
+}
+
+/** Stable, unique React keys for a list of events. */
+export function eventListKeys(events: NatsEvent[]): string[] {
+  return uniqueKeys(events.map(identity))
+}
+
+/** Render any payload field as bounded text: strings as-is, others as JSON. */
+export function displayText(v: unknown, max = 300): string {
+  if (v === undefined || v === null) return ''
+  let text: string
+  if (typeof v === 'string') text = v
+  else {
+    try { text = JSON.stringify(v) ?? String(v) } catch { text = String(v) }
+  }
+  return text.length > max ? text.slice(0, max) + '…' : text
 }
 
 export interface ParsedEvent {
