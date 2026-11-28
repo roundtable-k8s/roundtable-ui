@@ -1,28 +1,7 @@
 /** Chat with a knight through the gateway proxy (/api/chat). */
 
-/** Usage a gateway task record carries; each field is absent when the gateway did not report it. */
-export interface ChatUsage {
-  /** USD; notional (API-equivalent) when billing is "subscription". */
-  cost?: number
-  billing?: string
-  durationMs?: number
-  tokens?: { input: number; output: number }
-  turns?: number
-  toolCalls?: number
-  usageLimited?: boolean
-}
-
-/** Task record from the gateway; usage appears when it carries it. */
-export interface ChatTask extends ChatUsage {
-  taskId: string
-  runId?: string
-  status?: string
-  output?: string
-  error?: string
-  model?: string
-  /** Trace ID of the gateway's server span; the UI links it when a trace URL is configured. */
-  traceId?: string
-}
+export type { GatewayUsage as ChatUsage, GatewayTask as ChatTask } from './gatewayTask'
+import type { GatewayUsage as ChatUsage, GatewayTask as ChatTask } from './gatewayTask'
 
 export interface ChatTurn extends ChatUsage {
   id: number
@@ -35,8 +14,7 @@ export interface ChatTurn extends ChatUsage {
   traceId?: string
 }
 
-export const isFinalStatus = (status: string | undefined) =>
-  status === 'succeeded' || status === 'failed'
+export { isFinalStatus } from './gatewayTask'
 
 export interface ChatKnight {
   name: string

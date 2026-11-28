@@ -1,54 +1,23 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Scroll, Clock } from 'lucide-react'
-import { apiGet, apiPost } from '../lib/api'
+import { apiPost } from '../lib/api'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { SubmissionKey } from '../lib/submissionKey'
 import { getKnightConfig } from '../lib/knights'
 import { useFleet } from '../hooks/useFleet'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useTableFilter } from '../hooks/useTableFilter'
-import { useVisibleInterval } from '../hooks/useVisibleInterval'
+import { useTaskPoller } from '../hooks/useTaskPoller'
+import { isFinalStatus, type GatewayTask, type PullRequestRef } from '../lib/gatewayTask'
 import { taskRows, type TableInfo } from '../lib/tables'
 import { useToast } from '../components/Toast'
 import { TraceLink } from '../components/TraceLink'
 import { PageHeader, EmptyState, ErrorBanner, TableBadge, Badge } from '../components/ui'
 import type { Tone } from '../lib/tone'
-import { formatTimestampOrDate } from '../lib/format'
+import { formatTimestampOrDate, formatSecondsLadder } from '../lib/format'
 import { sanitizeText, safeUrl } from '../lib/untrusted'
 import { CostTag } from '../components/CostTag'
 import { tokensText } from '../lib/cost'
-
-const POLL_MS = 2000
-
-/** Task record returned by the gateway (POST /v1/knights/{name}/invoke, GET /v1/tasks/{id}). */
-interface GatewayTask {
-  taskId: string
-  runId?: string
-  roundTable?: string
-  status?: string
-  output?: string
-  error?: string
-  traceId?: string
-  usageLimited?: boolean
-  model?: string
-  requestedModel?: string
-  cost?: number
-  billing?: string
-  durationMs?: number
-  tokens?: { input?: number; output?: number }
-  turns?: number
-  toolCalls?: number
-  prs?: PullRequestRef[]
-  verdict?: string
-}
-
-/** A pull request the task opened or touched (gateway PRRef). */
-interface PullRequestRef {
-  repo?: string
-  number?: number
-  url?: string
-  action?: string
-}
 
 type UsageFields = Pick<GatewayTask, 'usageLimited' | 'model' | 'requestedModel' | 'cost' | 'billing' | 'durationMs' | 'tokens' | 'turns' | 'toolCalls' | 'prs' | 'verdict'>
 
@@ -65,8 +34,6 @@ interface DispatchedTask extends UsageFields {
   /** Set after repeated failed status polls; the task is no longer polled. */
   unavailable?: boolean
 }
-
-const MAX_POLL_FAILURES = 5
 
 const STORAGE_KEY = 'roundtable.dispatch.recent.v1'
 const MAX_STORED = 20
@@ -104,8 +71,6 @@ function saveStored(results: DispatchedTask[]) {
   }
 }
 
-const isFinal = (status: string) => status === 'succeeded' || status === 'failed'
-
 function statusTone(status: string): Tone {
   if (status === 'succeeded') return 'green'
   if (status === 'failed') return 'red'
@@ -135,13 +100,6 @@ function mergeTask(r: DispatchedTask, t: GatewayTask): DispatchedTask {
   }
 }
 
-function durationText(ms: number): string {
-  const s = Math.round(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`
-}
-
 function prLabel(pr: PullRequestRef): string {
   const ref = pr.number ? (pr.repo ? `${pr.repo}#${pr.number}` : `#${pr.number}`) : pr.repo || 'pull request'
   return pr.action ? `${ref} (${pr.action})` : ref
@@ -161,7 +119,7 @@ function UsageLine({ r }: { r: DispatchedTask }) {
   if (r.tokens) parts.push(<span key="tokens">{tokensText({ input: r.tokens.input ?? 0, output: r.tokens.output ?? 0 })}</span>)
   if (r.turns) parts.push(<span key="turns">{r.turns} {r.turns === 1 ? 'turn' : 'turns'}</span>)
   if (r.toolCalls !== undefined && r.toolCalls !== null) parts.push(<span key="tools">{r.toolCalls} tool {r.toolCalls === 1 ? 'call' : 'calls'}</span>)
-  if (r.durationMs) parts.push(<span key="dur">{durationText(r.durationMs)}</span>)
+  if (r.durationMs) parts.push(<span key="dur">{formatSecondsLadder(r.durationMs / 1000)}</span>)
   if (parts.length === 0) return null
   return (
     <div data-testid="dispatch-usage" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
@@ -219,31 +177,15 @@ export function TasksPage() {
   const domain = selected?.domain ?? ''
   const rows = useMemo(() => taskRows(events, tables, tableFilter), [events, tables, tableFilter])
 
-  // Consecutive failed polls per task id
-  const failures = useRef(new Map<string, number>())
-  // Poll dispatched tasks through the gateway until they finish
-  const pendingIds = results.filter((r) => !isFinal(r.status) && !r.unavailable).map((r) => r.taskId).join(',')
-  useVisibleInterval(
-    (signal) =>
-      Promise.all(pendingIds.split(',').map((id) =>
-        apiGet<GatewayTask>(`/api/tasks/dispatch/${encodeURIComponent(id)}`, { signal })
-          .then((t) => {
-            failures.current.delete(id)
-            setResults((prev) => prev.map((r) => (r.taskId === id ? mergeTask(r, t) : r)))
-          })
-          .catch(() => {
-            if (signal.aborted) return
-            const n = (failures.current.get(id) ?? 0) + 1
-            failures.current.set(id, n)
-            if (n >= MAX_POLL_FAILURES) {
-              setResults((prev) => prev.map((r) => (r.taskId === id ? { ...r, unavailable: true } : r)))
-            }
-          }),
-      )),
-    POLL_MS,
-    !!pendingIds,
-    { key: pendingIds },
-  )
+  // Poll dispatched tasks through the gateway until they finish; five failed polls mark a row unavailable
+  useTaskPoller<DispatchedTask, GatewayTask>({
+    items: results,
+    idOf: (r) => r.taskId,
+    isDone: (r) => isFinalStatus(r.status) || !!r.unavailable,
+    fetchUrl: (r) => `/api/tasks/dispatch/${encodeURIComponent(r.taskId)}`,
+    onUpdate: (id, t) => setResults((prev) => prev.map((r) => (r.taskId === id ? mergeTask(r, t) : r))),
+    onGiveUp: (id) => setResults((prev) => prev.map((r) => (r.taskId === id ? { ...r, unavailable: true } : r))),
+  })
 
   const dispatch = async () => {
     if (!task.trim() || !selected || dispatching) return
