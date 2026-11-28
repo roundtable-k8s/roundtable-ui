@@ -27,6 +27,16 @@ var (
 		Help: "WebSocket connections rejected because WS_MAX_CONNECTIONS was reached.",
 	})
 
+	sseStreams = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "roundtable_ui_sse_streams",
+		Help: "Open relayed SSE streams.",
+	})
+
+	sseRejectedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "roundtable_ui_sse_rejected_total",
+		Help: "SSE relays rejected because SSE_MAX_STREAMS was reached.",
+	})
+
 	httpRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "roundtable_ui_http_request_duration_seconds",
 		Help:    "HTTP request latency, by route template and method.",

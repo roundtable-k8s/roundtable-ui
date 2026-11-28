@@ -324,8 +324,9 @@ func routeMethods(r *mux.Router) []string {
 // routes are skipped because HEAD would open and hold the upstream stream with
 // the body discarded, so they answer 405 like any unlisted method.
 var headSkipped = map[string]bool{
-	"/api/chat/tasks/{taskId}/events": true,
-	"/api/fleet/{knight}/logs":        true,
+	"/api/chat/tasks/{taskId}/events":           true,
+	"/api/chains/runs/{namespace}/{run}/events": true,
+	"/api/fleet/{knight}/logs":                  true,
 }
 
 // addHeadRoutes answers HEAD on every GET-only route with the GET handler,
@@ -436,6 +437,7 @@ func buildRouter(d routerDeps) *mux.Router {
 	api.Handle("/chat/{knight}", d.dispatchLimit.wrap(chatSendHandler(d.gateway))).Methods("POST")
 	api.HandleFunc("/chat/knights", chatKnightsHandler(d.gateway)).Methods("GET")
 	api.HandleFunc("/chat/tasks/{taskId}", taskStatusHandler(d.gateway)).Methods("GET")
+	api.HandleFunc("/chains/runs/{namespace}/{run}/events", chainRunEventsHandler(d.gateway)).Methods("GET")
 	api.HandleFunc("/chat/tasks/{taskId}/events", chatEventsHandler(d.gateway)).Methods("GET")
 
 	// Recent tasks and chain runs, newest first (GET /v1/tasks, GET /v1/runs)

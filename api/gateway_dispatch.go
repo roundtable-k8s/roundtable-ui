@@ -130,6 +130,18 @@ func chainRunStatusHandler(g *gatewayClient) http.HandlerFunc {
 	}
 }
 
+// chainRunEventsHandler relays GET /v1/runs/{namespace}/{run}/events (SSE).
+func chainRunEventsHandler(g *gatewayClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		v := mux.Vars(r)
+		if !validKnightName.MatchString(v["namespace"]) || !validTaskID.MatchString(v["run"]) {
+			jsonError(w, "Invalid namespace or run", http.StatusBadRequest)
+			return
+		}
+		g.relaySSE(w, r, "/v1/runs/"+url.PathEscape(v["namespace"])+"/"+url.PathEscape(v["run"])+"/events")
+	}
+}
+
 const maxCancelReasonLen = 500
 
 // chainRunCancelHandler proxies POST /v1/runs/{namespace}/{run}/cancel. The

@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gorilla/mux"
@@ -111,65 +116,173 @@ func chatEventsHandler(g *gatewayClient) http.HandlerFunc {
 			jsonError(w, "Invalid task ID", http.StatusBadRequest)
 			return
 		}
-		if g.baseURL == "" {
-			jsonError(w, "Gateway not configured (set GATEWAY_URL)", http.StatusServiceUnavailable)
-			return
+		g.relaySSE(w, r, "/v1/tasks/"+url.PathEscape(id)+"/events")
+	}
+}
+
+// SSE relay limits. Variables so tests can shorten them.
+var (
+	sseIdleTimeout = 45 * time.Second // three gateway heartbeats
+	sseMaxDuration = sseMaxFromEnv()
+	sseSlots       = make(chan struct{}, sseMaxStreamsFromEnv())
+)
+
+const sseMaxStreamsDefault = 100
+
+func sseMaxFromEnv() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("SSE_MAX_SECONDS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
 		}
-		path := "/v1/tasks/" + url.PathEscape(id) + "/events"
-		resp, err := g.stream(r, path, g.bearer(r.Context(), false))
-		if err == nil && resp.StatusCode == http.StatusUnauthorized && g.tokenFile != "" {
-			resp.Body.Close()
-			resp, err = g.stream(r, path, g.bearer(r.Context(), true))
+		slog.Warn("invalid SSE_MAX_SECONDS, using default", "value", v)
+	}
+	return 30 * time.Minute
+}
+
+func sseMaxStreamsFromEnv() int {
+	if v := strings.TrimSpace(os.Getenv("SSE_MAX_STREAMS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
 		}
-		if err != nil {
-			slog.ErrorContext(r.Context(), "gateway stream failed", "path", path, "error", err)
-			jsonError(w, "Gateway unreachable", http.StatusBadGateway)
-			return
+		slog.Warn("invalid SSE_MAX_STREAMS, using default", "value", v)
+	}
+	return sseMaxStreamsDefault
+}
+
+// validLastEventID accepts at most 128 printable ASCII characters.
+func validLastEventID(id string) bool {
+	if len(id) == 0 || len(id) > 128 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x20 || id[i] > 0x7e {
+			return false
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			msg := http.StatusText(resp.StatusCode)
-			if resp.StatusCode == http.StatusNotFound {
-				msg = "Task events not available"
+	}
+	return true
+}
+
+// relaySSE proxies a gateway SSE stream at path to the browser. It forwards
+// Last-Event-ID, passes the gateway's error message on non-200, ends when the
+// upstream is idle, after sseMaxDuration or on server shutdown, and limits the
+// number of open relays.
+func (g *gatewayClient) relaySSE(w http.ResponseWriter, r *http.Request, path string) {
+	if g.baseURL == "" {
+		jsonError(w, "Gateway not configured (set GATEWAY_URL)", http.StatusServiceUnavailable)
+		return
+	}
+	life := wsLife
+	if !life.enter() {
+		w.Header().Set("Retry-After", "5")
+		jsonError(w, "Server shutting down", http.StatusServiceUnavailable)
+		return
+	}
+	defer life.leave()
+	slots := sseSlots
+	select {
+	case slots <- struct{}{}:
+	default:
+		sseRejectedTotal.Inc()
+		w.Header().Set("Retry-After", "5")
+		jsonError(w, "too many open event streams", http.StatusTooManyRequests)
+		return
+	}
+	sseStreams.Inc()
+	defer func() { <-slots; sseStreams.Dec() }()
+
+	lastID := r.Header.Get("Last-Event-ID")
+	if lastID != "" && !validLastEventID(lastID) {
+		lastID = ""
+	}
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	idle := sseIdleTimeout
+	idleTimer := time.AfterFunc(idle, cancel)
+	defer idleTimer.Stop()
+	maxTimer := time.AfterFunc(sseMaxDuration, cancel)
+	defer maxTimer.Stop()
+	var shuttingDown atomic.Bool
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-life.shutdown:
+			shuttingDown.Store(true)
+			cancel()
+		case <-done:
+		}
+	}()
+
+	resp, err := g.stream(ctx, path, g.bearer(ctx, false), lastID)
+	if err == nil && resp.StatusCode == http.StatusUnauthorized && g.tokenFile != "" {
+		resp.Body.Close()
+		resp, err = g.stream(ctx, path, g.bearer(ctx, true), lastID)
+	}
+	if err != nil {
+		slog.ErrorContext(r.Context(), "gateway stream failed", "path", path, "error", err)
+		jsonError(w, "Gateway unreachable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg := http.StatusText(resp.StatusCode)
+		var body struct {
+			Error string `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&body) == nil && body.Error != "" {
+			msg = body.Error
+		} else if resp.StatusCode == http.StatusNotFound {
+			msg = "Task events not available"
+		}
+		if ra := resp.Header.Get("Retry-After"); ra != "" && validLastEventID(ra) {
+			w.Header().Set("Retry-After", ra)
+		}
+		jsonError(w, msg, resp.StatusCode)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	fl, _ := w.(http.Flusher)
+	buf := make([]byte, 4096)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			idleTimer.Reset(idle)
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return
 			}
-			jsonError(w, msg, resp.StatusCode)
-			return
+			if fl != nil {
+				fl.Flush()
+			}
 		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("X-Accel-Buffering", "no")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		fl, _ := w.(http.Flusher)
-		buf := make([]byte, 4096)
-		for {
-			n, rerr := resp.Body.Read(buf)
-			if n > 0 {
-				if _, werr := w.Write(buf[:n]); werr != nil {
-					return
-				}
+		if rerr != nil {
+			if shuttingDown.Load() {
+				io.WriteString(w, ": server shutting down\n\n")
 				if fl != nil {
 					fl.Flush()
 				}
+			} else if rerr != io.EOF {
+				slog.DebugContext(r.Context(), "gateway stream ended", "error", rerr)
 			}
-			if rerr != nil {
-				if rerr != io.EOF {
-					slog.DebugContext(r.Context(), "gateway stream ended", "error", rerr)
-				}
-				return
-			}
+			return
 		}
 	}
 }
 
 // stream opens a long-lived GET to the gateway (no overall client timeout;
 // the request context ends it when the browser disconnects).
-func (g *gatewayClient) stream(r *http.Request, path, token string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, g.baseURL+path, nil)
+func (g *gatewayClient) stream(ctx context.Context, path, token, lastEventID string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.baseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	if lastEventID != "" {
+		req.Header.Set("Last-Event-ID", lastEventID)
+	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
