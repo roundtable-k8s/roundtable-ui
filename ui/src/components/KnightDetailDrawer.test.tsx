@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { KnightDetailDrawer } from './KnightDetailDrawer'
 import type { Knight } from '../hooks/useFleet'
@@ -135,5 +135,43 @@ describe('KnightDetailDrawer', () => {
     expect(screen.getByText('Ready')).toBeInTheDocument()
     expect(screen.getByText('Pending')).toBeInTheDocument()
     expect(screen.getByText('spec.workspace.fromSnapshot')).toBeInTheDocument()
+  })
+
+  it('shows a failed detail request with a Retry that reloads the details', async () => {
+    let detailCalls = 0
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/api/fleet/arthur') {
+        detailCalls++
+        return detailCalls === 1
+          ? Promise.reject(new TypeError('network down'))
+          : Promise.resolve(json(k('arthur', { workspaceSnapshots: [] })))
+      }
+      return new Promise<Response>(() => {})
+    })
+    render(<MemoryRouter><KnightDetailDrawer knight={k('arthur')} onClose={() => {}} /></MemoryRouter>)
+    expect(await screen.findByText(/Could not load the knight's details: network down/)).toBeInTheDocument()
+    expect(screen.queryByText('No snapshots yet')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('No snapshots yet')).toBeInTheDocument()
+    expect(screen.queryByText(/Could not load the knight's details/)).not.toBeInTheDocument()
+    expect(detailCalls).toBe(2)
+  })
+
+  it("keeps the activity spinner until the latest knight's recent request answers", async () => {
+    const recentResolvers: Record<string, (r: Response) => void> = {}
+    fetchMock.mockImplementation((url: string) => {
+      const m = /^\/api\/fleet\/([^/]+)\/session\?type=recent/.exec(url)
+      if (m) return new Promise<Response>((resolve) => { recentResolvers[m[1]] = resolve })
+      return new Promise<Response>(() => {})
+    })
+    const { rerender } = render(<MemoryRouter><KnightDetailDrawer knight={k('arthur')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(recentResolvers['arthur']).toBeDefined())
+    rerender(<MemoryRouter><KnightDetailDrawer knight={k('bors')} onClose={() => {}} /></MemoryRouter>)
+    await waitFor(() => expect(recentResolvers['bors']).toBeDefined())
+    // Knight A's answer arrives late and is stale: the spinner must stay for B.
+    await act(async () => { recentResolvers['arthur'](json({ entries: [] })) })
+    expect(screen.getByText('Loading activity...')).toBeInTheDocument()
+    await act(async () => { recentResolvers['bors'](json({ entries: [] })) })
+    expect(screen.queryByText('Loading activity...')).not.toBeInTheDocument()
   })
 })
