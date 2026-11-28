@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Clock, Link, Radio, WifiOff, Repeat, Externa
 import { UntrustedText } from '../components/UntrustedText'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { getKnightConfig } from '../lib/knights'
-import { PageHeader, RefreshButton, PhaseBadge, EmptyState, ErrorBanner } from '../components/ui'
+import { PageHeader, RefreshButton, PhaseBadge, ErrorBanner, ListState } from '../components/ui'
 import { countLabel, formatDuration, formatRelativeTime, until } from '../lib/format'
 import type { Chain, ChainFanOut, ChainItem, ChainLoop, ChainLoopStep, ChainRunGroup, ChainStep } from '../lib/types'
 import { sanitizeText } from '../lib/untrusted'
@@ -48,11 +48,16 @@ function layoutSteps(steps: ChainStep[]): Map<string, { col: number; row: number
   const columns = new Map<string, number>()
 
   // Compute column: max(dependsOn columns) + 1, or 0 if no deps
+  // A step in a dependency cycle counts as column 0 for the edge that closes the cycle.
+  const visiting = new Set<string>()
   function getCol(name: string): number {
     if (columns.has(name)) return columns.get(name)!
+    if (visiting.has(name)) return 0
     const step = stepMap.get(name)
     if (!step || !step.dependsOn || step.dependsOn.length === 0) { columns.set(name, 0); return 0 }
+    visiting.add(name)
     const maxParent = Math.max(...step.dependsOn.map(d => getCol(d)))
+    visiting.delete(name)
     const col = maxParent + 1
     columns.set(name, col)
     return col
@@ -380,16 +385,23 @@ function StepKVOutput({ chainName, stepName }: { chainName: string; stepName: st
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
+    const controller = new AbortController()
     setLoading(true)
     setError('')
     setNotFound(false)
-    apiGet<Record<string, unknown>>(`/api/chains/${encodeURIComponent(chainName)}/steps/${encodeURIComponent(stepName)}/output`)
-      .then(d => setData(d))
+    setData(null)
+    apiGet<Record<string, unknown>>(
+      `/api/chains/${encodeURIComponent(chainName)}/steps/${encodeURIComponent(stepName)}/output`,
+      { signal: controller.signal },
+    )
+      .then(d => { if (!controller.signal.aborted) setData(d) })
       .catch(e => {
+        if (controller.signal.aborted) return
         if ((e as { status?: number })?.status === 404) setNotFound(true)
         else setError(e instanceof Error ? e.message : String(e))
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
   }, [chainName, stepName])
 
   if (loading) return <p className="text-xs text-gray-500 mt-2">Loading full output from KV...</p>
@@ -559,7 +571,7 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
     <div ref={cardRef} className={`bg-roundtable-slate border rounded-xl overflow-hidden ${focused ? 'border-roundtable-gold/50' : 'border-roundtable-steel'}`}>
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-roundtable-steel/30 transition-colors"
+        className="w-full min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-4 text-left hover:bg-roundtable-steel/30 transition-colors"
       >
         {expanded
           ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -621,17 +633,17 @@ function ChainCard({ chain, focused = false }: { chain: Chain; focused?: boolean
             {chain.missionRef && (
               <div>
                 <span className="text-gray-500">Mission:</span> 
-                <a href={`/missions/${chain.missionRef}`} className="text-blue-400 hover:text-blue-300 ml-1">
+                <RouterLink to={`/missions/${encodeURIComponent(chain.missionRef)}`} className="text-blue-400 hover:text-blue-300 ml-1">
                   {chain.missionRef}
-                </a>
+                </RouterLink>
               </div>
             )}
             {chain.roundTableRef && (
               <div>
                 <span className="text-gray-500">Round Table:</span> 
-                <a href={`/roundtables/${chain.roundTableRef}`} className="text-blue-400 hover:text-blue-300 ml-1">
+                <RouterLink to={`/roundtables?table=${encodeURIComponent(chain.roundTableRef)}`} className="text-blue-400 hover:text-blue-300 ml-1">
                   {chain.roundTableRef}
-                </a>
+                </RouterLink>
               </div>
             )}
             {chain.outputKnightRef && (
@@ -945,7 +957,7 @@ export function ChainsPage() {
         <RefreshButton onClick={fetchChains} loading={loading} />
       </PageHeader>
 
-      {error && (
+      {error && shownChains.length + shownGroups.length > 0 && (
         <div className="mb-6">
           <ErrorBanner>Failed to refresh chains: {error} — showing last known state</ErrorBanner>
         </div>
@@ -957,8 +969,9 @@ export function ChainsPage() {
         </p>
       )}
 
-      {shownChains.length === 0 && shownGroups.length === 0 && !loading && (
-        <EmptyState icon={Link} title="No chain executions found." />
+      {shownChains.length === 0 && shownGroups.length === 0 && (
+        <ListState loading={loading} error={error} count={0} what="chains" icon={Link}
+          emptyTitle="No chain executions found." onRetry={fetchChains} />
       )}
 
       <div className="space-y-3">
