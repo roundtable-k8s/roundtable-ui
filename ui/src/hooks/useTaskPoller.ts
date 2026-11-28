@@ -36,7 +36,8 @@ export function useTaskPoller<Item, Remote>({
   useVisibleInterval(
     (signal) => {
       const c = ref.current
-      return Promise.all(c.pending.map((item) => {
+      // Resolves with the first failure (if any) so useVisibleInterval can back off on 429/5xx.
+      return Promise.all(c.pending.map((item): Promise<unknown> => {
         const id = c.idOf(item)
         return apiGet<Remote>(c.fetchUrl(item), { signal })
           .then((r) => {
@@ -44,11 +45,11 @@ export function useTaskPoller<Item, Remote>({
             c.onUpdate(id, r)
           })
           .catch((e: unknown) => {
-            if (signal.aborted) return
+            if (signal.aborted) return undefined
             if (c.giveUpOn404 && e instanceof ApiError && e.status === 404) {
               failures.current.delete(id)
               c.onGiveUp?.(id, e)
-              return
+              return undefined
             }
             const n = (failures.current.get(id) ?? 0) + 1
             failures.current.set(id, n)
@@ -56,8 +57,9 @@ export function useTaskPoller<Item, Remote>({
               failures.current.delete(id)
               c.onGiveUp?.(id, e)
             }
+            return e
           })
-      }))
+      })).then((results) => results.find((r) => r !== undefined))
     },
     intervalMs,
     key !== '',

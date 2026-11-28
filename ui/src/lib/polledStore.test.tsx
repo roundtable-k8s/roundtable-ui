@@ -135,3 +135,30 @@ describe('polledStore', () => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
   })
 })
+
+describe('polledStore back-off (#628)', () => {
+  it('spaces polls at 2x then 4x after 503s, honours Retry-After, and resets on success', async () => {
+    mockGet.mockRejectedValue(Object.assign(new Error('down'), { status: 503 }))
+    renderHook(() => usePolledFetch('/api/b', 1000, []))
+    await tick(0)
+    expect(calls('/api/b')).toBe(1)
+    await tick(1999)
+    expect(calls('/api/b')).toBe(1)
+    await tick(1)
+    expect(calls('/api/b')).toBe(2)
+    await tick(3999)
+    expect(calls('/api/b')).toBe(2)
+    await tick(1)
+    expect(calls('/api/b')).toBe(3)
+    mockGet.mockRejectedValue(Object.assign(new Error('slow'), { status: 429, retryAfterMs: 30_000 }))
+    await tick(5000) // capped at 5x
+    expect(calls('/api/b')).toBe(4)
+    await tick(29_999)
+    expect(calls('/api/b')).toBe(4)
+    mockGet.mockResolvedValue(['ok'])
+    await tick(1)
+    expect(calls('/api/b')).toBe(5)
+    await tick(1000) // back to the plain interval
+    expect(calls('/api/b')).toBe(6)
+  })
+})

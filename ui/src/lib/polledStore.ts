@@ -1,4 +1,5 @@
 import { apiGet } from './api'
+import { nextDelay, retryAfterOf, shouldBackOff } from './backoff'
 
 /** An entry is dropped this long after its last subscriber leaves. */
 export const GRACE_MS = 30_000
@@ -22,8 +23,12 @@ interface Entry {
   /** Callers of fetchFresh() still waiting; they keep the request alive without polling. */
   waiters: number
   listeners: Set<() => void>
-  timer: ReturnType<typeof setInterval> | null
+  timer: ReturnType<typeof setTimeout> | null
   timerMs: number
+  /** Consecutive failures worth backing off for (429, 5xx, status 0); reset by a success. */
+  failures: number
+  /** Retry-After of the last failure, ms. */
+  retryAfterMs: number
   ctrl: AbortController | null
   inflight: Promise<void> | null
   /** A forced refresh waiting for the running request to finish. */
@@ -50,14 +55,19 @@ function load(en: Entry): Promise<void> {
   const p = Promise.resolve(apiGet<unknown>(en.url, { signal: ctrl.signal })).then(
     (data) => {
       if (ctrl.signal.aborted) return
+      en.failures = 0
+      en.retryAfterMs = 0
       set(en, { data, hasData: true, error: null, errorStatus: undefined, loading: false, updatedAt: Date.now() })
     },
     (e) => {
       if (ctrl.signal.aborted) return
+      if (shouldBackOff(e)) { en.failures++; en.retryAfterMs = retryAfterOf(e) } else { en.failures = 0; en.retryAfterMs = 0 }
       set(en, { error: e instanceof Error ? e.message : 'Unknown error', errorStatus: statusOf(e), loading: false })
     },
   ).finally(() => {
     if (en.ctrl === ctrl) { en.ctrl = null; en.inflight = null }
+    // Re-arm after every finished request so a back-off applies to the very next poll.
+    if (!ctrl.signal.aborted) arm(en)
   })
   en.inflight = p
   return p
@@ -76,12 +86,18 @@ function wantedMs(en: Entry): number {
   return ms
 }
 
+/** Schedule the next poll `nextDelay` from now (interval, backed off after failures). */
+function arm(en: Entry) {
+  if (en.timer) { clearTimeout(en.timer); en.timer = null }
+  if (en.timerMs <= 0) return
+  en.timer = setTimeout(() => { en.timer = null; void load(en) }, nextDelay(en.timerMs, en.failures, en.retryAfterMs))
+}
+
 function syncTimer(en: Entry) {
   const ms = document.hidden ? 0 : wantedMs(en)
   if (ms === en.timerMs) return
-  if (en.timer) clearInterval(en.timer)
-  en.timer = ms > 0 ? setInterval(() => { void load(en) }, ms) : null
   en.timerMs = ms
+  arm(en)
 }
 
 function scheduleDrop(en: Entry) {
@@ -94,7 +110,7 @@ function scheduleDrop(en: Entry) {
 function entryFor(url: string): Entry {
   let en = entries.get(url)
   if (!en) {
-    en = { url, snap: EMPTY, subs: new Map(), waiters: 0, listeners: new Set(), timer: null, timerMs: 0, ctrl: null, inflight: null, queued: null, drop: null }
+    en = { url, snap: EMPTY, subs: new Map(), waiters: 0, listeners: new Set(), timer: null, timerMs: 0, failures: 0, retryAfterMs: 0, ctrl: null, inflight: null, queued: null, drop: null }
     entries.set(url, en)
   }
   if (en.drop) { clearTimeout(en.drop); en.drop = null }
@@ -185,7 +201,7 @@ document.addEventListener('visibilitychange', () => {
 export function resetPolledStore() {
   for (const en of entries.values()) {
     abort(en)
-    if (en.timer) clearInterval(en.timer)
+    if (en.timer) clearTimeout(en.timer)
     if (en.drop) clearTimeout(en.drop)
   }
   entries.clear()

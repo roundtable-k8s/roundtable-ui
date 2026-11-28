@@ -77,6 +77,7 @@ export function BriefingsPage() {
       if (signal.aborted) return
       // A failed refresh keeps the list on screen; only a failed first load is shown as an error.
       if (!listLoaded.current) setListError(e instanceof Error ? e.message : 'Unknown error')
+      return e // lets useVisibleInterval back off on 429/5xx
     } finally {
       if (!signal.aborted) setLoading(false)
     }
