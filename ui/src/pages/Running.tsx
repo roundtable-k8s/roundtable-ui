@@ -7,7 +7,8 @@ import { inTable } from '../lib/tables'
 import { useRunning } from '../hooks/useRunning'
 import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { PageHeader, RefreshButton, StatCard, ErrorBanner, ListState } from '../components/ui'
+import { PageHeader, RefreshButton, StatCard, ErrorBanner, ListState, Badge } from '../components/ui'
+import type { Tone } from '../lib/tone'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost, formatNumber } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
@@ -19,17 +20,15 @@ import {
   type RunningTask,
 } from '../lib/running'
 
-const STATUS_STYLES: Record<RunningStatus, { row: string; badge: string; text: string }> = {
-  running: { row: '', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30', text: 'text-gray-300' },
-  stale: { row: 'bg-yellow-500/10', badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', text: 'text-yellow-400' },
-  lost: { row: 'bg-red-500/10', badge: 'bg-red-500/20 text-red-400 border-red-500/30', text: 'text-red-400' },
+const STATUS_STYLES: Record<RunningStatus, { row: string; tone: Tone; text: string }> = {
+  running: { row: '', tone: 'blue', text: 'text-gray-300' },
+  stale: { row: 'bg-yellow-500/10', tone: 'yellow', text: 'text-yellow-400' },
+  lost: { row: 'bg-red-500/10', tone: 'red', text: 'text-red-400' },
 }
 
 function StatusBadge({ status }: { status: RunningStatus }) {
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[status].badge}`}>
-      {status}
-    </span>
+    <Badge tone={STATUS_STYLES[status].tone} strength="strong" className="font-medium">{status}</Badge>
   )
 }
 

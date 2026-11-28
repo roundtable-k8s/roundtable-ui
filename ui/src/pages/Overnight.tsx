@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Moon } from 'lucide-react'
 import { apiGet, apiGetWithTotal } from '../lib/api'
-import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner } from '../components/ui'
+import { PageHeader, RefreshButton, StatCard, ErrorBanner, Spinner, Badge } from '../components/ui'
 import { useUrlParam } from '../hooks/useUrlParam'
 import { CHAIN_LIST_LIMIT, truncationNote } from '../lib/chainTotal'
 import { DEAD_LETTERS_URL, deadLetterTime, errorExcerpt, type DeadLetter } from '../lib/deadLetters'
 import { NOTIONAL_HINT } from '../lib/cost'
 import { formatCost, formatTimestamp } from '../lib/format'
 import { DEFAULT_SINCE, SINCE_PRESETS, resolveSince, summarise } from '../lib/overnight'
-import { outcomeClass, outcomeLabel, scheduleLink, type Schedule } from '../lib/schedules'
+import { outcomeTone, outcomeLabel, scheduleLink, type Schedule } from '../lib/schedules'
 import { sanitizeText } from '../lib/untrusted'
 import type { Chain } from '../lib/types'
 
@@ -144,7 +144,7 @@ export function OvernightPage() {
             return (
               <li key={`${x.namespace}/${x.name}`} className="text-sm">
                 <Link to={scheduleLink(x.namespace, x.name)} className="text-roundtable-gold hover:underline">{x.name}</Link>
-                <span className={`ml-2 text-xs px-2 py-0.5 rounded-full border ${outcomeClass(outcome)}`}>{outcomeLabel(outcome)}</span>
+                <Badge tone={outcomeTone(outcome)} className="ml-2">{outcomeLabel(outcome)}</Badge>
                 <span className="text-gray-400"> · {formatTimestamp(x.lastRunAt ?? '')}</span>
               </li>
             )

@@ -10,7 +10,8 @@ import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { taskRows, type TableInfo } from '../lib/tables'
 import { useToast } from '../components/Toast'
 import { TraceLink } from '../components/TraceLink'
-import { PageHeader, EmptyState, ErrorBanner, TableBadge } from '../components/ui'
+import { PageHeader, EmptyState, ErrorBanner, TableBadge, Badge } from '../components/ui'
+import type { Tone } from '../lib/tone'
 import { formatTimestampOrDate } from '../lib/format'
 import { sanitizeText, safeUrl } from '../lib/untrusted'
 import { CostTag } from '../components/CostTag'
@@ -68,10 +69,10 @@ const MAX_POLL_FAILURES = 5
 
 const isFinal = (status: string) => status === 'succeeded' || status === 'failed'
 
-function statusClass(status: string) {
-  if (status === 'succeeded') return 'bg-green-500/20 text-green-400'
-  if (status === 'failed') return 'bg-red-500/20 text-red-400'
-  return 'bg-blue-500/20 text-blue-400'
+function statusTone(status: string): Tone {
+  if (status === 'succeeded') return 'green'
+  if (status === 'failed') return 'red'
+  return 'blue'
 }
 
 function mergeTask(r: DispatchedTask, t: GatewayTask): DispatchedTask {
@@ -313,9 +314,9 @@ export function TasksPage() {
                   <span>{kc.emoji}</span>
                   <span className="font-medium text-white capitalize">{r.knight}</span>
                   {r.table && <TableBadge table={r.table} />}
-                  <span data-testid="dispatch-status" className={`text-xs px-2 py-0.5 rounded ${statusClass(r.status)}`}>
+                  <Badge tone={statusTone(r.status)} strength="strong" testId="dispatch-status">
                     {r.unavailable ? 'status unavailable' : r.status}
-                  </span>
+                  </Badge>
                 </div>
                 <div className="flex items-center gap-1 text-gray-500 text-xs">
                   <Clock className="w-3 h-3" />

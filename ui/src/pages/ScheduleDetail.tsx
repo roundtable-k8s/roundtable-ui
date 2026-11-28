@@ -7,9 +7,9 @@ import { formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText, safeUrl } from '../lib/untrusted'
 import { SafeMarkdown } from '../components/SafeMarkdown'
 import { TraceLink } from '../components/TraceLink'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Button, LinkButton, ConfirmDialog } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Badge, Button, LinkButton, ConfirmDialog } from '../components/ui'
 import {
-  RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, scheduleNextUrl, type ScheduleNextRuns, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeClass,
+  RUN_HISTORY_LIMIT, describePolicy, describeDeadline, describeSuspension, scheduleApi, scheduleEditPath, scheduleNextUrl, type ScheduleNextRuns, sortRunsNewestFirst, formatSeconds, formatCostUSD, outcomeLabel, outcomeTone,
   runResultText, runResultOutcome, prLabel, describeTurns, type Schedule, type ScheduleRun, type ScheduleRunResult, type ScheduleRunNow, type ScheduleSuspendState,
 } from '../lib/schedules'
 
@@ -20,7 +20,7 @@ function absolute(iso?: string): string {
 }
 
 function OutcomeBadge({ outcome }: { outcome: string }) {
-  return <span className={`rounded-full border px-2 py-0.5 text-xs ${outcomeClass(outcome)}`}>{outcomeLabel(outcome)}</span>
+  return <Badge tone={outcomeTone(outcome)}>{outcomeLabel(outcome)}</Badge>
 }
 
 function TargetIcon({ kind }: { kind: string }) {
@@ -38,12 +38,10 @@ function ScheduleSummary({ s }: { s: Schedule }) {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <TableBadge table={s.table} />
         {s.suspended
-          ? <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Suspended</span>
-          : <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">Active</span>}
+          ? <Badge tone="amber">Suspended</Badge>
+          : <Badge tone="green">Active</Badge>}
         {s.managedBy === 'git' && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-xs text-purple-300">
-            <GitBranch className="w-3 h-3" aria-hidden /> managed in Git
-          </span>
+          <Badge tone="purple" icon={<GitBranch className="w-3 h-3" aria-hidden />}>managed in Git</Badge>
         )}
       </div>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">

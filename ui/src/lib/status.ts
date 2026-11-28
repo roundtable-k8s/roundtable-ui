@@ -4,45 +4,59 @@
  * carried its own partial, drifting copy of this map.
  */
 
-const PHASE_COLORS: Record<string, string> = {
+import { toneClasses, type Tone, type ToneStrength } from './tone'
+
+interface PhaseStyle { tone: Tone; strength: ToneStrength }
+
+const GRAY: PhaseStyle = { tone: 'gray', strength: 'strong' }
+const DIM: PhaseStyle = { tone: 'gray', strength: 'muted' }
+const strong = (tone: Tone): PhaseStyle => ({ tone, strength: 'strong' })
+
+export const PHASE_COLORS: Record<string, PhaseStyle> = {
   // Waiting / neutral
-  Idle: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  Pending: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  Unknown: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  Skipped: 'bg-gray-500/20 text-gray-500 border-gray-500/30',
-  Expired: 'bg-gray-500/20 text-gray-500 border-gray-500/30',
+  Idle: GRAY,
+  Pending: GRAY,
+  Unknown: GRAY,
+  Skipped: DIM,
+  Expired: DIM,
 
   // In progress
-  Provisioning: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  Running: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  StepRunning: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  Active: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  Planning: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-  Assembling: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  Briefing: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  Provisioning: strong('blue'),
+  Running: strong('blue'),
+  StepRunning: strong('blue'),
+  Active: strong('blue'),
+  Planning: strong('indigo'),
+  Assembling: strong('cyan'),
+  Briefing: strong('purple'),
 
   // Healthy / done
-  Ready: 'bg-green-500/20 text-green-400 border-green-500/30',
-  Succeeded: 'bg-green-500/20 text-green-400 border-green-500/30',
-  Completed: 'bg-green-500/20 text-green-400 border-green-500/30', // legacy alias
+  Ready: strong('green'),
+  Succeeded: strong('green'),
+  Completed: strong('green'), // legacy alias
 
   // Degraded
-  Degraded: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  PartiallySucceeded: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  Degraded: strong('yellow'),
+  PartiallySucceeded: strong('yellow'),
 
   // Paused / cleanup
-  Paused: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  Suspended: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  CleaningUp: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  OverBudget: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  Paused: strong('orange'),
+  Suspended: strong('orange'),
+  CleaningUp: strong('orange'),
+  OverBudget: strong('orange'),
 
   // Failed
-  Failed: 'bg-red-500/20 text-red-400 border-red-500/30',
-  Error: 'bg-red-500/20 text-red-400 border-red-500/30',
+  Failed: strong('red'),
+  Error: strong('red'),
+}
+
+/** Tone and strength for a phase; unknown phases fall back to Pending. */
+export function phaseStyle(phase: string): PhaseStyle {
+  return PHASE_COLORS[phase] || PHASE_COLORS.Pending
 }
 
 export function phaseColor(phase: string): string {
-  return PHASE_COLORS[phase] || PHASE_COLORS.Pending
+  const { tone, strength } = phaseStyle(phase)
+  return toneClasses(tone, strength)
 }
 
 /** Knight liveness dot colors (KnightCard pulsing indicator). */

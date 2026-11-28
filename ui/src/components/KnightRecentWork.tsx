@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { formatCost, formatMsLadder, formatRelativeTime, until } from '../lib/format'
-import { phaseColor } from '../lib/status'
+import { phaseStyle } from '../lib/status'
 import { scheduleLink, type Schedule } from '../lib/schedules'
 import { schedulesFor, taskRows } from '../lib/knightTasks'
 import { sanitizeText } from '../lib/untrusted'
-import { ListState } from './ui'
+import { ListState, Badge } from './ui'
 import { TraceLink } from './TraceLink'
 
 const POLL_MS = 30_000
@@ -29,7 +29,7 @@ export function KnightRecentWork({ knight, table }: { knight: string; table?: st
           <ul className="divide-y divide-roundtable-steel text-sm">
             {rows.map((t) => (
               <li key={t.taskId} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className={`rounded-full border px-2 py-0.5 text-xs ${phaseColor(cap(t.status))}`}>{t.status}</span>
+                <Badge tone={phaseStyle(cap(t.status)).tone} strength={phaseStyle(cap(t.status)).strength}>{t.status}</Badge>
                 <Link to={`/running?task=${encodeURIComponent(t.taskId)}`} className="text-blue-400 hover:text-blue-300 font-mono text-xs truncate max-w-[10rem]" title={t.taskId}>{t.taskId}</Link>
                 <span className="text-gray-400">{t.createdAt ? formatRelativeTime(t.createdAt) : '—'}</span>
                 <span className="text-gray-400">{formatMsLadder(t.durationMs)}</span>
@@ -51,7 +51,7 @@ export function KnightRecentWork({ knight, table }: { knight: string; table?: st
                 <Link to={scheduleLink(s.namespace, s.name)} className="text-blue-400 hover:text-blue-300">{sanitizeText(s.name)}</Link>
                 <code className="text-xs text-gray-400">{sanitizeText(s.cron)}</code>
                 <span className="text-gray-400">{s.suspended ? '—' : until(s.nextRunAt)}</span>
-                {s.suspended && <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Suspended</span>}
+                {s.suspended && <Badge tone="amber">Suspended</Badge>}
               </li>
             ))}
           </ul>
