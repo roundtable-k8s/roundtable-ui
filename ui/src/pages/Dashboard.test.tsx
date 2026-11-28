@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { DashboardPage } from './Dashboard'
@@ -608,6 +608,28 @@ describe('DashboardPage cost CSV download (#514)', () => {
       click.mockRestore()
       delete urlApi.createObjectURL
       delete urlApi.revokeObjectURL
+    }
+  })
+})
+
+describe('DashboardPage table filter', () => {
+  it('counts only events of the selected table (and untagged ones)', async () => {
+    const ts = new Date(Date.now() - 3600_000).toISOString()
+    const ev = (table: string | undefined, id: string) => ({
+      type: 'task' as const, subject: `x.tasks.${id}`, timestamp: ts, table, data: { task: id },
+    })
+    vi.mocked(useWebSocket).mockReturnValue({
+      events: [ev('a', 't1'), ev('b', 't2'), ev('b', 't3'), ev(undefined, 't4')], connected: true,
+    } as unknown as ReturnType<typeof useWebSocket>)
+    vi.mocked(apiGet).mockImplementation((url: string) => Promise.resolve(url.startsWith('/api/chains') || url.startsWith('/api/fleet') ? [] : {}) as never)
+    window.history.pushState({}, '', '/?table=a')
+    try {
+      renderDashboard()
+      const card = screen.getByText('Tasks Dispatched').closest('div')!.parentElement!
+      expect(card).toHaveTextContent('2')
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
+    } finally {
+      window.history.pushState({}, '', '/')
     }
   })
 })

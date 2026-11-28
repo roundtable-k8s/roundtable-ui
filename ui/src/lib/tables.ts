@@ -68,3 +68,8 @@ export function withTable(url: string, table: string): string {
 export function inTable(table: string, have: string | undefined): boolean {
   return !table || (have || 'none') === table
 }
+
+/** Whether an event belongs in the view narrowed to `table` ('' = all). Events without a table (older APIs) stay visible. */
+export function eventInTable(table: string, event: { table?: string }): boolean {
+  return !table || !event.table || event.table === table
+}

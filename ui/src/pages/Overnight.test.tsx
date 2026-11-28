@@ -88,4 +88,17 @@ describe('OvernightPage truncated chain list', () => {
     expect(await screen.findByText(/showing 500 of 731/)).toBeInTheDocument()
     expect(fetchMock.mock.calls.filter(c => String(c[0]).startsWith('/api/chains')).length).toBe(1)
   })
+
+  it('requests chains and schedules for ?table= and narrows dead letters to it', async () => {
+    deadLetters.deadLetters.push({ taskId: 't2', knight: 'kay', state: 'open', reason: 'x', attempt: 1, deadLetteredAt: ago(1), updatedAt: ago(1), table: 'b' } as never)
+    deadLetters.deadLetters[0] = { ...deadLetters.deadLetters[0], table: 'a' } as never
+    renderPage('/overnight?table=a')
+    expect(await screen.findByRole('link', { name: 'galahad' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'kay' })).toBeNull()
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]))
+    expect(urls.find((u) => u.startsWith('/api/chains'))).toContain('table=a')
+    expect(urls.find((u) => u.startsWith('/api/schedules'))).toBe('/api/schedules?table=a')
+    expect(urls.find((u) => u.startsWith('/api/dead-letters'))).toBeDefined()
+    deadLetters.deadLetters.length = 1
+  })
 })
