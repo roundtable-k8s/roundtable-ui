@@ -3,7 +3,7 @@ import { useTables } from '../hooks/useTables'
 import { validateMissionForm, firstInvalidStep, stepOfField } from '../lib/missionForm'
 import { Target, Plus, X, ArrowLeft, Rocket, Brain, Settings } from 'lucide-react'
 import { apiPost } from '../lib/api'
-import { Modal, ErrorBanner } from '../components/ui'
+import { Modal, ErrorBanner, Field, TextInput, TextArea, SelectInput } from '../components/ui'
 
 interface MissionForm {
   name: string
@@ -73,8 +73,8 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
   const touch = (key: string) => setTouched(t => (t[key] ? t : { ...t, [key]: true }))
   const shown = (key: string) => (touched[key] ? errors[key] : undefined)
   const errId = (key: string) => `wiz-err-${key.replace(/\./g, '-')}`
-  /** aria props for a field with a validation message. */
-  const aria = (key: string) => shown(key) ? { 'aria-invalid': true as const, 'aria-describedby': errId(key) } : {}
+  /** Message and error-element id of a field, shown once it is touched (for Field and the controls). */
+  const err = (key: string) => ({ error: shown(key), errorId: errId(key) })
   const fieldError = (k: string) => shown(k)
     ? <p id={errId(k)} className="text-xs text-red-400 mt-1">{errors[k]}</p>
     : null
@@ -194,51 +194,44 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
         <div className="p-6 space-y-4">
           {step === 0 && (
             <>
-              <div>
-                <label htmlFor="wiz-mission-name" className="block text-sm text-gray-300 mb-1">Mission Name</label>
-                <input id="wiz-mission-name"
+              <Field id="wiz-mission-name" label="Mission Name" size="sm" {...err('name')}>
+                <TextInput id="wiz-mission-name"
                   value={form.name}
                   onChange={e => updateField('name', e.target.value)}
                   onBlur={() => touch('name')}
-                  {...aria('name')}
+                  {...err('name')}
                   placeholder="e.g. code-review-sprint"
-                  className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                 />
-                {fieldError('name')}
-              </div>
-              <div>
-                <label htmlFor="wiz-objective" className="block text-sm text-gray-300 mb-1">Objective</label>
-                <textarea id="wiz-objective"
+                </Field>
+              <Field id="wiz-objective" label="Objective" size="sm" {...err('objective')}>
+                <TextArea id="wiz-objective"
                   value={form.objective}
                   onChange={e => updateField('objective', e.target.value)}
                   onBlur={() => touch('objective')}
-                  {...aria('objective')}
+                  {...err('objective')}
                   placeholder="Describe the mission objective..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50 resize-none"
+                  className="resize-none"
                 />
-                {fieldError('objective')}
-              </div>
+                </Field>
               <div>
                 <label htmlFor="wiz-roundtable-reference" className="block text-sm text-gray-300 mb-1">RoundTable Reference</label>
                 {tables.length > 0 ? (
-                  <select id="wiz-roundtable-reference"
+                  <SelectInput id="wiz-roundtable-reference"
                     value={form.roundTableRef}
                     onChange={e => updateField('roundTableRef', e.target.value)}
-                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
                   >
                     <option value="">(none)</option>
                     {form.roundTableRef && !tables.includes(form.roundTableRef) && (
                       <option value={form.roundTableRef}>{form.roundTableRef}</option>
                     )}
                     {tables.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  </SelectInput>
                 ) : (
-                  <input id="wiz-roundtable-reference"
+                  <TextInput id="wiz-roundtable-reference"
                     value={form.roundTableRef}
                     onChange={e => updateField('roundTableRef', e.target.value)}
                     placeholder="e.g. fleet-a"
-                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
                   />
                 )}
               </div>
@@ -261,41 +254,32 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label htmlFor="wiz-cost-budget" className="block text-sm text-gray-300 mb-1">Cost Budget (USD)</label>
-                  <input id="wiz-cost-budget"
+                <Field id="wiz-cost-budget" label="Cost Budget (USD)" size="sm" {...err('costBudgetUSD')}>
+                  <TextInput id="wiz-cost-budget"
                     value={form.costBudgetUSD}
                     onChange={e => updateField('costBudgetUSD', e.target.value)}
                     onBlur={() => touch('costBudgetUSD')}
-                    {...aria('costBudgetUSD')}
-                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
+                    {...err('costBudgetUSD')}
                   />
-                  {fieldError('costBudgetUSD')}
-                </div>
-                <div>
-                  <label htmlFor="wiz-ttl" className="block text-sm text-gray-300 mb-1">TTL (seconds)</label>
-                  <input id="wiz-ttl"
+                  </Field>
+                <Field id="wiz-ttl" label="TTL (seconds)" size="sm" {...err('ttl')}>
+                  <TextInput id="wiz-ttl"
                     type="number"
                     value={form.ttl}
                     onChange={e => updateField('ttl', e.target.value)}
                     onBlur={() => touch('ttl')}
-                    {...aria('ttl')}
-                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
+                    {...err('ttl')}
                   />
-                  {fieldError('ttl')}
-                </div>
-                <div>
-                  <label htmlFor="wiz-timeout" className="block text-sm text-gray-300 mb-1">Timeout (seconds)</label>
-                  <input id="wiz-timeout"
+                  </Field>
+                <Field id="wiz-timeout" label="Timeout (seconds)" size="sm" {...err('timeout')}>
+                  <TextInput id="wiz-timeout"
                     type="number"
                     value={form.timeout}
                     onChange={e => updateField('timeout', e.target.value)}
                     onBlur={() => touch('timeout')}
-                    {...aria('timeout')}
-                    className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
+                    {...err('timeout')}
                   />
-                  {fieldError('timeout')}
-                </div>
+                  </Field>
               </div>
             </>
           )}
@@ -306,22 +290,22 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
               {form.knights.map((knight, idx) => (
                 <div key={idx}>
                 <div className="flex items-center gap-2">
-                  <input
+                  <TextInput
                     value={knight.name}
                     onChange={e => updateKnight(idx, 'name', e.target.value)}
                     aria-label="Knight name"
                     placeholder="Knight name"
                     onBlur={() => { touch('knights'); touch(`knights.${idx}`) }}
-                    {...aria(`knights.${idx}`)}
+                    {...err(`knights.${idx}`)}
                     {...(shown('knights') ? { 'aria-describedby': [shown(`knights.${idx}`) ? errId(`knights.${idx}`) : '', errId('knights')].filter(Boolean).join(' ') } : {})}
-                    className="flex-1 px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
+                    className="flex-1"
                   />
-                  <input
+                  <TextInput
                     value={knight.role}
                     onChange={e => updateKnight(idx, 'role', e.target.value)}
                     aria-label="Knight role"
                     placeholder="Role (optional)"
-                    className="flex-1 px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50"
+                    className="flex-1"
                   />
                   {form.knights.length > 1 && (
                     <button onClick={() => removeKnight(idx)} aria-label="Remove knight" className="text-gray-500 hover:text-red-400">
@@ -362,41 +346,37 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
               </div>
 
               {/* Success Criteria */}
-              <div>
-                <label htmlFor="wiz-success-criteria" className="block text-sm text-gray-300 mb-1">Success Criteria (optional)</label>
-                <textarea id="wiz-success-criteria"
+              <Field id="wiz-success-criteria" label="Success Criteria (optional)" size="sm">
+                <TextArea id="wiz-success-criteria"
                   value={form.successCriteria}
                   onChange={e => updateField('successCriteria', e.target.value)}
                   placeholder="Describe how to determine if the mission succeeded..."
                   rows={2}
-                  className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50 resize-none text-sm"
+                  className="resize-none"
                 />
-              </div>
+                </Field>
 
               {/* Briefing */}
-              <div>
-                <label htmlFor="wiz-briefing" className="block text-sm text-gray-300 mb-1">Briefing (optional)</label>
-                <textarea id="wiz-briefing"
+              <Field id="wiz-briefing" label="Briefing (optional)" size="sm">
+                <TextArea id="wiz-briefing"
                   value={form.briefing}
                   onChange={e => updateField('briefing', e.target.value)}
                   placeholder="Initial context and instructions for mission knights..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold/50 resize-none text-sm"
+                  className="resize-none"
                 />
-              </div>
+                </Field>
 
               {/* Cleanup Policy */}
-              <div>
-                <label htmlFor="wiz-cleanup-policy" className="block text-sm text-gray-300 mb-1">Cleanup Policy</label>
-                <select id="wiz-cleanup-policy"
+              <Field id="wiz-cleanup-policy" label="Cleanup Policy" size="sm">
+                <SelectInput id="wiz-cleanup-policy"
                   value={form.cleanupPolicy}
                   onChange={e => updateField('cleanupPolicy', e.target.value as 'Delete' | 'Retain')}
-                  className="w-full px-3 py-2 bg-roundtable-navy border border-roundtable-steel rounded-lg text-white focus:outline-none focus:border-roundtable-gold/50"
                 >
                   <option value="Delete">Delete (remove resources after completion)</option>
                   <option value="Retain">Retain (keep resources for inspection)</option>
-                </select>
-              </div>
+                </SelectInput>
+                </Field>
 
               {/* Checkboxes */}
               <div className="space-y-2">
@@ -435,69 +415,61 @@ export function MissionWizard({ onClose, onCreated }: MissionWizardProps) {
                     <h4 className="text-sm font-medium">Planner Configuration</h4>
                   </div>
 
-                  <div>
-                    <label htmlFor="wiz-planner-knight" className="block text-xs text-gray-400 mb-1">Planner Knight (optional)</label>
-                    <input id="wiz-planner-knight"
+                  <Field id="wiz-planner-knight" label="Planner Knight (optional)">
+                    <TextInput id="wiz-planner-knight"
                       value={form.planner.knightRef}
                       onChange={e => updatePlanner('knightRef', e.target.value)}
                       placeholder="table planner (default)"
-                      className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 text-sm"
+                      tone="indigo" size="sm"
                     />
-                  </div>
+                    </Field>
 
                   <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label htmlFor="wiz-planner-timeout" className="block text-xs text-gray-400 mb-1">Timeout (s)</label>
-                      <input id="wiz-planner-timeout"
+                    <Field id="wiz-planner-timeout" label="Timeout (s)" {...err('planner.timeout')}>
+                      <TextInput id="wiz-planner-timeout"
                         type="number"
                         value={form.planner.timeout}
                         onChange={e => updatePlanner('timeout', e.target.value)}
                         onBlur={() => touch('planner.timeout')}
-                        {...aria('planner.timeout')}
-                        className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
+                        {...err('planner.timeout')}
+                        tone="indigo" size="sm"
                       />
-                      {fieldError('planner.timeout')}
-                    </div>
-                    <div>
-                      <label htmlFor="wiz-max-chains" className="block text-xs text-gray-400 mb-1">Max Chains</label>
-                      <input id="wiz-max-chains"
+                      </Field>
+                    <Field id="wiz-max-chains" label="Max Chains" {...err('planner.maxChains')}>
+                      <TextInput id="wiz-max-chains"
                         type="number"
                         min="1"
                         max="20"
                         value={form.planner.maxChains}
                         onChange={e => updatePlanner('maxChains', e.target.value)}
                         onBlur={() => touch('planner.maxChains')}
-                        {...aria('planner.maxChains')}
-                        className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
+                        {...err('planner.maxChains')}
+                        tone="indigo" size="sm"
                       />
-                      {fieldError('planner.maxChains')}
-                    </div>
-                    <div>
-                      <label htmlFor="wiz-max-knights" className="block text-xs text-gray-400 mb-1">Max Knights</label>
-                      <input id="wiz-max-knights"
+                      </Field>
+                    <Field id="wiz-max-knights" label="Max Knights" {...err('planner.maxKnights')}>
+                      <TextInput id="wiz-max-knights"
                         type="number"
                         min="1"
                         max="50"
                         value={form.planner.maxKnights}
                         onChange={e => updatePlanner('maxKnights', e.target.value)}
                         onBlur={() => touch('planner.maxKnights')}
-                        {...aria('planner.maxKnights')}
-                        className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 text-sm"
+                        {...err('planner.maxKnights')}
+                        tone="indigo" size="sm"
                       />
-                      {fieldError('planner.maxKnights')}
-                    </div>
+                      </Field>
                   </div>
 
-                  <div>
-                    <label htmlFor="wiz-additional-context" className="block text-xs text-gray-400 mb-1">Additional Context (optional)</label>
-                    <textarea id="wiz-additional-context"
+                  <Field id="wiz-additional-context" label="Additional Context (optional)">
+                    <TextArea id="wiz-additional-context"
                       value={form.planner.context}
                       onChange={e => updatePlanner('context', e.target.value)}
                       placeholder="Extra context for the planner..."
                       rows={2}
-                      className="w-full px-3 py-2 bg-roundtable-navy border border-indigo-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 resize-none text-sm"
+                      tone="indigo" size="sm" className="resize-none"
                     />
-                  </div>
+                    </Field>
 
                   <div className="flex items-center gap-2 p-2 bg-roundtable-navy/50 border border-indigo-500/30 rounded">
                     <input

@@ -7,7 +7,7 @@ import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useConfig } from '../hooks/useConfig'
 import { useTables } from '../hooks/useTables'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
-import { PageHeader, ErrorBanner, Spinner, Button, LinkButton } from '../components/ui'
+import { PageHeader, ErrorBanner, Spinner, Button, LinkButton, Field, TextInput, TextArea, SelectInput } from '../components/ui'
 import { sanitizeText } from '../lib/untrusted'
 import { scheduleApi, schedulePreviewUrl, type Schedule, type ScheduleNextRuns } from '../lib/schedules'
 import { CRON_PRESETS, CronError, formatInZone, nextRuns } from '../lib/cron'
@@ -20,8 +20,6 @@ import type { Chain } from '../lib/types'
 
 const CHAINS_URL = '/api/chains?copies=exclude&limit=500'
 
-const input = 'w-full bg-roundtable-navy border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-roundtable-gold'
-
 function timeZones(): string[] {
   const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] }
   try {
@@ -30,27 +28,6 @@ function timeZones(): string[] {
   } catch {
     return ['UTC']
   }
-}
-
-function Field({ id, label, error, hint, children }: {
-  id: string
-  label: string
-  error?: string
-  hint?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
-      {children}
-      {hint && !error && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
-      {error && <p id={`${id}-error`} role="alert" data-testid={`error-${id}`} className="mt-1 text-xs text-red-300">{sanitizeText(error)}</p>}
-    </div>
-  )
-}
-
-function border(error?: string): string {
-  return error ? 'border-red-500/60' : 'border-roundtable-steel'
 }
 
 const PREVIEW_DEBOUNCE_MS = 400
@@ -288,21 +265,21 @@ function ScheduleFormBody() {
           onSubmit={(e) => { e.preventDefault(); void save() }}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field id="schedule-name" label="Name" error={errors.name}>
-              <input id="schedule-name" className={`${input} ${border(errors.name)}`} value={form.name} disabled={editing}
+              <TextInput id="schedule-name" size="sm" error={errors.name} value={form.name} disabled={editing}
                 placeholder="morning-digest" onChange={(e) => set('name', e.target.value)} />
             </Field>
             <Field id="schedule-namespace" label="Namespace" error={errors.namespace}>
-              <input id="schedule-namespace" className={`${input} ${border(errors.namespace)}`} value={form.namespace} disabled={editing}
+              <TextInput id="schedule-namespace" size="sm" error={errors.namespace} value={form.namespace} disabled={editing}
                 onChange={(e) => set('namespace', e.target.value)} />
             </Field>
           </div>
 
           <Field id="schedule-table" label="Table" error={errors.table}
             hint={form.kind === 'mission' ? 'A mission target needs a table.' : 'Optional: by default the target Chain\'s or knight\'s table.'}>
-            <select id="schedule-table" className={`${input} ${border(errors.table)}`} value={form.table} onChange={(e) => set('table', e.target.value)}>
+            <SelectInput id="schedule-table" size="sm" error={errors.table} value={form.table} onChange={(e) => set('table', e.target.value)}>
               <option value="">No table</option>
               {[...new Set([...tables, ...(form.table ? [form.table] : [])])].sort().map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </SelectInput>
           </Field>
 
           <div>
@@ -319,17 +296,17 @@ function ScheduleFormBody() {
             <>
               <Field id="schedule-knight" label="Knight" error={errors.knight}>
                 {knights.length > 0 ? (
-                  <select id="schedule-knight" className={`${input} ${border(errors.knight)}`} value={form.knight} onChange={(e) => set('knight', e.target.value)}>
+                  <SelectInput id="schedule-knight" size="sm" error={errors.knight} value={form.knight} onChange={(e) => set('knight', e.target.value)}>
                     <option value="">Choose a knight…</option>
                     {knights.map((k) => <option key={k} value={k}>{k}</option>)}
-                  </select>
+                  </SelectInput>
                 ) : (
-                  <input id="schedule-knight" className={`${input} ${border(errors.knight)}`} value={form.knight} placeholder="galahad"
+                  <TextInput id="schedule-knight" size="sm" error={errors.knight} value={form.knight} placeholder="galahad"
                     onChange={(e) => set('knight', e.target.value)} />
                 )}
               </Field>
               <Field id="schedule-task" label="Task" error={errors.task} hint="A Go template: .Event.Time is the scheduled time.">
-                <textarea id="schedule-task" rows={5} className={`${input} ${border(errors.task)} font-mono`} value={form.task}
+                <TextArea id="schedule-task" rows={5} size="sm" error={errors.task} className="font-mono" value={form.task}
                   onChange={(e) => set('task', e.target.value)} />
               </Field>
             </>
@@ -339,17 +316,17 @@ function ScheduleFormBody() {
             <>
               <Field id="schedule-chain" label="Chain" error={errors.chain}>
                 {chainNames.length > 0 ? (
-                  <select id="schedule-chain" className={`${input} ${border(errors.chain)}`} value={form.chain} onChange={(e) => set('chain', e.target.value)}>
+                  <SelectInput id="schedule-chain" size="sm" error={errors.chain} value={form.chain} onChange={(e) => set('chain', e.target.value)}>
                     <option value="">Choose a Chain…</option>
                     {chainNames.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  </SelectInput>
                 ) : (
-                  <input id="schedule-chain" className={`${input} ${border(errors.chain)}`} value={form.chain} placeholder="daily-digest"
+                  <TextInput id="schedule-chain" size="sm" error={errors.chain} value={form.chain} placeholder="daily-digest"
                     onChange={(e) => set('chain', e.target.value)} />
                 )}
               </Field>
               <Field id="schedule-input" label="Input (optional)" error={errors.input} hint="A Go template rendered into the run's input; empty keeps the Chain's own.">
-                <textarea id="schedule-input" rows={3} className={`${input} ${border(errors.input)} font-mono`} value={form.input}
+                <TextArea id="schedule-input" rows={3} size="sm" error={errors.input} className="font-mono" value={form.input}
                   onChange={(e) => set('input', e.target.value)} />
               </Field>
             </>
@@ -358,18 +335,18 @@ function ScheduleFormBody() {
           {form.kind === 'mission' && (
             <>
               <Field id="schedule-objective" label="Objective" error={errors.objective} hint="A Go template, like a task.">
-                <textarea id="schedule-objective" rows={4} className={`${input} ${border(errors.objective)} font-mono`} value={form.objective}
+                <TextArea id="schedule-objective" rows={4} size="sm" error={errors.objective} className="font-mono" value={form.objective}
                   onChange={(e) => set('objective', e.target.value)} />
               </Field>
               <Field id="schedule-budget" label="Cost budget (USD)" error={errors.costBudgetUSD}>
-                <input id="schedule-budget" className={`${input} ${border(errors.costBudgetUSD)}`} value={form.costBudgetUSD} inputMode="decimal"
+                <TextInput id="schedule-budget" size="sm" error={errors.costBudgetUSD} value={form.costBudgetUSD} inputMode="decimal"
                   onChange={(e) => set('costBudgetUSD', e.target.value)} />
               </Field>
             </>
           )}
 
           <Field id="schedule-cron" label="Cron" error={errors.cron} hint="minute hour day-of-month month day-of-week, or @daily, @every 1h…">
-            <input id="schedule-cron" className={`${input} ${border(errors.cron)} font-mono`} value={form.cron}
+            <TextInput id="schedule-cron" size="sm" error={errors.cron} className="font-mono" value={form.cron}
               onChange={(e) => set('cron', e.target.value)} />
           </Field>
           <div className="flex flex-wrap gap-1.5" aria-label="Cron presets">
@@ -382,7 +359,7 @@ function ScheduleFormBody() {
           </div>
 
           <Field id="schedule-timezone" label="Time zone" error={errors.timeZone}>
-            <input id="schedule-timezone" list="schedule-timezones" className={`${input} ${border(errors.timeZone)}`} value={form.timeZone} placeholder="UTC"
+            <TextInput id="schedule-timezone" list="schedule-timezones" size="sm" error={errors.timeZone} value={form.timeZone} placeholder="UTC"
               onChange={(e) => set('timeZone', e.target.value)} />
             <datalist id="schedule-timezones">{zones.map((z) => <option key={z} value={z} />)}</datalist>
           </Field>
@@ -392,12 +369,12 @@ function ScheduleFormBody() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field id="schedule-concurrency" label="Concurrency policy" error={errors.concurrency}
               hint="When a run is still active: Allow another, Forbid (skip) or Replace it.">
-              <select id="schedule-concurrency" className={`${input} ${border(errors.concurrency)}`} value={form.concurrency}
+              <SelectInput id="schedule-concurrency" size="sm" error={errors.concurrency} value={form.concurrency}
                 onChange={(e) => set('concurrency', e.target.value as ConcurrencyPolicy)}>
                 <option value="Allow">Allow</option>
                 <option value="Forbid">Forbid</option>
                 {form.kind === 'chain' && <option value="Replace">Replace</option>}
-              </select>
+              </SelectInput>
             </Field>
             <Field id="schedule-suspend" label="State" error={errors.suspend}>
               <label className="flex items-center gap-2 py-2 text-sm text-gray-200">
