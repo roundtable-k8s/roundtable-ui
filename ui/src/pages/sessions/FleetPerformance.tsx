@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { mapLimit, INTROSPECT_CONCURRENCY } from '../../lib/mapLimit'
 import { getKnightConfig } from '../../lib/knights'
 import { SESSION_TIMEOUT_MS } from '../../hooks/useKnightSession'
 import type { KnightSessionStats } from '../../hooks/useKnightSession'
@@ -14,12 +15,12 @@ export function useFleetPerf(knights: Knight[]) {
   const fetchFleetPerf = useCallback(async () => {
     setShowFleetPerf(true)
     const results: Record<string, KnightSessionStats> = {}
-    await Promise.all(knights.map(async k => {
+    await mapLimit(knights, INTROSPECT_CONCURRENCY, async k => {
       try {
         const data = await apiGet<KnightSessionStats>(`/api/fleet/${encodeURIComponent(k.name)}/session?type=stats`, { timeoutMs: SESSION_TIMEOUT_MS })
         results[k.name] = { ...data, supported: true }
       } catch {}
-    }))
+    })
     setAllKnightStats(results)
   }, [knights])
   return { allKnightStats, showFleetPerf, fetchFleetPerf }

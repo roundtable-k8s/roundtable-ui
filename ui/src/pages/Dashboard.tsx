@@ -1,4 +1,5 @@
 import { apiGet, apiGetWithTotal } from '../lib/api'
+import { mapLimit, INTROSPECT_CONCURRENCY } from '../lib/mapLimit'
 import { GlanceStrip } from '../components/GlanceStrip'
 import { CHAIN_LIST_LIMIT, type KeyedTotal, totalFor, truncationNote } from '../lib/chainTotal'
 import { useState, useEffect, useMemo, useRef } from 'react'
@@ -42,10 +43,8 @@ export const SESSION_COST_REFRESH_MS = 2000
 
 /** Fetch session introspection cost for each knight; knights without session stats are omitted. */
 async function fetchSessionCosts(names: string[]): Promise<Record<string, number>> {
-  const results = await Promise.allSettled(
-    names.map(name =>
+  const results = await mapLimit(names, INTROSPECT_CONCURRENCY, name =>
       apiGet<{ session?: { cost?: number } }>(`/api/fleet/${encodeURIComponent(name)}/session?type=stats`, { timeoutMs: SESSION_TIMEOUT_MS })
-    )
   )
   const perKnight: Record<string, number> = {}
   results.forEach((r, i) => {
