@@ -519,6 +519,7 @@ type statsCacheKey struct {
 	prefix   string
 	knight   string
 	podParam string
+	payload  string // runId/limit pick which session's stats the knight returns
 }
 
 type statsCacheEntry struct {
@@ -544,7 +545,7 @@ func writeStatsEntry(w http.ResponseWriter, e statsCacheEntry) {
 // requests for the same (knight, pod) share one fan-out. Only 200 answers are
 // cached; history/session/recent/tree never come through here.
 func serveStatsCached(w http.ResponseWriter, ctx context.Context, req introspectRequester, prefix, name, podParam string, payload []byte, timeout time.Duration) {
-	key := statsCacheKey{k8sClient, prefix, name, podParam}
+	key := statsCacheKey{k8sClient, prefix, name, podParam, string(payload)}
 	statsCacheMu.Lock()
 	if e, ok := statsCache[key]; ok && time.Since(e.at) < statsCacheTTL {
 		statsCacheMu.Unlock()
@@ -553,31 +554,23 @@ func serveStatsCached(w http.ResponseWriter, ctx context.Context, req introspect
 	}
 	statsCacheMu.Unlock()
 
-	run := func(c context.Context) (statsCacheEntry, int) {
+	type result struct {
+		e    statsCacheEntry
+		code int
+	}
+	v, _, _ := statsCacheGroup.Do(fmt.Sprintf("%p/%s/%s/%s/%s", k8sClient, prefix, name, podParam, payload), func() (interface{}, error) {
+		// The flight must not die with its first caller's request.
 		rec := httptest.NewRecorder()
-		serveIntrospectUncached(rec, c, req, prefix, name, podParam, "stats", payload, timeout)
+		serveIntrospectUncached(rec, context.WithoutCancel(ctx), req, prefix, name, podParam, "stats", payload, timeout)
 		e := statsCacheEntry{header: rec.Header().Clone(), body: rec.Body.Bytes(), at: time.Now()}
 		if rec.Code == http.StatusOK {
 			statsCacheMu.Lock()
 			statsCache[key] = e
 			statsCacheMu.Unlock()
 		}
-		return e, rec.Code
-	}
-	type result struct {
-		e    statsCacheEntry
-		code int
-	}
-	v, _, shared := statsCacheGroup.Do(fmt.Sprintf("%p/%s/%s/%s", k8sClient, prefix, name, podParam), func() (interface{}, error) {
-		e, code := run(ctx)
-		return result{e, code}, nil
+		return result{e, rec.Code}, nil
 	})
 	res := v.(result)
-	if res.code != http.StatusOK && shared && ctx.Err() == nil {
-		// The leader failed (maybe only its client went away): try on our own.
-		e, code := run(ctx)
-		res = result{e, code}
-	}
 	if res.code != http.StatusOK {
 		w.Header().Set("Content-Type", res.e.header.Get("Content-Type"))
 		w.WriteHeader(res.code)

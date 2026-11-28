@@ -88,3 +88,29 @@ func TestGetKnightCRMissingIs404(t *testing.T) {
 		t.Fatalf("err = %v, want not found", err)
 	}
 }
+
+// The payload (runId) is part of the cache and singleflight keys, so another
+// run's stats are never served from a cached or in-flight answer.
+func TestIntrospectStatsCacheKeyedByRunID(t *testing.T) {
+	var natsCalls atomic.Int32
+	f := &fakeIntrospect{answer: func(string) ([]byte, error) {
+		natsCalls.Add(1)
+		return statsReply("galahad-a", 2, 0.5, 100, 1, "opus"), nil
+	}}
+	h := setupIntrospectTest(t, f, makeKnightPod("galahad-a", "galahad", true))
+
+	for _, q := range []string{"type=stats&runId=A", "type=stats&runId=B", "type=stats"} {
+		if w, _ := doSession(t, h, q); w.Code != 200 {
+			t.Fatalf("%s: code %d", q, w.Code)
+		}
+	}
+	if n := natsCalls.Load(); n != 3 {
+		t.Fatalf("NATS requests = %d, want 3 (one per distinct runId)", n)
+	}
+	if w, _ := doSession(t, h, "type=stats&runId=A"); w.Code != 200 {
+		t.Fatal("repeat failed")
+	}
+	if n := natsCalls.Load(); n != 3 {
+		t.Errorf("same runId not cached: NATS requests = %d, want 3", n)
+	}
+}
