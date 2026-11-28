@@ -1,3 +1,4 @@
+import { activatable, FOCUS_RING } from '../lib/activatable'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Skull, RotateCcw } from 'lucide-react'
@@ -260,8 +261,9 @@ export function DeadLettersView({ entries, loading, error, onRetry, onLoadDetail
             </thead>
             <tbody>
               {rows.map((e) => (
-                <tr key={entryKey(e)} data-testid="dead-letter-row" onClick={() => open(e)}
-                  className={`border-b border-roundtable-steel/50 cursor-pointer hover:bg-roundtable-steel/30 ${e.state === 'resolved' ? 'opacity-50' : ''}`}>
+                <tr key={entryKey(e)} data-testid="dead-letter-row" {...activatable(() => open(e))}
+                  aria-label={`Open dead letter ${e.taskId}`}
+                  className={`${FOCUS_RING} border-b border-roundtable-steel/50 cursor-pointer hover:bg-roundtable-steel/30 ${e.state === 'resolved' ? 'opacity-50' : ''}`}>
                   <td className="p-3" onClick={(ev) => ev.stopPropagation()}>
                     {selectable(e) && (
                       <input type="checkbox" aria-label={`Select ${e.taskId}`} checked={checked.has(entryKey(e))} disabled={bulkRunning}

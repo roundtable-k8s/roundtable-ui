@@ -41,13 +41,24 @@ export function useToast() {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const nextId = useRef(0)
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
+
+  const later = useCallback((fn: () => void, ms: number) => {
+    const t = setTimeout(() => { timers.current.delete(t); fn() }, ms)
+    timers.current.add(t)
+  }, [])
+
+  useEffect(() => {
+    const pending = timers.current
+    return () => { pending.forEach(clearTimeout); pending.clear() }
+  }, [])
 
   const dismiss = useCallback((id: number) => {
     setToasts(prev => prev.map(t => t.id === id ? { ...t, dismissing: true } : t))
-    setTimeout(() => {
+    later(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
     }, 300)
-  }, [])
+  }, [later])
 
   const addToast = useCallback((message: string, type: ToastType) => {
     const id = nextId.current++
@@ -55,8 +66,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       const next = [...prev, { id, message, type, dismissing: false }]
       return next.length > MAX_TOASTS ? next.slice(next.length - MAX_TOASTS) : next
     })
-    setTimeout(() => dismiss(id), 5000)
-  }, [dismiss])
+    later(() => dismiss(id), 5000)
+  }, [dismiss, later])
 
   return (
     <ToastContext.Provider value={{ addToast }}>
@@ -68,7 +79,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse gap-2 pointer-events-none">
+    <div role="region" aria-label="Notifications" aria-live="polite" className="fixed bottom-6 right-6 z-50 flex flex-col-reverse gap-2 pointer-events-none">
       {toasts.map(toast => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
@@ -91,14 +102,16 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
 
   return (
     <div
+      role={toast.type === 'error' ? 'alert' : undefined}
       className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg border backdrop-blur-sm shadow-lg transition-all duration-300 max-w-sm ${typeStyles[toast.type]} ${animClass}`}
     >
       <span className={`text-sm flex-1 ${typeTextColors[toast.type]}`}>{toast.message}</span>
       <button
         onClick={() => onDismiss(toast.id)}
+        aria-label="Dismiss notification"
         className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
       >
-        <X className="w-3.5 h-3.5" />
+        <X className="w-3.5 h-3.5" aria-hidden="true" />
       </button>
     </div>
   )

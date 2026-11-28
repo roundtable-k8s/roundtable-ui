@@ -90,6 +90,7 @@ export function MissionsPage() {
               <button
                 key={phase}
                 onClick={() => setPhaseFilter(phase)}
+                aria-pressed={phaseFilter === phase}
                 className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
                   phaseFilter === phase
                     ? 'bg-roundtable-gold/20 border border-roundtable-gold/30 text-roundtable-gold'

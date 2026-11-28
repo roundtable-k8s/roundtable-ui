@@ -1,3 +1,4 @@
+import { FOCUS_RING } from '../lib/activatable'
 import { useState, useMemo, useCallback } from 'react'
 import { GitGraph, Wifi, WifiOff, Filter, Activity } from 'lucide-react'
 import { useWebSocket, type NatsEvent } from '../hooks/useWebSocket'
@@ -249,12 +250,13 @@ function EventCard({ event, expanded, onToggle, onOpenActivity }: {
 
   return (
     <div
-      className={`rounded-lg border transition-colors cursor-pointer ${
+      className={`rounded-lg border transition-colors ${
         isTask ? 'bg-blue-500/5 border-blue-500/10' : 'bg-green-500/5 border-green-500/10'
       } ${expanded ? 'ring-1 ring-roundtable-gold/30' : ''}`}
-      onClick={onToggle}
     >
       <div className="flex items-center gap-2 text-xs px-3 py-2">
+        <button type="button" onClick={onToggle} aria-expanded={expanded}
+          className={`flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer ${FOCUS_RING}`}>
         <span className={isTask ? 'text-blue-400' : 'text-green-400'}>{isTask ? '📤' : '📥'}</span>
         <span className={`font-medium ${isTask ? 'text-blue-400' : 'text-green-400'}`}>
           {isTask ? 'TASK' : 'RESULT'}
@@ -279,10 +281,11 @@ function EventCard({ event, expanded, onToggle, onOpenActivity }: {
         <span className="text-gray-600 ml-auto flex-shrink-0">
           {formatTimestampOrDate(event.timestamp)}
         </span>
+        </button>
         {taskId && onOpenActivity && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onOpenActivity(taskId, knight ?? undefined) }}
+            onClick={() => onOpenActivity(taskId, knight ?? undefined)}
             className="flex items-center gap-1 text-gray-400 hover:text-roundtable-gold flex-shrink-0"
             aria-label={`Task activity ${taskId}`}
             title="Task activity"
@@ -291,7 +294,7 @@ function EventCard({ event, expanded, onToggle, onOpenActivity }: {
           </button>
         )}
       </div>
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-2 cursor-pointer" onClick={onToggle}>
         <p className={`text-xs text-gray-400 ${expanded ? '' : 'line-clamp-2'}`}>{taskText}</p>
       </div>
       {expanded && (

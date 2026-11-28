@@ -181,6 +181,7 @@ export function KnightDetailDrawer({ knight, onClose, card }: Props) {
           <div>
             <button
               onClick={() => setLogsExpanded(!logsExpanded)}
+              aria-expanded={logsExpanded}
               className="w-full flex items-center justify-between text-sm font-medium text-gray-400 mb-3 hover:text-roundtable-gold transition-colors"
             >
               <div className="flex items-center gap-2">

@@ -1,3 +1,4 @@
+import { activatable, FOCUS_RING } from '../../lib/activatable'
 import { useState } from 'react'
 import { TreePine, ChevronRight, ChevronDown, MessageSquare } from 'lucide-react'
 import type { SessionEntry, SessionTreeNode, KnightSessionStats } from '../../hooks/useKnightSession'
@@ -20,8 +21,8 @@ export function TreeNodeView({ node, depth = 0 }: { node: SessionTreeNode & { ch
   return (
     <div>
       <div
-        className="flex items-center gap-2 py-1 pr-2 rounded hover:bg-roundtable-steel/30 cursor-pointer text-sm"
-        onClick={() => setExpanded(e => !e)}
+        className={`flex items-center gap-2 py-1 pr-2 rounded hover:bg-roundtable-steel/30 cursor-pointer text-sm ${FOCUS_RING}`}
+        {...activatable(() => setExpanded(e => !e), hasChildren ? expanded : undefined)}
       >
         {/* Indented label region — only this shrinks/truncates, keeping the
             timestamp pinned to a fixed right column. */}

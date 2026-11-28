@@ -32,6 +32,17 @@ const mockKnight: Knight = {
 }
 
 describe('KnightCard', () => {
+  it('is a tab stop that opens on Enter and Space', async () => {
+    const onClick = vi.fn()
+    render(<KnightCard knight={mockKnight} onClick={onClick} />)
+    await userEvent.tab()
+    const card = screen.getByRole('button', { name: /galahad/i })
+    expect(card).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    expect(onClick).toHaveBeenCalledTimes(2)
+  })
+
   it('hides the success tile for a knight with no tasks', () => {
     render(<KnightCard knight={{ ...mockKnight, tasksCompleted: 0, tasksFailed: 0 }} />)
     expect(screen.queryByText('success')).toBeNull()
