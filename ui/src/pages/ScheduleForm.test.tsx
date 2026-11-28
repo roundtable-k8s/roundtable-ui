@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ScheduleFormPage, NextRunsPreview } from './ScheduleForm'
 import { apiGet, apiPost, apiPut, ApiError } from '../lib/api'
 import type { CardEntry } from '../lib/cards'
@@ -294,5 +294,29 @@ describe('NextRunsPreview: gateway preview', () => {
     await flush(500)
     expect(mockGet).not.toHaveBeenCalled()
     expect(screen.getByTestId('next-runs')).toHaveTextContent('Enter a cron expression.')
+  })
+})
+
+describe('ScheduleFormPage: switching routes', () => {
+  it('starts an empty new form when navigating from an edit page to /schedules/new', async () => {
+    serve()
+    render(
+      <MemoryRouter initialEntries={['/schedules/roundtable/morning-brief/edit']}>
+        <Link to="/schedules/new">new schedule</Link>
+        <Routes>
+          <Route path="/schedules" element={<div>schedules list</div>} />
+          <Route path="/schedules/new" element={<ScheduleFormPage />} />
+          <Route path="/schedules/:namespace/:name/edit" element={<ScheduleFormPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByLabelText('Knight')).toHaveValue('galahad'))
+    expect(screen.getByLabelText('Name')).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('link', { name: 'new schedule' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Name')).toBeEnabled())
+    expect(screen.getByLabelText('Name')).toHaveValue('')
+    expect(screen.getByLabelText('Knight')).not.toHaveValue('galahad')
   })
 })
