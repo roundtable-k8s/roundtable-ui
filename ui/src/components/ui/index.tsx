@@ -421,3 +421,4 @@ export function TableBadge({ table }: { table?: string }) {
 
 export { Button, LinkButton, ConfirmDialog, type ButtonTone, type ButtonSize } from './Button'
 export * from './Form'
+export { DataTable, type DataTableColumn } from './DataTable'

@@ -7,7 +7,7 @@ import { inTable } from '../lib/tables'
 import { useRunning } from '../hooks/useRunning'
 import { useNow } from '../hooks/useNow'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { PageHeader, RefreshButton, StatCard, ErrorBanner, ListState, Badge } from '../components/ui'
+import { PageHeader, RefreshButton, StatCard, ErrorBanner, ListState, Badge, DataTable } from '../components/ui'
 import type { Tone } from '../lib/tone'
 import { TaskActivityPanel } from '../components/TaskActivityPanel'
 import { formatCost, formatNumber } from '../lib/format'
@@ -171,26 +171,22 @@ export function RunningPage() {
 
       <ListState loading={loading} error={error} onRetry={refresh} count={rows.length} what="running tasks" icon={Activity}
         emptyTitle={all.length === 0 ? 'Nothing is running right now.' : 'No tasks match these filters.'}>
-        <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
+        <>
           <span id={rowsHintId} className="sr-only">Press Enter on a row to open its details</span>
-          <table aria-label="Running tasks" aria-describedby={rowsHintId} className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 border-b border-roundtable-steel">
-                <th scope="col" className="px-3 py-2 font-medium">Status</th>
-                <th scope="col" className="px-3 py-2 font-medium">Knight</th>
-                <th scope="col" className="px-3 py-2 font-medium">Pod</th>
-                <th scope="col" className="px-3 py-2 font-medium">Slot</th>
-                <th scope="col" className="px-3 py-2 font-medium">Task</th>
-                <th scope="col" className="px-3 py-2 font-medium">Run</th>
-                <th scope="col" className="px-3 py-2 font-medium">Chain / step</th>
-                <th scope="col" className="px-3 py-2 font-medium">Model</th>
-                <th scope="col" className="px-3 py-2 font-medium">Elapsed</th>
-                <th scope="col" className="px-3 py-2 font-medium">Heartbeat</th>
-                <th scope="col" className="px-3 py-2 font-medium">Last tool</th>
-                <th scope="col" className="px-3 py-2 font-medium text-right">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DataTable label="Running tasks" density="compact" describedBy={rowsHintId} columns={[
+            { key: 'status', header: 'Status' },
+            { key: 'knight', header: 'Knight' },
+            { key: 'pod', header: 'Pod' },
+            { key: 'slot', header: 'Slot' },
+            { key: 'task', header: 'Task' },
+            { key: 'run', header: 'Run' },
+            { key: 'chain-step', header: 'Chain / step' },
+            { key: 'model', header: 'Model' },
+            { key: 'elapsed', header: 'Elapsed' },
+            { key: 'heartbeat', header: 'Heartbeat' },
+            { key: 'last-tool', header: 'Last tool' },
+            { key: 'cost', header: 'Cost', align: 'right' },
+          ]}>
               {rows.map((t) => (
                 <tr
                   key={t.taskId}
@@ -217,9 +213,8 @@ export function RunningPage() {
                   <td className="px-3 py-2 text-right text-roundtable-gold tabular-nums">{t.costUsd != null ? formatCost(t.costUsd) : '—'}</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+          </DataTable>
+        </>
       </ListState>
 
       {selectedId && (

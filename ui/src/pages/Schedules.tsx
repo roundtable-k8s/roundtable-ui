@@ -6,7 +6,7 @@ import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { inTable, withTable } from '../lib/tables'
 import { apiDelete, apiPost } from '../lib/api'
-import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Badge, Button, LinkButton, ConfirmDialog as ConfirmModal } from '../components/ui'
+import { PageHeader, RefreshButton, ErrorBanner, Spinner, EmptyState, TableBadge, Badge, Button, LinkButton, ConfirmDialog as ConfirmModal, DataTable } from '../components/ui'
 import { countLabel, formatDateTime, formatRelativeTime, until } from '../lib/format'
 import { sanitizeText } from '../lib/untrusted'
 import { chainLink, type Trigger } from '../lib/triggers'
@@ -115,20 +115,15 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
   onDelete: (s: Schedule) => void
 }) {
   return (
-    <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
-            <th className="px-4 py-3 font-medium">Schedule</th>
-            <th className="px-4 py-3 font-medium">Target</th>
-            <th className="px-4 py-3 font-medium">Cadence</th>
-            <th className="px-4 py-3 font-medium">Next run</th>
-            <th className="px-4 py-3 font-medium">Last run</th>
-            <th className="px-4 py-3 font-medium">State</th>
-            <th className="px-4 py-3 font-medium text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+    <DataTable label="Schedules" columns={[
+      { key: 'schedule', header: 'Schedule' },
+      { key: 'target', header: 'Target' },
+      { key: 'cadence', header: 'Cadence' },
+      { key: 'next-run', header: 'Next run' },
+      { key: 'last-run', header: 'Last run' },
+      { key: 'state', header: 'State' },
+      { key: 'actions', header: 'Actions', align: 'right' },
+    ]}>
           {schedules.map((s) => {
             const key = scheduleKey(s)
             const task = firstLine(sanitizeText(tasks[key]))
@@ -192,9 +187,7 @@ export function SchedulesTable({ schedules, tasks, showTable, busy, onRun, onSus
               </tr>
             )
           })}
-        </tbody>
-      </table>
-    </div>
+    </DataTable>
   )
 }
 

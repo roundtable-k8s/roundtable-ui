@@ -3,7 +3,7 @@ import { Inbox, AlertTriangle, Clock, ExternalLink } from 'lucide-react'
 import { usePolledFetch } from '../hooks/usePolledFetch'
 import { useTableFilter } from '../hooks/useTableFilter'
 import { withTable } from '../lib/tables'
-import { PageHeader, RefreshButton, ListState, TableBadge } from '../components/ui'
+import { PageHeader, RefreshButton, ListState, TableBadge, DataTable } from '../components/ui'
 import { QueueSparkline } from '../components/QueueSparkline'
 import {
   OLDEST_WAIT_WARN_SECONDS,
@@ -44,21 +44,16 @@ export function QueuesTable({ queues, history, showTable = false }: {
   const byKnight = useMemo(() => new Map(history.map(h => [h.knight, h])), [history])
 
   return (
-    <div className="overflow-x-auto bg-roundtable-slate border border-roundtable-steel rounded-xl">
-      <table aria-label="Queues" className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-roundtable-steel">
-            <th scope="col" className="px-4 py-3 font-medium">Knight</th>
-            <th scope="col" className="px-4 py-3 font-medium text-right">Pending</th>
-            <th scope="col" className="px-4 py-3 font-medium text-right">Ack pending</th>
-            <th scope="col" className="px-4 py-3 font-medium text-right">Redelivered</th>
-            <th scope="col" className="px-4 py-3 font-medium text-right">Oldest wait</th>
-            <th scope="col" className="px-4 py-3 font-medium text-right">Free slots</th>
-            <th scope="col" className="px-4 py-3 font-medium text-right">Replicas</th>
-            <th scope="col" className="px-4 py-3 font-medium">Last hour</th>
-          </tr>
-        </thead>
-        <tbody>
+    <DataTable label="Queues" columns={[
+      { key: 'knight', header: 'Knight' },
+      { key: 'pending', header: 'Pending', align: 'right' },
+      { key: 'ack-pending', header: 'Ack pending', align: 'right' },
+      { key: 'redelivered', header: 'Redelivered', align: 'right' },
+      { key: 'oldest-wait', header: 'Oldest wait', align: 'right' },
+      { key: 'free-slots', header: 'Free slots', align: 'right' },
+      { key: 'replicas', header: 'Replicas', align: 'right' },
+      { key: 'last-hour', header: 'Last hour' },
+    ]}>
           {queues.map(q => {
             const h = byKnight.get(q.knight)
             const max = latestMaxReplicas(h)
@@ -112,9 +107,7 @@ export function QueuesTable({ queues, history, showTable = false }: {
               </tr>
             )
           })}
-        </tbody>
-      </table>
-    </div>
+    </DataTable>
   )
 }
 
