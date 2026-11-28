@@ -66,6 +66,42 @@ interface DispatchedTask extends UsageFields {
 
 const MAX_POLL_FAILURES = 5
 
+const STORAGE_KEY = 'roundtable.dispatch.recent.v1'
+const MAX_STORED = 20
+
+/** Restore the recently dispatched tasks (no outputs) from sessionStorage. */
+function loadStored(): DispatchedTask[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((r): r is DispatchedTask => !!r && typeof r.taskId === 'string' && typeof r.knight === 'string')
+      .slice(0, MAX_STORED)
+      .map((r) => ({
+        taskId: r.taskId,
+        knight: r.knight,
+        table: typeof r.table === 'string' ? r.table : '',
+        task: typeof r.task === 'string' ? r.task : '',
+        status: typeof r.status === 'string' ? r.status : 'pending',
+        timestamp: typeof r.timestamp === 'string' ? r.timestamp : '',
+      }))
+  } catch {
+    return []
+  }
+}
+
+function saveStored(results: DispatchedTask[]) {
+  try {
+    const slim = results.slice(0, MAX_STORED).map((r) => ({
+      taskId: r.taskId, knight: r.knight, table: r.table, task: r.task, status: r.status, timestamp: r.timestamp,
+    }))
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(slim))
+  } catch {
+    // storage unavailable or full: the list just won't survive navigation
+  }
+}
+
 const isFinal = (status: string) => status === 'succeeded' || status === 'failed'
 
 function statusClass(status: string) {
@@ -160,20 +196,23 @@ export function TasksPage() {
   const [task, setTask] = useState('')
   const [dispatching, setDispatching] = useState(false)
   const submission = useRef(new SubmissionKey())
-  const [results, setResults] = useState<DispatchedTask[]>([])
+  const [results, setResults] = useState<DispatchedTask[]>(loadStored)
   // Every RoundTable the API covers (#239), for the history filter
   const [tables, setTables] = useState<TableInfo[]>([])
   // Shared table filter (?table=); '' = all tables
   const { table: tableFilter } = useTableFilter()
   const { events } = useWebSocket()
 
-  // Default to the first knight once the fleet loads
+  // The chosen knight, or the first one when the fleet no longer lists it
+  const effective = knights.some((k) => k.name === knight) ? knight : knights[0]?.name ?? ''
   useEffect(() => {
-    if (!knight && knights.length > 0) setKnight(knights[0].name)
-  }, [knight, knights])
+    if (effective !== knight) setKnight(effective)
+  }, [effective, knight])
 
-  const selected = knights.find((k) => k.name === knight)
-  const config = getKnightConfig(knight)
+  useEffect(() => { saveStored(results) }, [results])
+
+  const selected = knights.find((k) => k.name === effective)
+  const config = getKnightConfig(effective)
   const domain = selected?.domain ?? ''
   const rows = useMemo(() => taskRows(events, tables, tableFilter), [events, tables, tableFilter])
 
@@ -215,7 +254,7 @@ export function TasksPage() {
 
     try {
       const body = {
-        knight,
+        knight: effective,
         task,
         ...(selected.namespace ? { namespace: selected.namespace } : {}),
       }
@@ -224,7 +263,7 @@ export function TasksPage() {
       submission.current.settle()
       setResults((prev) => [mergeTask({
         taskId: data.taskId,
-        knight,
+        knight: effective,
         table: '',
         task,
         status: 'pending',
@@ -251,11 +290,11 @@ export function TasksPage() {
 
       {/* Dispatch form */}
       <div className="bg-roundtable-slate border border-roundtable-steel rounded-xl p-6 mb-8">
-        <div className="flex gap-4 mb-4">
-          <div className="w-48">
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+          <div className="w-full sm:w-48">
             <label htmlFor="task-knight" className="text-sm text-gray-400 mb-2 block">Knight</label>
             <select id="task-knight"
-              value={knight}
+              value={effective}
               onChange={(e) => setKnight(e.target.value)}
               className="w-full bg-roundtable-navy border border-roundtable-steel rounded-lg px-3 py-2 text-white"
             >
@@ -267,7 +306,7 @@ export function TasksPage() {
               ))}
             </select>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <label htmlFor="task-quest" className="text-sm text-gray-400 mb-2 block">Quest</label>
             <div className="flex gap-2">
               <input
@@ -275,9 +314,9 @@ export function TasksPage() {
                 type="text"
                 value={task}
                 onChange={(e) => setTask(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && dispatch()}
-                placeholder={knight ? `Send a quest to ${config.emoji} ${knight} (${domain})...` : 'Waiting for fleet…'}
-                className="flex-1 bg-roundtable-navy border border-roundtable-steel rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:border-roundtable-gold/50 focus:outline-none"
+                onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && dispatch()}
+                placeholder={effective ? `Send a quest to ${config.emoji} ${effective} (${domain})...` : 'Waiting for fleet…'}
+                className="flex-1 min-w-0 bg-roundtable-navy border border-roundtable-steel rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:border-roundtable-gold/50 focus:outline-none"
               />
               <button
                 onClick={dispatch}
@@ -290,7 +329,7 @@ export function TasksPage() {
           </div>
         </div>
         <p className="text-xs text-gray-500">
-          Dispatching to <span className="text-roundtable-gold font-mono">{knight || '—'}</span>
+          Dispatching to <span className="text-roundtable-gold font-mono">{effective || '—'}</span>
           {domain && <> (domain <span className="font-mono">{domain}</span>)</>} through the invoke gateway, which routes to the knight's own table.
         </p>
       </div>

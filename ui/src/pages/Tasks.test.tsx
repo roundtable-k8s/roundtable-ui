@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { TasksPage } from './Tasks'
@@ -27,11 +27,14 @@ vi.mock('../lib/api', () => ({
   apiGet: (...args: unknown[]) => apiGet(...args),
   apiPost: (...args: unknown[]) => apiPost(...args),
 }))
-vi.mock('../hooks/useFleet', () => ({ useFleet: () => ({ knights, error: null }) }))
+let fleet = knights
+vi.mock('../hooks/useFleet', () => ({ useFleet: () => ({ knights: fleet, error: null }) }))
 vi.mock('../hooks/useWebSocket', () => ({ useWebSocket: () => ({ events }) }))
 vi.mock('../components/Toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 
 beforeEach(() => {
+  fleet = knights
+  sessionStorage.clear()
   apiPost.mockReset()
   apiGet.mockReset()
   apiGet.mockImplementation((url: string) =>
@@ -81,6 +84,45 @@ describe('TasksPage trace link', () => {
     await dispatch()
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/config'))
     expect(screen.queryByRole('link', { name: /View trace/ })).toBeNull()
+  }, 15000)
+})
+
+describe('TasksPage dispatch form and persistence', () => {
+  it('follows the fleet when the chosen knight disappears', async () => {
+    const { rerender } = render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.selectOptions(screen.getByLabelText('Knight'), 'rt-ui')
+    fleet = [knights[0]]
+    rerender(<MemoryRouter><TasksPage /></MemoryRouter>)
+    expect((screen.getByLabelText('Knight') as HTMLSelectElement).value).toBe('galahad')
+    await userEvent.type(screen.getByLabelText('Quest'), 'scan')
+    const button = screen.getByRole('button', { name: 'Dispatch' })
+    expect(button).toBeEnabled()
+    await userEvent.click(button)
+    await waitFor(() => expect(apiPost).toHaveBeenCalled())
+    expect(apiPost.mock.calls[0][1]).toMatchObject({ knight: 'galahad' })
+  })
+
+  it('does not dispatch on Enter while an IME composition is active', () => {
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    const input = screen.getByLabelText('Quest')
+    fireEvent.change(input, { target: { value: 'にほん' } })
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(apiPost).not.toHaveBeenCalled()
+  })
+
+  it('restores dispatched tasks after a remount and polls the pending one', async () => {
+    const first = render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await userEvent.type(screen.getByLabelText('Quest'), 'fix it{Enter}')
+    await waitFor(() => expect(screen.getByText('fix it')).toBeInTheDocument())
+    first.unmount()
+
+    apiGet.mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/tables' ? { tables }
+        : { taskId: 'invoke-rt-ui-1', status: 'succeeded', output: 'all done' }))
+    render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    expect(screen.getByText('fix it')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('dispatch-output').textContent).toBe('all done'), { timeout: 5000 })
+    expect(apiGet).toHaveBeenCalledWith('/api/tasks/dispatch/invoke-rt-ui-1', expect.anything())
   }, 15000)
 })
 
