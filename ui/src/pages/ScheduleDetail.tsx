@@ -353,6 +353,11 @@ export function ScheduleYaml({ namespace, name }: { namespace: string; name: str
   const [copyError, setCopyError] = useState('')
 
   useEffect(() => {
+    // Drop what belongs to the previous schedule before fetching this one.
+    setYaml(null)
+    setError('')
+    setCopied(false)
+    setCopyError('')
     let live = true
     apiGetText(scheduleApi(namespace, name, 'manifest'))
       .then((y) => { if (live) setYaml(y) })
@@ -399,8 +404,17 @@ export function ScheduleYaml({ namespace, name }: { namespace: string; name: str
 
 type Tab = 'runs' | 'yaml'
 
+/**
+ * Keyed by namespace/name: opening another schedule (command palette, back or
+ * forward) starts from a clean state, so the tab, selected run, action message
+ * and open confirm dialog never carry over from the previous schedule.
+ */
 export function ScheduleDetailPage() {
   const { namespace = '', name = '' } = useParams()
+  return <ScheduleDetailBody key={`${namespace}/${name}`} namespace={namespace} name={name} />
+}
+
+function ScheduleDetailBody({ namespace, name }: { namespace: string; name: string }) {
   const navigate = useNavigate()
   const { data, loading, error, refresh } = usePolledFetch<Schedule | null>(scheduleApi(namespace, name), POLL_MS, null)
   const [tab, setTab] = useState<Tab>('runs')

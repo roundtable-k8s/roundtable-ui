@@ -138,6 +138,12 @@ type Errors = Partial<Record<FormField, string>>
  * schedule, with a live YAML preview of the Trigger it saves (#302).
  */
 export function ScheduleFormPage() {
+  // Keyed by route identity: /schedules/new and each edit URL get fresh form state.
+  const params = useParams<{ namespace: string; name: string }>()
+  return <ScheduleFormBody key={`${params.namespace ?? ''}/${params.name ?? ''}`} />
+}
+
+function ScheduleFormBody() {
   const params = useParams<{ namespace: string; name: string }>()
   const editing = !!(params.namespace && params.name)
   const navigate = useNavigate()

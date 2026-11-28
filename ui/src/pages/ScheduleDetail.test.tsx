@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ScheduleDetailPage } from './ScheduleDetail'
 import { apiDelete, apiGet, apiGetText, apiPost } from '../lib/api'
 import type { Schedule, ScheduleRun, ScheduleRunResult } from '../lib/schedules'
@@ -319,5 +319,69 @@ describe('ScheduleDetailPage: next runs', () => {
     renderPage()
     const section = await screen.findByRole('region', { name: 'next runs' })
     expect(within(section).getByText('suspended: these ticks will not fire')).toBeInTheDocument()
+  })
+})
+
+describe('ScheduleDetailPage: opening another schedule', () => {
+  const YAML_OTHER = 'apiVersion: ai.roundtable.io/v1alpha1\nkind: Trigger\nmetadata:\n  name: other\n'
+
+  function mockTwoSchedules() {
+    mockApiGet.mockImplementation(async (url: string) => {
+      if (url === '/api/schedules/roundtable/morning-digest') return sched()
+      if (url === '/api/schedules/roundtable/other') return sched({ name: 'other' })
+      if (url.startsWith('/api/schedules/roundtable/morning-digest/runs?')) return { runs }
+      if (url.startsWith('/api/schedules/roundtable/other/runs?')) return { runs: [] }
+      if (url.startsWith('/api/schedules/roundtable/morning-digest/next')) return nextRuns()
+      if (url.startsWith('/api/schedules/roundtable/other/next')) return nextRuns()
+      if (url === '/api/schedules/roundtable/morning-digest/runs/digest-2') return result
+      throw new Error(`unexpected ${url}`)
+    })
+  }
+
+  // The link sits outside the route, like the command palette, so it survives navigation.
+  function renderSwitching() {
+    return render(
+      <MemoryRouter initialEntries={['/schedules/roundtable/morning-digest']}>
+        <Link to="/schedules/roundtable/other">open other</Link>
+        <Routes>
+          <Route path="/schedules/:namespace/:name" element={<ScheduleDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('resets the tab and the selected run when the URL changes to another schedule', async () => {
+    mockTwoSchedules()
+    mockApiGetText.mockResolvedValue(YAML)
+    renderSwitching()
+    const history = await screen.findByRole('region', { name: 'run history' })
+    fireEvent.click(await within(history).findByRole('button', { name: 'View result of digest-2' }))
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/api/schedules/roundtable/morning-digest/runs/digest-2'))
+
+    fireEvent.click(screen.getByRole('link', { name: 'open other' }))
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Run history' })).toHaveAttribute('aria-selected', 'true'))
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/api/schedules/roundtable/other', expect.anything()))
+    expect(mockApiGet).not.toHaveBeenCalledWith('/api/schedules/roundtable/other/runs/digest-2')
+  })
+
+  it('shows the other schedule YAML, not the previous manifest error, after switching', async () => {
+    mockTwoSchedules()
+    mockApiGetText.mockImplementation(async (url: string) => {
+      if (url === '/api/schedules/roundtable/morning-digest/manifest') throw new Error('manifest unavailable')
+      if (url === '/api/schedules/roundtable/other/manifest') return YAML_OTHER
+      throw new Error(`unexpected ${url}`)
+    })
+    renderSwitching()
+    await screen.findByRole('region', { name: 'run history' })
+    fireEvent.click(screen.getByRole('tab', { name: 'YAML' }))
+    expect(await screen.findByText(/Failed to load the manifest: manifest unavailable/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'open other' }))
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/api/schedules/roundtable/other', expect.anything()))
+    fireEvent.click(await screen.findByRole('tab', { name: 'YAML' }))
+
+    expect(await screen.findByTestId('schedule-yaml')).toHaveTextContent('name: other')
+    expect(screen.queryByText(/Failed to load the manifest/)).toBeNull()
   })
 })
